@@ -1,0 +1,36 @@
+{
+    "home": {
+        "title": "ホームページ",
+        "subTitle": "TOPICS",
+        "sections": [{
+                "type": "hero",
+                "headline": "トップページへようこそ！",
+                "subtext": "JSONで管理されたPure PHPサイトです"
+            },
+            {
+                "type": "text",
+                "content": "このページはJSONファイルから動的に生成されています。"
+            }
+        ]
+    },
+    "sample": {
+        "title": "サンプルページ",
+        "sections": [{
+                "type": "sample",
+                "headline": "ここにサブタイトル",
+                "subtext": "サンプルページ内のテキストメッセージ"
+            },
+            {
+                "type": "text",
+                "content": "このページはJSONファイルから動的に生成されています。"
+            }
+        ]
+    },
+    "about": {
+        "title": "このサイトについて",
+        "sections": [{
+            "type": "text",
+            "content": "pure PHP と JSON で構築された軽量CMS風の仕組みです。"
+        }]
+    }
+}

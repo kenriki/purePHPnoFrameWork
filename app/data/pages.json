@@ -26,6 +26,18 @@
             }
         ]
     },
+    "sample1": {
+        "title": "じゃんけんゲーム",
+        "sections": [{
+                "type": "text",
+                "content": "じゃんけんゲームで遊ぼう！"
+            },
+            {
+                "type": "php",
+                "file": "janken.php"
+            }
+        ]
+    },
     "about": {
         "title": "このサイトについて",
         "sections": [{

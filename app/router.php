@@ -3,6 +3,7 @@
 require_once __DIR__ . '/controllers/PageController.php';
 require_once __DIR__ . '/controllers/HomeController.php';
 require_once __DIR__ . '/controllers/SampleController.php';
+require_once __DIR__ . '/controllers/Sample1Controller.php';
 
 function route($page) {
 
@@ -13,6 +14,9 @@ function route($page) {
 
         case 'sample':
             return (new SampleController())->show();
+
+        case 'sample1':
+            return (new Sample1Controller())->show();
 
         default:
             // JSONページ（固定ページ）

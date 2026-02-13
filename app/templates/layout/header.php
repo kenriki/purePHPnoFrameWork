@@ -14,6 +14,7 @@
         <ul>
             <li><a href="/index.php?page=home">Home</a></li>
             <li><a href="/index.php?page=sample">Sample</a></li>
+            <li><a href="/index.php?page=sample1">じゃんけん</a></li>
             <li><a href="/index.php?page=about">About</a></li>
             <li><a href="/index.php?page=etc">etc</a></li>
         </ul>

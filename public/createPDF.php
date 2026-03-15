@@ -34,7 +34,7 @@ $pdf->AddFont('NotoSansJP', '', 'NotoSansJP-VariableFont_wght.ttf', true);
 $pdf->SetFont('NotoSansJP', '', 14);
 
 // JSON の UTF-8 をそのまま書く
-$pdf->MultiCell(0, 10, $pdfData['title']);
+$pdf->MultiCell(0, 10, $pdfData['sub_title']);
 $pdf->Ln(10);
 
 foreach ($pdfData['sections'] as $section) {
@@ -51,3 +51,4 @@ header("Content-Disposition: inline; filename*=UTF-8''{$filename}");
 // ★ Output の第2引数は絶対に使わない（doc.pdf になるため）
 $pdf->Output('I');
 exit;
+?>

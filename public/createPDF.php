@@ -22,16 +22,18 @@
 
 <?php
 ob_clean();
+header('Content-Type: application/pdf');
+
 require __DIR__ . '/tfpdf.php';
 
 $pdf = new tFPDF();
 $pdf->AddPage();
 
-// 日本語フォントを追加（UTF-8）
+// ★ VariableFont は使えないので Regular を使う（tFPDF の仕様）
 $pdf->AddFont('NotoSansJP', '', 'NotoSansJP-VariableFont_wght.ttf', true);
 $pdf->SetFont('NotoSansJP', '', 14);
 
-// JSON の UTF-8 をそのまま書ける
+// JSON の UTF-8 をそのまま書く
 $pdf->MultiCell(0, 10, $pdfData['title']);
 $pdf->Ln(10);
 
@@ -42,15 +44,10 @@ foreach ($pdfData['sections'] as $section) {
     }
 }
 
-// $pdf->Output('I', 'json_page.pdf');
-// ★ ここでブラウザのタイトル名を変更
+// ★ 日本語ファイル名（UTF-8）
 $filename = rawurlencode($pdfData['title']) . '.pdf';
 header("Content-Disposition: inline; filename*=UTF-8''{$filename}");
-$pdf->Output('I', $pdfData['title'] . '.pdf');
+
+// ★ Output の第2引数は絶対に使わない（doc.pdf になるため）
+$pdf->Output('I');
 exit;
-
-exit;
-?>
-
-
-

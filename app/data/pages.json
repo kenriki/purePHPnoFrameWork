@@ -44,5 +44,14 @@
             "type": "text",
             "content": "pure PHP と JSON で構築された軽量CMS風の仕組みです。"
         }]
+    },
+    "createPDF": {
+        "title": "PDF作成",
+        "sections": [
+            {
+                "type": "text",
+                "content": "PDFを作成します。"
+            }
+        ]
     }
 }

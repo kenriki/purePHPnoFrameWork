@@ -14,3 +14,5 @@
     <?php endif; ?>
 
 <?php endforeach; ?>
+
+<a href="/index.php?page=createPDF">PDF作成</a>

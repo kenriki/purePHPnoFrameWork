@@ -1,0 +1,6 @@
+*.tar
+\font
+.bk
+f*.php
+tf*.php
+phpinfo.php

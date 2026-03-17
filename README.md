@@ -42,3 +42,11 @@ http://localhost:8080/index.php?page=sample
 
 ### 以下が実際のコード
 [https://github.com/kenriki/purePHPnoFrameWork/commit/afc419d1c084268a2db7ae2ab444770568adbed3](https://github.com/kenriki/purePHPnoFrameWork/commit/afc419d1c084268a2db7ae2ab444770568adbed3)
+
+## 実行結果
+http://localhost:8080/index.php?page=sample2
+![alt text](img/image5.png)
+
+
+### 以下が実際のコード
+[https://github.com/kenriki/purePHPnoFrameWork/commit/827b59dc945c201ba7cb7343cc861fdfa33135b4](https://github.com/kenriki/purePHPnoFrameWork/commit/827b59dc945c201ba7cb7343cc861fdfa33135b4)

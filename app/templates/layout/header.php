@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <title><?= htmlspecialchars($page['title']) ?></title>
     <link rel="stylesheet" href="/assets/style.css">
+    <style>
+        table { border-collapse: collapse; width: 100%; font-size: 12px; }
+        th, td { border: 1px solid #aaa; padding: 4px; text-align: center; }
+        th { background: #eee; }
+    </style>
 </head>
 <body>
 <header>

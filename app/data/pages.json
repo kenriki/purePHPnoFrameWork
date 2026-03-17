@@ -38,6 +38,18 @@
             }
         ]
     },
+    "sample2": {
+        "title": "テーブルの扱い方サンプル",
+        "sections": [{
+                "type": "text",
+                "content": "テーブルの扱い方について学ぼう"
+            },
+            {
+                "type": "php",
+                "file": "tableMaster.php"
+            }
+        ]
+    },
     "about": {
         "title": "このサイトについて",
         "sections": [{

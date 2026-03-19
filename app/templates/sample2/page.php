@@ -1,7 +1,5 @@
 <?php
-/**
- * 現場で使うSQL文の定義
- */
+/** 現場で使うSQL文の定義 */
 $sql = "
 WITH T1 AS (
     SELECT *, ROW_NUMBER() OVER(PARTITION BY SerialNo ORDER BY id DESC) as rn 
@@ -17,10 +15,7 @@ LEFT JOIN T1 ON m.SerialNo = T1.SerialNo
 LEFT JOIN T2 ON m.SerialNo = T2.SerialNo
 ";
 
-/**
- * 【家でのテスト用】DB実行をシミュレートする関数
- * 現場では $stmt = $pdo->prepare($sql); $stmt->execute(); $rows = ... に置き換える部分
- */
+/** 家でのテスト用 DB シミュレーター */
 function simulateDbExecute($sql) {
     $dummyRows = [];
     for ($i = 1; $i <= 5; $i++) {
@@ -30,7 +25,6 @@ function simulateDbExecute($sql) {
             'id' => $i,
             'delete_flg' => 0,
         ];
-        // 10テーブル分のカラム A~J を生成
         for ($t = 1; $t <= 10; $t++) {
             $char = chr(64 + $t);
             $data["Table{$t}_Col{$char}"] = "Data-{$t}-{$i}";
@@ -41,85 +35,65 @@ function simulateDbExecute($sql) {
     return $dummyRows;
 }
 
-// 1. 実行（現場では $pdo を使うが、家ではシミュレーターを使用）
-$rows = simulateDbExecute($sql);
-
-// 2. 非表示にしたいカラム（ブラックリスト）
+// ★ 非表示にしたいカラム（ブラックリスト）
 /* ============================================================
  *  ▼ 除外パターン（ブラックリスト方式）
  *  SELECT * で大量に取った後、不要なカラムだけ削除する方式
  *  → カラムが多い場合は管理が大変
  * ============================================================ */
+$rowsBlack = simulateDbExecute($sql);
 
 $blackList = ['Table3_ColC', 'Table5_ColE', 'Table8_ColH', 'id', 'rn', 'delete_flg'];
 
-// 3. PHPで不要なカラムを削除（アスタリスクで取った後の後処理）
-foreach ($rows as &$row) {
+foreach ($rowsBlack as &$row) {
     foreach ($blackList as $target) {
-        if (array_key_exists($target, $row)) {
-            unset($row[$target]);
-        }
+        unset($row[$target]);
     }
 }
 unset($row);
 
-// --- 4. 表示用のHTML ---
-?>
-<h3>除外したいカラムについて</h3>
-<h4>除外したいカラムを除外して、SQL実行結果の画面流し込み（不要カラム削除済み）</h4>
-<p>実行されたSQLの一部: <pre><code><?php echo htmlspecialchars(substr($sql, 0, 100)); ?>...</code></pre></p>
-
-<table>
-    <thead>
-        <tr>
-            <?php if (!empty($rows)): ?>
-                <?php foreach (array_keys($rows[0]) as $header): ?>
-                    <th><?php echo htmlspecialchars($header); ?></th>
-                <?php endforeach; ?>
-            <?php endif; ?>
-        </tr>
-    </thead>
-    <tbody>
-        <?php foreach ($rows as $row): ?>
-            <tr>
-                <?php foreach ($row as $value): ?>
-                    <td><?php echo htmlspecialchars($value); ?></td>
-                <?php endforeach; ?>
-            </tr>
-        <?php endforeach; ?>
-    </tbody>
-</table>
-
-<h3>表示したいカラムについて</h3>
-<?php
-// 2. 表示したいカラム（ホワイトリスト）
+// ★ 表示したいカラム（ホワイトリスト）
 /* ============================================================
  *  ▼ 表示したいパターン（ホワイトリスト方式）
  *  必要なカラム名だけを指定し、それ以外はすべて除外する方式
  *  → カラムが多い場合はこちらの方が安全で管理しやすい
  * ============================================================ */
+$rowsWhite = simulateDbExecute($sql);
 
 $whiteList = ['A-SerialNo', 'B-SerialNo', 'Table1_ColA', 'Table2_ColB'];
 
-// 3. PHPでホワイトリストにあるカラムだけ残す
-foreach ($rows as &$row) {
+foreach ($rowsWhite as &$row) {
     $row = array_intersect_key($row, array_flip($whiteList));
 }
 unset($row);
 ?>
-<table>
+
+<h3>ブラックリスト版（除外したいカラムを削除）</h3>
+<?php if (!empty($rowsBlack)): ?>
+<table class="dataTable">
     <thead>
+        <!-- 1行目：カラム名 -->
         <tr>
-            <?php if (!empty($rows)): ?>
-                <?php foreach (array_keys($rows[0]) as $header): ?>
-                    <th><?php echo htmlspecialchars($header); ?></th>
-                <?php endforeach; ?>
-            <?php endif; ?>
+            <?php foreach (array_keys($rowsBlack[0]) as $header): ?>
+                <th class="sortable"><?php echo htmlspecialchars($header); ?></th>
+            <?php endforeach; ?>
+        </tr>
+        <!-- 2行目：検索窓 -->
+        <tr>
+            <?php foreach (array_keys($rowsBlack[0]) as $header): ?>
+                <th>
+                    <input
+                        type="text"
+                        class="filter-input"
+                        placeholder="検索"
+                        style="width: 90%;"
+                    >
+                </th>
+            <?php endforeach; ?>
         </tr>
     </thead>
-
     <tbody>
-        <?php foreach ($rows as $row): ?>
+        <?php foreach ($rowsBlack as $row): ?>
             <tr>
                 <?php foreach ($row as $value): ?>
                     <td><?php echo htmlspecialchars($value); ?></td>
@@ -128,3 +102,105 @@ unset($row);
         <?php endforeach; ?>
     </tbody>
 </table>
+<?php endif; ?>
+
+<hr>
+
+<h3>ホワイトリスト版（表示したいカラムだけ）</h3>
+<?php if (!empty($rowsWhite)): ?>
+<table class="dataTable">
+    <thead>
+        <!-- 1行目：カラム名 -->
+        <tr>
+            <?php foreach (array_keys($rowsWhite[0]) as $header): ?>
+                <th class="sortable"><?php echo htmlspecialchars($header); ?></th>
+            <?php endforeach; ?>
+        </tr>
+        <!-- 2行目：検索窓 -->
+        <tr>
+            <?php foreach (array_keys($rowsWhite[0]) as $header): ?>
+                <th>
+                    <input
+                        type="text"
+                        class="filter-input"
+                        placeholder="検索"
+                        style="width: 90%;"
+                    >
+                </th>
+            <?php endforeach; ?>
+        </tr>
+    </thead>
+    <tbody>
+        <?php foreach ($rowsWhite as $row): ?>
+            <tr>
+                <?php foreach ($row as $value): ?>
+                    <td><?php echo htmlspecialchars($value); ?></td>
+                <?php endforeach; ?>
+            </tr>
+        <?php endforeach; ?>
+    </tbody>
+</table>
+<?php endif; ?>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+
+    // 複数テーブル対応
+    document.querySelectorAll(".dataTable").forEach(table => {
+        const tbody = table.querySelector("tbody");
+        const headerCells = table.querySelectorAll("thead tr:first-child th");
+        const filterInputs = table.querySelectorAll(".filter-input");
+
+        // ▼ フィルタ
+        filterInputs.forEach((input, colIndex) => {
+            input.addEventListener("input", () => {
+                const filters = Array.from(filterInputs).map(i => i.value.trim().toLowerCase());
+
+                Array.from(tbody.querySelectorAll("tr")).forEach(row => {
+                    let visible = true;
+
+                    Array.from(row.children).forEach((cell, idx) => {
+                        const keyword = filters[idx];
+                        if (keyword && !cell.innerText.toLowerCase().includes(keyword)) {
+                            visible = false;
+                        }
+                    });
+
+                    row.style.display = visible ? "" : "none";
+                });
+            });
+        });
+
+        // ▼ ソート
+        headerCells.forEach((th, colIndex) => {
+            th.style.cursor = "pointer";
+
+            th.addEventListener("click", () => {
+                const rows = Array.from(tbody.querySelectorAll("tr"));
+                const asc = th.dataset.sortOrder !== "asc";
+                th.dataset.sortOrder = asc ? "asc" : "desc";
+
+                headerCells.forEach(h => {
+                    if (h !== th) h.textContent = h.textContent.replace(/[▲▼]/g, "");
+                });
+
+                th.textContent = th.textContent.replace(/[▲▼]/g, "") + (asc ? " ▲" : " ▼");
+
+                rows.sort((a, b) => {
+                    const A = a.children[colIndex].innerText.trim();
+                    const B = b.children[colIndex].innerText.trim();
+
+                    if (!isNaN(A) && !isNaN(B)) return asc ? A - B : B - A;
+                    if (!isNaN(Date.parse(A)) && !isNaN(Date.parse(B)))
+                        return asc ? new Date(A) - new Date(B) : new Date(B) - new Date(A);
+
+                    return asc ? A.localeCompare(B) : B.localeCompare(A);
+                });
+
+                rows.forEach(row => tbody.appendChild(row));
+            });
+        });
+    });
+
+});
+</script>

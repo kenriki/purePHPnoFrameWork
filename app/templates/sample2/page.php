@@ -45,6 +45,12 @@ function simulateDbExecute($sql) {
 $rows = simulateDbExecute($sql);
 
 // 2. 非表示にしたいカラム（ブラックリスト）
+/* ============================================================
+ *  ▼ 除外パターン（ブラックリスト方式）
+ *  SELECT * で大量に取った後、不要なカラムだけ削除する方式
+ *  → カラムが多い場合は管理が大変
+ * ============================================================ */
+
 $blackList = ['Table3_ColC', 'Table5_ColE', 'Table8_ColH', 'id', 'rn', 'delete_flg'];
 
 // 3. PHPで不要なカラムを削除（アスタリスクで取った後の後処理）
@@ -59,7 +65,8 @@ unset($row);
 
 // --- 4. 表示用のHTML ---
 ?>
-<h3>SQL実行結果の画面流し込み（不要カラム削除済み）</h3>
+<h3>除外したいカラムについて</h3>
+<h4>除外したいカラムを除外して、SQL実行結果の画面流し込み（不要カラム削除済み）</h4>
 <p>実行されたSQLの一部: <pre><code><?php echo htmlspecialchars(substr($sql, 0, 100)); ?>...</code></pre></p>
 
 <table>
@@ -72,6 +79,45 @@ unset($row);
             <?php endif; ?>
         </tr>
     </thead>
+    <tbody>
+        <?php foreach ($rows as $row): ?>
+            <tr>
+                <?php foreach ($row as $value): ?>
+                    <td><?php echo htmlspecialchars($value); ?></td>
+                <?php endforeach; ?>
+            </tr>
+        <?php endforeach; ?>
+    </tbody>
+</table>
+
+<h3>表示したいカラムについて</h3>
+<?php
+// 2. 表示したいカラム（ホワイトリスト）
+/* ============================================================
+ *  ▼ 表示したいパターン（ホワイトリスト方式）
+ *  必要なカラム名だけを指定し、それ以外はすべて除外する方式
+ *  → カラムが多い場合はこちらの方が安全で管理しやすい
+ * ============================================================ */
+
+$whiteList = ['A-SerialNo', 'B-SerialNo', 'Table1_ColA', 'Table2_ColB'];
+
+// 3. PHPでホワイトリストにあるカラムだけ残す
+foreach ($rows as &$row) {
+    $row = array_intersect_key($row, array_flip($whiteList));
+}
+unset($row);
+?>
+<table>
+    <thead>
+        <tr>
+            <?php if (!empty($rows)): ?>
+                <?php foreach (array_keys($rows[0]) as $header): ?>
+                    <th><?php echo htmlspecialchars($header); ?></th>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </tr>
+    </thead>
+
     <tbody>
         <?php foreach ($rows as $row): ?>
             <tr>

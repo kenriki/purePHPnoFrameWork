@@ -138,3 +138,33 @@ if (php_sapi_name() !== 'cli') {
     exit;
 }
 ```
+
+## おまけ
+PHPUnit の TestDox 形式（テキストファイル出力）では、テストが成功した項目に [x]（チェックボックスに×印をつけた状態）を表示するのが標準の仕様です。
+[x] ： テスト成功（完了）
+[ ] ： テスト失敗（または未実行）
+もしテストが失敗していたら、ファイルの中身は [ ] Show になり、その下にエラーメッセージが詳しく書き込まれます。
+
+### Homeコントローラーのテスト結果
+```terminal
+PS C:\Apache24\htdocs\sample2> php .\lib\phpunit-13.0.5.phar tests/HomeControllerTest.php --log-teamcity tests/result/testHomeController.txt
+PHPUnit 13.0.5 by Sebastian Bergmann and contributors.
+
+Runtime:       PHP 8.5.3
+Configuration: C:\Apache24\htdocs\sample2\phpunit.xml
+
+.                                                                   1 / 1 (100%)
+
+Time: 00:00.008, Memory: 26.00 MB
+
+There was 1 PHPUnit test runner warning:
+
+1) Test results may not be as expected because the XML configuration file did not pass validation:
+
+  Line 5:
+  - Element 'phpunit', attribute '{http://www.w3.org}noNamespaceSchemaLocation': The attribute '{http://www.w3.org}noNamespaceSchemaLocation' is not allowed.
+
+
+OK, but there were issues!
+Tests: 1, Assertions: 2, PHPUnit Warnings: 1.
+```

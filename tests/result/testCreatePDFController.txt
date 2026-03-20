@@ -1,0 +1,5 @@
+##teamcity[testCount count='1' flowId='15768']
+##teamcity[testSuiteStarted name='CreatePDFControllerTest' locationHint='php_qn://C:\Apache24\htdocs\sample2\tests\CreatePDFControllerTest.php::\CreatePDFControllerTest' flowId='15768']
+##teamcity[testStarted name='testShow' locationHint='php_qn://C:\Apache24\htdocs\sample2\tests\CreatePDFControllerTest.php::\CreatePDFControllerTest::testShow' flowId='15768']
+##teamcity[testFinished name='testShow' duration='9' flowId='15768']
+##teamcity[testSuiteFinished name='CreatePDFControllerTest' flowId='15768']

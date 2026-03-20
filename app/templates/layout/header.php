@@ -18,9 +18,28 @@
     <nav>
         <ul>
             <li><a href="/index.php?page=home">Home</a></li>
-            <li><a href="/index.php?page=sample">Sample</a></li>
+            <li><a href="/index.php?page=sample">テーブル1Sample</a></li>
+            <li><a href="/index.php?page=sample2">テーブル2Sample</a></li>
             <li><a href="/index.php?page=sample1">じゃんけん</a></li>
             <li><a href="/index.php?page=about">About</a></li>
             <li><a href="/index.php?page=etc">etc</a></li>
         </ul>
     </nav>
+    <!-- <nav>
+        <ul class="menu">
+            <li><a href="/index.php?page=home">Home</a></li> -->
+
+            <!-- ▼ Hover で開くテーブルメニュー -->
+            <!-- <li class="dropdown">
+                <a href="#">サンプルコード</a>
+                <ul class="dropdown-menu">
+                    <li><a href="/index.php?page=sample">テーブル1Sample</a></li>
+                    <li><a href="/index.php?page=sample2">テーブル2Sample</a></li>
+                    <li><a href="/index.php?page=sample1">じゃんけん</a></li>
+                </ul>
+            </li>
+
+            <li><a href="/index.php?page=about">About</a></li>
+            <li><a href="/index.php?page=etc">etc</a></li>
+        </ul>
+    </nav> -->

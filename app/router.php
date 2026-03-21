@@ -5,6 +5,7 @@ require_once __DIR__ . '/controllers/HomeController.php';
 require_once __DIR__ . '/controllers/SampleController.php';
 require_once __DIR__ . '/controllers/Sample1Controller.php';
 require_once __DIR__ . '/controllers/Sample2Controller.php';
+require_once __DIR__ . '/controllers/Sample3Controller.php';
 require_once __DIR__ . '/controllers/CreatePDFController.php';
 
 function route($page) {
@@ -22,6 +23,9 @@ function route($page) {
 
         case 'sample2':
             return (new Sample2Controller())->show();
+
+        case 'sample3':
+            return (new Sample3Controller())->show();
 
         case 'createPDF':
             // PDF生成アクション

@@ -50,6 +50,18 @@
             }
         ]
     },
+    "sample3": {
+        "title": "Python連携サンプル",
+        "sections": [{
+                "type": "text",
+                "content": "Python連携について学ぼう"
+            },
+            {
+                "type": "php",
+                "file": "pythonMaster.php"
+            }
+        ]
+    },
     "about": {
         "title": "このサイトについて",
         "sections": [{

@@ -21,6 +21,7 @@
             <li><a href="/index.php?page=sample">テーブル1Sample</a></li>
             <li><a href="/index.php?page=sample2">テーブル2Sample</a></li>
             <li><a href="/index.php?page=sample1">じゃんけん</a></li>
+            <li><a href="/index.php?page=sample3">Python連携</a></li>
             <li><a href="/index.php?page=about">About</a></li>
             <li><a href="/index.php?page=etc">etc</a></li>
         </ul>

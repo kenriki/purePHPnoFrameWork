@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title><?= htmlspecialchars($page['title']) ?></title>
-    <link rel="stylesheet" href="/assets/style.css">
+    <link rel="stylesheet" href="/assets/css/style.css">
     <style>
         table { border-collapse: collapse; width: 100%; font-size: 12px; }
         th, td { border: 1px solid #aaa; padding: 4px; text-align: center; }
@@ -17,29 +17,23 @@
 <main>
     <nav>
         <ul>
-            <li><a href="/index.php?page=home">Home</a></li>
-            <li><a href="/index.php?page=sample">テーブル1Sample</a></li>
-            <li><a href="/index.php?page=sample2">テーブル2Sample</a></li>
-            <li><a href="/index.php?page=sample1">じゃんけん</a></li>
-            <li><a href="/index.php?page=about">About</a></li>
-            <li><a href="/index.php?page=etc">etc</a></li>
+            <?php
+            // 1. JSONファイルを読み込む（PageControllerと同様の処理）
+            $menuData = json_decode(file_get_contents(DATA_PATH), true);
+
+            // 2. ループで li タグを生成
+            if ($menuData):
+                foreach ($menuData as $id => $content): 
+                    // 特定のページを表示したくない場合はここで除外も可能
+                    ?>
+                    <li>
+                        <a href="/index.php?page=<?= htmlspecialchars($id) ?>">
+                            <?= htmlspecialchars($content['title'] ?? $id) ?>
+                        </a>
+                    </li>
+                <?php 
+                endforeach;
+            endif; 
+            ?>
         </ul>
     </nav>
-    <!-- <nav>
-        <ul class="menu">
-            <li><a href="/index.php?page=home">Home</a></li> -->
-
-            <!-- ▼ Hover で開くテーブルメニュー -->
-            <!-- <li class="dropdown">
-                <a href="#">サンプルコード</a>
-                <ul class="dropdown-menu">
-                    <li><a href="/index.php?page=sample">テーブル1Sample</a></li>
-                    <li><a href="/index.php?page=sample2">テーブル2Sample</a></li>
-                    <li><a href="/index.php?page=sample1">じゃんけん</a></li>
-                </ul>
-            </li>
-
-            <li><a href="/index.php?page=about">About</a></li>
-            <li><a href="/index.php?page=etc">etc</a></li>
-        </ul>
-    </nav> -->

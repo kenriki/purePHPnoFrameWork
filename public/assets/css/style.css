@@ -1,0 +1,53 @@
+body {
+    background: #f0f0f0;
+}
+
+nav {
+    background: #333;
+    padding: 10px 0;
+    /* 左右のパディングはul側で調整 */
+}
+
+nav ul {
+    list-style: none;
+    margin: 0;
+    padding: 0 20px;
+    /* 左右に余白を確保 */
+    display: flex;
+    gap: 20px;
+    /* 横スライド用の設定 */
+    overflow-x: auto;
+    /* 横方向にはみ出たらスクロール */
+    white-space: nowrap;
+    /* 項目を改行させない */
+    -webkit-overflow-scrolling: touch;
+    /* スマホでの操作を滑らかに */
+}
+
+
+/* スクロールバーを隠したい場合（お好みで） */
+
+nav ul::-webkit-scrollbar {
+    display: none;
+}
+
+nav ul li {
+    /* display: inline-block; は flex のため不要 */
+    flex: 0 0 auto;
+    /* 項目が画面幅に合わせて縮まないように固定 */
+}
+
+nav ul li a {
+    color: #fff;
+    text-decoration: none;
+    font-weight: bold;
+    padding: 6px 10px;
+    border-radius: 4px;
+    transition: 0.2s;
+    display: block;
+    /* クリック範囲を広げる */
+}
+
+nav ul li a:hover {
+    background: #555;
+}

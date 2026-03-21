@@ -50,6 +50,42 @@
             }
         ]
     },
+    "sample3": {
+        "title": "Python連携サンプル",
+        "sections": [{
+                "type": "text",
+                "content": "Python連携について学ぼう"
+            },
+            {
+                "type": "php",
+                "file": "pythonMaster.php"
+            }
+        ]
+    },
+    "sample4": {
+        "title": "サンプル４のページ",
+        "sections": [{
+                "type": "text",
+                "content": "サンプル４について学ぼう"
+            },
+            {
+                "type": "php",
+                "file": "sample4.php"
+            }
+        ]
+    },
+    "sample5": {
+        "title": "サンプル5のページ",
+        "sections": [{
+                "type": "text",
+                "content": "サンプル5について学ぼう"
+            },
+            {
+                "type": "php",
+                "file": "sample5.php"
+            }
+        ]
+    },
     "about": {
         "title": "このサイトについて",
         "sections": [{

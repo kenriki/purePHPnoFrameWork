@@ -62,6 +62,30 @@
             }
         ]
     },
+    "sample4": {
+        "title": "サンプル４のページ",
+        "sections": [{
+                "type": "text",
+                "content": "サンプル４について学ぼう"
+            },
+            {
+                "type": "php",
+                "file": "sample4.php"
+            }
+        ]
+    },
+    "sample5": {
+        "title": "サンプル5のページ",
+        "sections": [{
+                "type": "text",
+                "content": "サンプル5について学ぼう"
+            },
+            {
+                "type": "php",
+                "file": "sample5.php"
+            }
+        ]
+    },
     "about": {
         "title": "このサイトについて",
         "sections": [{

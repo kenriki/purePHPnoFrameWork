@@ -15,7 +15,8 @@
     <h1><?= htmlspecialchars($page['title']) ?></h1>
 </header>
 <main>
-    <nav>
+    <nav class="scroll-nav">
+        <button class="nav-arrow left">‹</button>
         <ul>
             <?php
             // 1. JSONファイルを読み込む（PageControllerと同様の処理）
@@ -36,4 +37,5 @@
             endif; 
             ?>
         </ul>
+        <button class="nav-arrow right">›</button>
     </nav>

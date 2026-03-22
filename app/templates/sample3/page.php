@@ -1,6 +1,8 @@
 <?php
+//echo shell_exec('whoami 2>&1');
 // 1. Python実行設定
-$pythonPath = "C:\\Users\\user\\AppData\\Local\\Programs\\Python\\Python313\\python.exe";
+//$pythonPath = "C:\\Users\\user\\AppData\\Local\\Programs\\Python\\Python313\\python.exe";
+$pythonPath = "C:\\Program Files\\Python314\\python.exe";
 $scriptPath = __DIR__ . '/../../scripts/process_data.py';
 $csvPath = __DIR__ . '/../../data/data.csv';
 

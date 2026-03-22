@@ -7,7 +7,8 @@ foreach (glob(__DIR__ . '/controllers/*Controller.php') as $filename) {
 }
 
 // 認証チェック関数
-function checkAuthentication($page) {
+function checkAuthentication($page)
+{
     // ログインしていなくても見れるページ
     $public_pages = ['login', 'register'];
 
@@ -19,21 +20,33 @@ function checkAuthentication($page) {
         }
     }
 }
-
-function route($page) {
+function route($page)
+{
     checkAuthentication($page);
 
-    // 認証系（ログイン・登録・ログアウト）の振り分け
+    // --- Auth系 ---
     if (in_array($page, ['login', 'register', 'logout'])) {
-        $controller = new AuthController();
-        if ($page === 'logout') {
-            return $controller->logout();
-        }
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            return $controller->$page();
-        }
+        $auth = new AuthController();
+        if ($page === 'logout')
+            return $auth->logout();
+        if ($_SERVER['REQUEST_METHOD'] === 'POST')
+            return $auth->$page();
     }
-    // どの専用処理にも当てはまらない場合はページを表示
+
+    // --- PDF生成の振り分け ---
+    if ($page === 'createPDF') {
+        $controller = new CreatePDFController();
+
+        // URLに &action=generate がついている時だけ PDF生成(generate)を実行
+        if (isset($_GET['action']) && $_GET['action'] === 'generate') {
+            return $controller->generate();
+        }
+
+        // それ以外の時は、通常の画面表示(show)を実行
+        return $controller->show();
+    }
+
+    // --- 通常の表示（render） ---
     return (new PageController())->render($page);
 }
 ?>

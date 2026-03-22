@@ -95,6 +95,15 @@
             }
         ]
     },
+    "logout": {
+        "title": "ログアウト",
+        "sections": [
+            {
+                "type": "php",
+                "file": "auth/logout.php"
+            }
+        ]
+    },
     "register": {
         "title": "新規会員登録",
         "sections": [

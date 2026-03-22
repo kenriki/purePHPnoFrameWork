@@ -41,23 +41,37 @@
                 <button class="nav-arrow left">‹</button>
                 <ul>
                     <?php
-                    // 1. JSONファイルを読み込む（PageControllerと同様の処理）
+                    // 1. JSONファイルを読み込む
                     $menuData = json_decode(file_get_contents(DATA_PATH), true);
 
                     // 2. ループで li タグを生成
                     if ($menuData):
                         foreach ($menuData as $id => $content):
-                            // 特定のページを表示したくない場合はここで除外も可能
+                            // 1. 表示名（title）を取得
+                            $title = $content['title'] ?? '';
+
+                            // 2. 表示名が以下のいずれかに一致したら除外する
+                            $exclude_titles = ['ログイン', '新規会員登録', 'ログアウト', 'createPDF'];
+
+                            if (in_array($title, $exclude_titles)) {
+                                continue;
+                            }
                             ?>
                             <li>
                                 <a href="/index.php?page=<?= htmlspecialchars($id) ?>">
-                                    <?= htmlspecialchars($content['title'] ?? $id) ?>
+                                    <?= htmlspecialchars($title) ?>
                                 </a>
                             </li>
-                        <?php
+                            <?php
                         endforeach;
                     endif;
-                    ?>
+
+                    // 最後にログアウトボタンだけ別枠で追加
+                    if (isset($_SESSION['user_id'])): ?>
+                        <li class="logout-item">
+                            <a href="/index.php?page=logout" style="color: #ff4d4d;">ログアウト</a>
+                        </li>
+                    <?php endif; ?>
                 </ul>
                 <button class="nav-arrow right">›</button>
             </nav>

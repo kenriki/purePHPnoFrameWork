@@ -1,4 +1,6 @@
-<?php foreach ($page['sections'] as $section): ?>
+<?php
+// PageController から渡された $page['sections'] を順番に処理
+foreach ($page['sections'] as $section): ?>
 
     <?php if ($section['type'] === 'text'): ?>
         <p><?= nl2br(htmlspecialchars($section['content'])) ?></p>
@@ -20,6 +22,19 @@
             <h2><?= htmlspecialchars($section['headline']) ?></h2>
             <p><?= htmlspecialchars($section['subtext']) ?></p>
         </section>
+
+    <?php elseif ($section['type'] === 'php'): ?>
+        <div class="php-content">
+            <?php 
+            // dbconfig.php で定義した TEMPLATE_PATH を使用
+            $phpFile = TEMPLATE_PATH . $section['file'];
+            if (file_exists($phpFile)) {
+                include $phpFile;
+            } else {
+                echo "<p style='color:red;'>Error: ファイル「" . htmlspecialchars($section['file']) . "」が見つかりません。</p>";
+            }
+            ?>
+        </div>
 
     <?php endif; ?>
 

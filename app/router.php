@@ -1,29 +1,39 @@
 <?php
 
-// 1. 基準となる PageController を最初に読み込む
+// コントローラーの読み込み
 require_once __DIR__ . '/controllers/PageController.php';
-
-// 2. controllers フォルダ内のファイルを一括で読み込む (手書き不要)
 foreach (glob(__DIR__ . '/controllers/*Controller.php') as $filename) {
     require_once $filename;
 }
 
-function route($page) {
-    // クラス名を推測（例: 'home' -> 'HomeController'）
-    $controllerName = ucfirst($page) . 'Controller';
+// 認証チェック関数
+function checkAuthentication($page) {
+    // ログインしていなくても見れるページ
+    $public_pages = ['login', 'register'];
 
-    // 1. クラスが存在する場合（HomeController, SampleControllerなど）
-    if (class_exists($controllerName)) {
-        $controller = new $controllerName();
-        // PDFなどの特殊なアクション分岐がある場合
-        if ($page === 'createPDF' && isset($_GET['action']) && $_GET['action'] === 'generate') {
-            return $controller->generate();
+    if (!in_array($page, $public_pages)) {
+        if (!isset($_SESSION['user_id'])) {
+            // ログインしていない場合はログイン画面へ強制移動
+            header("Location: index.php?page=login");
+            exit;
         }
-        return $controller->show();
     }
+}
 
-    // 2. クラスがない場合は、PageController で JSON ページとして処理
-    // (PageController 内で 404 判定も行う)
+function route($page) {
+    checkAuthentication($page);
+
+    // 認証系（ログイン・登録・ログアウト）の振り分け
+    if (in_array($page, ['login', 'register', 'logout'])) {
+        $controller = new AuthController();
+        if ($page === 'logout') {
+            return $controller->logout();
+        }
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            return $controller->$page();
+        }
+    }
+    // どの専用処理にも当てはまらない場合はページを表示
     return (new PageController())->render($page);
 }
 ?>

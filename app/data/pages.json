@@ -113,6 +113,24 @@
             }
         ]
     },
+    "survey": {
+        "title": "アンケート",
+        "sections": [
+            {
+                "type": "php",
+                "file": "pages/survey_form.php"
+            }
+        ]
+    },
+    "survey_thanks": {
+        "title": "アンケート送信完了",
+        "sections": [
+            {
+                "type": "php",
+                "file": "pages/survey_thanks.php"
+            }
+        ]
+    },
     "about": {
         "title": "このサイトについて",
         "sections": [{

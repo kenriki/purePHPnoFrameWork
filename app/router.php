@@ -46,6 +46,19 @@ function route($page)
         return $controller->show();
     }
 
+    // --- アンケートの振り分け ---
+    if ($page === 'survey') {
+        $controller = new SurveyController();
+
+        // POST送信（保存ボタンが押された時）は store を実行
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            return $controller->store();
+        }
+
+        // 普通にアクセスした時は show を実行
+        return $controller->show();
+    }
+
     // --- 通常の表示（render） ---
     return (new PageController())->render($page);
 }

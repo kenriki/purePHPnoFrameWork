@@ -51,7 +51,7 @@
                             $title = $content['title'] ?? '';
 
                             // 2. 表示名が以下のいずれかに一致したら除外する
-                            $exclude_titles = ['ログイン', '新規会員登録', 'ログアウト', 'createPDF'];
+                            $exclude_titles = ['ログイン', '新規会員登録', 'ログアウト', 'createPDF','アンケート送信完了'];
 
                             if (in_array($title, $exclude_titles)) {
                                 continue;

@@ -5,6 +5,11 @@
             <label>ユーザー名</label>
             <input type="text" name="username" style="width: 100%; padding: 8px; box-sizing: border-box;" required>
         </div>
+
+        <div class="form-group">
+            <label>メールアドレス</label>
+            <input type="email" name="email" required placeholder="example@mail.com">
+        </div>
         
         <div style="margin-bottom: 10px; position: relative;">
             <label>パスワード</label>

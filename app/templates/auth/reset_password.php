@@ -1,7 +1,4 @@
 <?php
-// 環境設定（UTF-8固定）
-mb_internal_encoding("UTF-8");
-mb_http_output("UTF-8");
 header('Content-Type: text/html; charset=UTF-8');
 
 require_once APP_ROOT . '/app/dbconfig.php';
@@ -44,6 +41,8 @@ $update_stmt->execute([$hash, $email]);
 // 4. 更新が物理的に行われた場合のみメール送信
 if ($update_stmt->rowCount() > 0) {
 
+    mb_language("Japanese");
+    mb_internal_encoding("UTF-8");
     $subject = "パスワード更新完了通知";
     $body_lines = [
         "パスワードの変更が完了しました。",

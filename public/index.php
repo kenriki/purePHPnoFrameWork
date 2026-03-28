@@ -1,5 +1,8 @@
 <?php
 session_start();
+header('Content-Type: text/html; charset=UTF-8');
+mb_internal_encoding("UTF-8");
+
 /**
  * 1. DB接続設定の読み込み
  * config.php を dbconfig.php にリネームしたものを読み込みます

@@ -24,7 +24,7 @@ class AuthController
             if ($user && password_verify($password, $user['password'])) {
                 $_SESSION['user_id'] = $user['id'];
                 $_SESSION['username'] = $user['username'];
-                $_SESSION['email']    = $user['email'];
+                $_SESSION['email'] = $user['email'];
                 // var_dump($user);
                 // exit;
                 header("Location: index.php?page=home");
@@ -84,6 +84,7 @@ class AuthController
     public function reset_password()
     {
         $email = $_POST['email'] ?? '';
+        $current_password = $_POST['current_password'] ?? '';
         $new_password = $_POST['new_password'] ?? '';
         $confirm_password = $_POST['confirm_password'] ?? '';
 
@@ -93,9 +94,15 @@ class AuthController
         }
 
         $db = getDB();
-        $stmt = $db->prepare("SELECT id FROM users WHERE email = ?");
+        $stmt = $db->prepare("SELECT id, password FROM users WHERE email = ?");
         $stmt->execute([$email]);
         $user = $stmt->fetch();
+
+        //var_dump($user); exit;
+        if (!$user || !password_verify($current_password, $user['password'])) {
+            echo "<script>alert('現在のパスワードが違います'); history.back();</script>";
+            exit;
+        }
 
         if (!$user) {
             echo "<p style='color:red;'>メールアドレスが登録されていません。</p>";

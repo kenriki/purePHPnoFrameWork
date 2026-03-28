@@ -1,10 +1,18 @@
 <div style="max-width: 300px; margin: 50px auto; padding: 20px; border: 1px solid #ccc; border-radius: 8px;">
-    <h2 style="text-align: center;">パスワード再設定</h2>
+    <h2 style="text-align: center;">パスワード変更</h2>
 
     <form action="index.php?page=reset_password" method="POST" accept-charset="UTF-8">
         <div style="margin-bottom: 10px;">
             <label>メールアドレス</label>
             <input type="email" name="email" style="width: 100%; padding: 8px;" required>
+        </div>
+
+        <div style="margin-bottom: 10px; position: relative;">
+            <label>現在のパスワード</label>
+            <input type="password" id="current_password" name="current_password" style="width: 100%; padding: 8px;"
+                required>
+            <span onclick="togglePassword('current_password')"
+                style="position: absolute; right: 10px; top: 35px; cursor: pointer;">👁</span>
         </div>
 
         <div style="margin-bottom: 10px; position: relative;">

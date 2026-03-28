@@ -167,7 +167,7 @@ class AuthController
         //     echo "入力したパスワード: " . $current_password . "<br>";
         //     die("一致しませんでした。DBの中身が古いか、登録時のパスワードが異なります。");
         // }
-        
+
         // 4. パスワード更新（ハッシュ化して保存）
         $hashed = password_hash($new_password, PASSWORD_DEFAULT);
         $stmt = $db->prepare("UPDATE users SET password = ?, update_date = NOW() WHERE id = ?");
@@ -191,12 +191,25 @@ class AuthController
             $mail->SMTPSecure = 'tls';
             $mail->Port = SMTP_PORT;
             $mail->CharSet = 'UTF-8'; // 文字化け防止
+            $mail->Encoding = 'base64';  // ★これを追加！
 
+            // 1. 送信元：第2引数に「表示名」をしっかり指定します
             $mail->setFrom(ADMIN_EMAIL, 'Sample Site 管理者');
-            $mail->addAddress($email);
 
-            $mail->Subject = 'パスワードが更新されました';
-            $mail->Body = "以下のパスワードに更新されました：\n\n" . $new_password;
+            // 宛先が空でないかチェック
+            if (!empty($email)) {
+                $mail->addAddress($email);
+            } else {
+                throw new Exception('宛先メールアドレスが正しく取得できていません。');
+            }
+
+            // 2. 件名：新規登録と同じ【Sample Site】というプレフィックスを付けます
+            $mail->Subject = '【Sample Site】パスワード更新完了のお知らせ';
+
+            // 3. 本文：ここもお好みで整えるとより親切です
+            $mail->Body = "パスワードの更新が完了しました。\n\n"
+                . "新しいパスワード： " . $new_password . "\n\n"
+                . "心当たりがない場合は、至急管理者へご連絡ください。";
 
             $mail->send();
 

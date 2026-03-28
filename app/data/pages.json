@@ -2,7 +2,9 @@
     "home": {
         "title": "ホームページ",
         "subTitle": "TOPICS",
-        "sections": [{
+        "template": "home/page.php",
+        "sections": [
+            {
                 "type": "hero",
                 "headline": "トップページへようこそ！",
                 "subtext": "JSONで管理されたPure PHPサイトです"
@@ -13,9 +15,15 @@
             }
         ]
     },
+    "memo": {
+        "title": "仕事メモ",
+        "template": "memo/page.php",
+        "controller": "MemoController"
+    },
     "sample": {
         "title": "サンプルページ",
-        "sections": [{
+        "sections": [
+            {
                 "type": "sample",
                 "headline": "ここにサブタイトル",
                 "subtext": "サンプルページ内のテキストメッセージ"
@@ -28,7 +36,8 @@
     },
     "sample1": {
         "title": "じゃんけんゲーム",
-        "sections": [{
+        "sections": [
+            {
                 "type": "text",
                 "content": "じゃんけんゲームで遊ぼう！"
             },
@@ -40,7 +49,8 @@
     },
     "sample2": {
         "title": "テーブルの扱い方サンプル",
-        "sections": [{
+        "sections": [
+            {
                 "type": "text",
                 "content": "テーブルの扱い方について学ぼう"
             },
@@ -52,7 +62,8 @@
     },
     "sample3": {
         "title": "Python連携サンプル",
-        "sections": [{
+        "sections": [
+            {
                 "type": "text",
                 "content": "Python連携について学ぼう"
             },
@@ -64,7 +75,8 @@
     },
     "sample4": {
         "title": "サンプル４のページ",
-        "sections": [{
+        "sections": [
+            {
                 "type": "text",
                 "content": "サンプル４について学ぼう"
             },
@@ -76,7 +88,8 @@
     },
     "sample5": {
         "title": "サンプル5のページ",
-        "sections": [{
+        "sections": [
+            {
                 "type": "text",
                 "content": "サンプル5について学ぼう"
             },
@@ -113,6 +126,24 @@
             }
         ]
     },
+    "forgot_password": {
+        "title": "パスワード再設定",
+        "sections": [
+            {
+                "type": "php",
+                "file": "auth/forgot_password.php"
+            }
+        ]
+    },
+    "reset_password": {
+        "title": "パスワード更新",
+        "sections": [
+            {
+                "type": "php",
+                "file": "auth/reset_password.php"
+            }
+        ]
+    },
     "survey": {
         "title": "アンケート",
         "sections": [
@@ -133,15 +164,18 @@
     },
     "about": {
         "title": "このサイトについて",
-        "sections": [{
-            "type": "text",
-            "content": "pure PHP と JSON で構築された軽量CMS風の仕組みです。"
-        }]
+        "sections": [
+            {
+                "type": "text",
+                "content": "pure PHP と JSON で構築された軽量CMS風の仕組みです。"
+            }
+        ]
     },
     "createPDF": {
         "title": "インターネットとセキュリティ",
         "sub_title": "インターネットとセキュリティについて",
-        "sections": [{
+        "sections": [
+            {
                 "type": "text",
                 "content": "インターネットは現代社会に欠かせないインフラですが、同時に多くのセキュリティリスクも存在します。安全に利用するためには、基本的な知識と対策が重要です。"
             },

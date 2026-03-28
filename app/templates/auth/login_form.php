@@ -9,11 +9,15 @@
             <label>パスワード</label>
             <input type="password" name="password" style="width: 100%; padding: 8px;" required>
         </div>
-        <button type="submit" style="width: 100%; padding: 10px; background: #333; color: #fff; border: none; cursor: pointer;">
+        <button type="submit"
+            style="width: 100%; padding: 10px; background: #333; color: #fff; border: none; cursor: pointer;">
             ログイン
         </button>
     </form>
     <p style="text-align: center; margin-top: 15px; font-size: 0.9em;">
         アカウントをお持ちでない方は <a href="?page=register">新規登録</a>
+    </p>
+    <p style="text-align: center; margin-top: 10px; font-size: 0.9em;">
+        <a href="index.php?page=forgot_password">パスワードをお忘れの方はこちら</a>
     </p>
 </div>

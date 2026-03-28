@@ -1,9 +1,10 @@
 <?php
 
-class PageController {
+class PageController
+{
 
-    public function render($pageId) {
-
+    public function render($pageId)
+    {
         $json = json_decode(file_get_contents(DATA_PATH), true);
 
         // ページが存在しない場合は 404 用のデータを作る

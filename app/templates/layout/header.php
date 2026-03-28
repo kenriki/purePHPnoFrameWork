@@ -1,3 +1,8 @@
+<?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+?>
 <!DOCTYPE html>
 <html lang="ja">
 
@@ -51,7 +56,7 @@
                             $title = $content['title'] ?? '';
 
                             // 2. 表示名が以下のいずれかに一致したら除外する
-                            $exclude_titles = ['ログイン', '新規会員登録', 'ログアウト', 'createPDF','アンケート送信完了'];
+                            $exclude_titles = ['ログイン', '新規会員登録', 'ログアウト', 'createPDF','アンケート送信完了','パスワード再設定','パスワード更新'];
 
                             if (in_array($title, $exclude_titles)) {
                                 continue;

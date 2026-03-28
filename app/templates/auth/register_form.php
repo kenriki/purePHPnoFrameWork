@@ -5,10 +5,16 @@
             <label>ユーザー名</label>
             <input type="text" name="username" style="width: 100%; padding: 8px; box-sizing: border-box;" required>
         </div>
+<<<<<<< HEAD
 
         <div class="form-group">
             <label>メールアドレス</label>
             <input type="email" name="email" required placeholder="example@mail.com">
+=======
+        <div style="margin-bottom: 10px;">
+            <label>メールアドレス</label>
+            <input type="text" name="email" style="width: 100%; padding: 8px; box-sizing: border-box;" required>
+>>>>>>> develop
         </div>
         
         <div style="margin-bottom: 10px; position: relative;">

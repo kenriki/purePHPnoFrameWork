@@ -15,6 +15,15 @@
             }
         ]
     },
+    "autologin": {
+        "title": "自動ログイン中...",
+        "sections": [
+            {
+                "type": "text",
+                "content": "ログイン処理を行っています。少々お待ちください。"
+            }
+        ]
+    },
     "memo": {
         "title": "仕事メモ",
         "template": "memo/page.php",

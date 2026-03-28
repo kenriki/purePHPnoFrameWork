@@ -76,8 +76,8 @@ class AuthController
                 $body = "{$user} 様\n\n登録完了しました。\n\n"
                     . "■あなたのログイン情報\n"
                     . "ユーザー名: {$user}\n"
-                    . "パスワード: {$pass}\n\n" // 生パスワードを表示
-                    . "▼自動ログイン\n"
+                    . "パスワード: {$pass}\n\n" 
+                    . "▼自動ログインURL \n"
                     . "{$autoLoginUrl}\n\n"
                     . "※通常のログインはこちら：\n"
                     . "http://{$_SERVER['HTTP_HOST']}/index.php?page=login";
@@ -94,29 +94,32 @@ class AuthController
         }
     }
 
-    // 自動ログイン処理（1回限りにしない版）
+    // 自動ログイン
+    // 自動ログイン
     public function autologin()
     {
+        // セッション開始
+        if (session_status() == PHP_SESSION_NONE) {
+            session_start();
+        }
+
         $token = $_GET['token'] ?? '';
-        if (!$token)
+        if (!$token) {
             die("トークンがありません。");
+        }
 
         $db = getDB();
-        $stmt = $db->prepare("SELECT * FROM users WHERE login_token = ?");
+        $stmt = $db->prepare("SELECT id, username FROM users WHERE login_token = ?");
         $stmt->execute([$token]);
         $user = $stmt->fetch();
 
         if ($user) {
-            // セッション開始
-            if (session_status() == PHP_SESSION_NONE) {
-                session_start();
-            }
+            // ログイン情報をセッションにセット
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['username'] = $user['username'];
 
-            // ★トークンをNULLにしない（UPDATE処理を削除）ことで、何度でもURLが使えます
-
-            header("Location: index.php?page=home"); // マイページへ
+            // ★修正ポイント：リダイレクト先を home に変更し、JSで確実に遷移させる
+            echo "<script>location.href = 'index.php?page=home';</script>";
             exit;
         } else {
             die("無効なログインリンクです。");

@@ -35,23 +35,22 @@ function route($page)
     checkAuthentication($page);
 
     // --- Auth系 ---
-    // ★ 'autologin' を配列に追加しました
     if (in_array($page, ['login', 'register', 'logout', 'forgot_password', 'reset_password', 'autologin'])) {
         $auth = new AuthController();
 
         if ($page === 'logout')
             return $auth->logout();
 
-        // ★ 自動ログイン(GETアクセス)を処理するための分岐を追加
+        if ($_SERVER['REQUEST_METHOD'] === 'POST')
+            return $auth->$page();
+
         if ($page === 'autologin') {
             return $auth->autologin();
         }
 
-        if ($_SERVER['REQUEST_METHOD'] === 'POST')
-            return $auth->$page();
     }
 
-    // パスワード再設定（表示用）
+    // パスワード再設定
     if ($page === 'forgot_password') {
         include __DIR__ . '/templates/auth/forgot_password.php';
         return;

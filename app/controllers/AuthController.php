@@ -76,7 +76,7 @@ class AuthController
                 $body = "{$user} 様\n\n登録完了しました。\n\n"
                     . "■あなたのログイン情報\n"
                     . "ユーザー名: {$user}\n"
-                    . "パスワード: {$pass}\n\n" 
+                    . "パスワード: {$pass}\n\n"
                     . "▼自動ログインURL \n"
                     . "{$autoLoginUrl}\n\n"
                     . "※通常のログインはこちら：\n"
@@ -128,33 +128,47 @@ class AuthController
 
     public function reset_password()
     {
-        $email = $_POST['email'] ?? '';
+        // 入力値の取得（trimを追加して余計なスペースを削除）
+        $email = trim($_POST['email'] ?? '');
         $current_password = $_POST['current_password'] ?? '';
         $new_password = $_POST['new_password'] ?? '';
         $confirm_password = $_POST['confirm_password'] ?? '';
 
+        // 1. 新しいパスワードの一致確認
         if ($new_password !== $confirm_password) {
-            echo "<p style='color:red;'>パスワードが一致しません。</p>";
+            echo "<script>alert('新しいパスワードが一致しません'); history.back();</script>";
             return;
         }
 
         $db = getDB();
+
+        // 2. ユーザーの存在確認
         $stmt = $db->prepare("SELECT id, password FROM users WHERE email = ?");
         $stmt->execute([$email]);
         $user = $stmt->fetch();
 
-        //var_dump($user); exit;
-        if (!$user || !password_verify($current_password, $user['password'])) {
+        if (!$user) {
+            echo "<script>alert('メールアドレスが登録されていません'); history.back();</script>";
+            exit;
+        }
+
+        // 3. 現在のパスワード照合（DBのハッシュと入力値を比較）
+        // ※もしここでエラーになるなら、DBに「ハッシュ化されていない生パスワード」が入っている可能性があります
+        if (!password_verify($current_password, $user['password'])) {
             echo "<script>alert('現在のパスワードが違います'); history.back();</script>";
             exit;
         }
 
-        if (!$user) {
-            echo "<p style='color:red;'>メールアドレスが登録されていません。</p>";
-            return;
-        }
+        // // 3. 現在のパスワード照合
+        // $is_match = password_verify($current_password, $user['password']);
 
-        // パスワード更新
+        // if (!$is_match) {
+        //     // 【デバッグ用】一致しない理由を画面に出す
+        //     echo "入力したパスワード: " . $current_password . "<br>";
+        //     die("一致しませんでした。DBの中身が古いか、登録時のパスワードが異なります。");
+        // }
+        
+        // 4. パスワード更新（ハッシュ化して保存）
         $hashed = password_hash($new_password, PASSWORD_DEFAULT);
         $stmt = $db->prepare("UPDATE users SET password = ?, update_date = NOW() WHERE id = ?");
         $stmt->execute([$hashed, $user['id']]);
@@ -166,21 +180,19 @@ class AuthController
         require_once APP_ROOT . '/app/lib/PHPMailer/src/SMTP.php';
         require_once APP_ROOT . '/app/lib/PHPMailer/src/Exception.php';
 
-        $mail = new PHPMailer\PHPMailer\PHPMailer();
+        $mail = new PHPMailer\PHPMailer\PHPMailer(true);
 
         try {
             $mail->isSMTP();
-            $mail->Host = SMTP_HOST;        // smtp.gmail.com
+            $mail->Host = SMTP_HOST;
             $mail->SMTPAuth = true;
-            $mail->Username = SMTP_USER;    // Gmail アドレス
-            $mail->Password = SMTP_PASS;    // アプリパスワード
+            $mail->Username = SMTP_USER;
+            $mail->Password = SMTP_PASS;
             $mail->SMTPSecure = 'tls';
-            $mail->Port = SMTP_PORT;        // 587
+            $mail->Port = SMTP_PORT;
+            $mail->CharSet = 'UTF-8'; // 文字化け防止
 
-            // 送信元（管理メールアドレス）
             $mail->setFrom(ADMIN_EMAIL, 'Sample Site 管理者');
-
-            // 送信先（ユーザー）
             $mail->addAddress($email);
 
             $mail->Subject = 'パスワードが更新されました';
@@ -188,12 +200,14 @@ class AuthController
 
             $mail->send();
 
-            echo "<p style='color:green;'>パスワードを更新し、メールを送信しました。</p>";
+            echo "<p style='color:green; text-align:center; padding:50px;'>パスワードを更新し、通知メールを送信しました。<br><a href='index.php?page=home'>ホームへ戻る</a></p>";
 
         } catch (Exception $e) {
-            echo "<p style='color:red;'>メール送信に失敗しました: {$mail->ErrorInfo}</p>";
+            // パスワード更新自体は成功しているので、その旨を伝える
+            echo "<p style='color:orange;'>パスワードは更新されましたが、メール送信に失敗しました: {$mail->ErrorInfo}</p>";
         }
     }
+
 
 
 }

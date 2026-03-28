@@ -24,7 +24,9 @@ class AuthController
             if ($user && password_verify($password, $user['password'])) {
                 $_SESSION['user_id'] = $user['id'];
                 $_SESSION['username'] = $user['username'];
-
+                $_SESSION['email']    = $user['email'];
+                // var_dump($user);
+                // exit;
                 header("Location: index.php?page=home");
                 exit;
             } else {
@@ -76,6 +78,68 @@ class AuthController
             } catch (PDOException $e) {
                 die("エラー：そのユーザー名は既に使われています。<a href='javascript:history.back()'>戻る</a>");
             }
+        }
+    }
+
+    public function reset_password()
+    {
+        $email = $_POST['email'] ?? '';
+        $new_password = $_POST['new_password'] ?? '';
+        $confirm_password = $_POST['confirm_password'] ?? '';
+
+        if ($new_password !== $confirm_password) {
+            echo "<p style='color:red;'>パスワードが一致しません。</p>";
+            return;
+        }
+
+        $db = getDB();
+        $stmt = $db->prepare("SELECT id FROM users WHERE email = ?");
+        $stmt->execute([$email]);
+        $user = $stmt->fetch();
+
+        if (!$user) {
+            echo "<p style='color:red;'>メールアドレスが登録されていません。</p>";
+            return;
+        }
+
+        // パスワード更新
+        $hashed = password_hash($new_password, PASSWORD_DEFAULT);
+        $stmt = $db->prepare("UPDATE users SET password = ?, update_date = NOW() WHERE id = ?");
+        $stmt->execute([$hashed, $user['id']]);
+
+        // ---------------------------
+        // メール送信（PHPMailer）
+        // ---------------------------
+        require_once APP_ROOT . '/app/lib/PHPMailer/src/PHPMailer.php';
+        require_once APP_ROOT . '/app/lib/PHPMailer/src/SMTP.php';
+        require_once APP_ROOT . '/app/lib/PHPMailer/src/Exception.php';
+
+        $mail = new PHPMailer\PHPMailer\PHPMailer();
+
+        try {
+            $mail->isSMTP();
+            $mail->Host = SMTP_HOST;        // smtp.gmail.com
+            $mail->SMTPAuth = true;
+            $mail->Username = SMTP_USER;    // Gmail アドレス
+            $mail->Password = SMTP_PASS;    // アプリパスワード
+            $mail->SMTPSecure = 'tls';
+            $mail->Port = SMTP_PORT;        // 587
+
+            // 送信元（管理メールアドレス）
+            $mail->setFrom(ADMIN_EMAIL, 'Sample Site 管理者');
+
+            // 送信先（ユーザー）
+            $mail->addAddress($email);
+
+            $mail->Subject = 'パスワードが更新されました';
+            $mail->Body = "以下のパスワードに更新されました：\n\n" . $new_password;
+
+            $mail->send();
+
+            echo "<p style='color:green;'>パスワードを更新し、メールを送信しました。</p>";
+
+        } catch (Exception $e) {
+            echo "<p style='color:red;'>メール送信に失敗しました: {$mail->ErrorInfo}</p>";
         }
     }
 

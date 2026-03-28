@@ -1,0 +1,13 @@
+.env
+\app\lib\PHPMailer
+\lib\*.phar
+app/data/user_memos/
+app/lib/
+app/templates/memo/
+phpmyadmin/
+*.tar
+\font
+.bk
+f*.php
+tf*.php
+phpinfo.php

@@ -152,26 +152,26 @@ class AuthController
             exit;
         }
 
-        // 3. 現在のパスワード照合（DBのハッシュと入力値を比較）
-        // ※もしここでエラーになるなら、DBに「ハッシュ化されていない生パスワード」が入っている可能性があります
+        // 3. 現在のパスワード照合
         if (!password_verify($current_password, $user['password'])) {
             echo "<script>alert('現在のパスワードが違います'); history.back();</script>";
             exit;
         }
 
-        // // 3. 現在のパスワード照合
-        // $is_match = password_verify($current_password, $user['password']);
-
-        // if (!$is_match) {
-        //     // 【デバッグ用】一致しない理由を画面に出す
-        //     echo "入力したパスワード: " . $current_password . "<br>";
-        //     die("一致しませんでした。DBの中身が古いか、登録時のパスワードが異なります。");
-        // }
-
-        // 4. パスワード更新（ハッシュ化して保存）
+        // --------------------------------------------------
+        // 4. パスワード更新 ＆ 自動ログイン用トークンの生成
+        // --------------------------------------------------
         $hashed = password_hash($new_password, PASSWORD_DEFAULT);
-        $stmt = $db->prepare("UPDATE users SET password = ?, update_date = NOW() WHERE id = ?");
-        $stmt->execute([$hashed, $user['id']]);
+
+        // 新しい自動ログイン用トークンを発行（既存のものを上書きして安全性を高める）
+        $newToken = bin2hex(random_bytes(32));
+
+        // DB更新（パスワードとトークンの両方をセット）
+        $stmt = $db->prepare("UPDATE users SET password = ?, login_token = ?, update_date = NOW() WHERE id = ?");
+        $stmt->execute([$hashed, $newToken, $user['id']]);
+
+        // 自動ログインURLの組み立て
+        $autoLoginUrl = "http://{$_SERVER['HTTP_HOST']}/index.php?page=autologin&token={$newToken}";
 
         // ---------------------------
         // メール送信（PHPMailer）
@@ -183,6 +183,7 @@ class AuthController
         $mail = new PHPMailer\PHPMailer\PHPMailer(true);
 
         try {
+            // SMTP設定
             $mail->isSMTP();
             $mail->Host = SMTP_HOST;
             $mail->SMTPAuth = true;
@@ -190,26 +191,28 @@ class AuthController
             $mail->Password = SMTP_PASS;
             $mail->SMTPSecure = 'tls';
             $mail->Port = SMTP_PORT;
-            $mail->CharSet = 'UTF-8'; // 文字化け防止
-            $mail->Encoding = 'base64';  // ★これを追加！
 
-            // 1. 送信元：第2引数に「表示名」をしっかり指定します
+            // 文字化け対策
+            $mail->CharSet = 'UTF-8';
+            $mail->Encoding = 'base64';
+
+            // 送信元・宛先
             $mail->setFrom(ADMIN_EMAIL, 'Sample Site 管理者');
-
-            // 宛先が空でないかチェック
             if (!empty($email)) {
                 $mail->addAddress($email);
             } else {
                 throw new Exception('宛先メールアドレスが正しく取得できていません。');
             }
 
-            // 2. 件名：新規登録と同じ【Sample Site】というプレフィックスを付けます
+            // 件名
             $mail->Subject = '【Sample Site】パスワード更新完了のお知らせ';
 
-            // 3. 本文：ここもお好みで整えるとより親切です
+            // 本文（自動ログインURLを追記）
             $mail->Body = "パスワードの更新が完了しました。\n\n"
-                . "新しいパスワード： " . $new_password . "\n\n"
-                . "心当たりがない場合は、至急管理者へご連絡ください。";
+                . "■新しいパスワード： " . $new_password . "\n\n"
+                . "▼こちらから自動ログインできます：\n"
+                . $autoLoginUrl . "\n\n"
+                . "※このメールに心当たりがない場合は、至急管理者へご連絡ください。";
 
             $mail->send();
 

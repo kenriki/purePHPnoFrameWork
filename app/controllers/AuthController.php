@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/../utils/MailUtil.php';
+
 class AuthController
 {
     // 画面表示
@@ -54,30 +56,73 @@ class AuthController
     {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $db = getDB();
+
             $user = $_POST['username'] ?? '';
-            $pass = $_POST['password'] ?? '';
-            $pass_conf = $_POST['password_conf'] ?? '';
+            $email = $_POST['email'] ?? '';
+            $pass = $_POST['password'] ?? ''; // 生のパスワードを保持
 
-            if ($pass !== $pass_conf) {
-                die("エラー：パスワードが一致しません。<a href='javascript:history.back()'>戻る</a>");
-            }
-
-            // パスワードをハッシュ化
+            // 自動ログイン用トークン（1回限りにしないためDBに保持し続ける）
+            $token = bin2hex(random_bytes(32));
             $hashed_password = password_hash($pass, PASSWORD_DEFAULT);
 
             try {
-                $stmt = $db->prepare("INSERT INTO users (username, password) VALUES (?, ?)");
-                $stmt->execute([$user, $hashed_password]);
+                $stmt = $db->prepare("INSERT INTO users (username, email, password, login_token) VALUES (?, ?, ?, ?)");
+                $stmt->execute([$user, $email, $hashed_password, $token]);
 
-                // 【重要】ここでメッセージを出し、処理を止める
-                echo "<div style='text-align:center; padding:50px; font-family:sans-serif;'>";
-                echo "<h2>✅ ユーザー「" . htmlspecialchars($user) . "」の登録が完了しました！</h2>";
-                echo "<p><a href='index.php?page=login' style='display:inline-block; margin-top:20px; padding:10px 20px; background:#007bff; color:#fff; text-decoration:none; border-radius:5px;'>ログイン画面へ移動する</a></p>";
-                echo "</div>";
+                $autoLoginUrl = "http://{$_SERVER['HTTP_HOST']}/index.php?page=autologin&token={$token}";
+
+                $subject = "【Sample Site】会員登録完了のお知らせ";
+                // ★本文にパスワードを追加
+                $body = "{$user} 様\n\n登録完了しました。\n\n"
+                    . "■あなたのログイン情報\n"
+                    . "ユーザー名: {$user}\n"
+                    . "パスワード: {$pass}\n\n" 
+                    . "▼自動ログインURL \n"
+                    . "{$autoLoginUrl}\n\n"
+                    . "※通常のログインはこちら：\n"
+                    . "http://{$_SERVER['HTTP_HOST']}/index.php?page=login";
+
+                MailUtil::sendMail($email, $subject, $body);
+
+                // 完了表示（image_4ad0a3.pngをベースに）
+                echo "<div style='text-align:center; padding:100px 20px;'><h1>登録完了！</h1><p><a href='index.php?page=login'>ログイン画面へ</a></p></div>";
                 exit;
+
             } catch (PDOException $e) {
-                die("エラー：そのユーザー名は既に使われています。<a href='javascript:history.back()'>戻る</a>");
+                die("エラー：" . $e->getMessage());
             }
+        }
+    }
+
+    // 自動ログイン
+    // 自動ログイン
+    public function autologin()
+    {
+        // セッション開始
+        if (session_status() == PHP_SESSION_NONE) {
+            session_start();
+        }
+
+        $token = $_GET['token'] ?? '';
+        if (!$token) {
+            die("トークンがありません。");
+        }
+
+        $db = getDB();
+        $stmt = $db->prepare("SELECT id, username FROM users WHERE login_token = ?");
+        $stmt->execute([$token]);
+        $user = $stmt->fetch();
+
+        if ($user) {
+            // ログイン情報をセッションにセット
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['username'] = $user['username'];
+
+            // ★修正ポイント：リダイレクト先を home に変更し、JSで確実に遷移させる
+            echo "<script>location.href = 'index.php?page=home';</script>";
+            exit;
+        } else {
+            die("無効なログインリンクです。");
         }
     }
 

@@ -10,28 +10,44 @@ foreach (glob(__DIR__ . '/controllers/*Controller.php') as $filename) {
 function checkAuthentication($page)
 {
     // ログインしていなくても見れるページ
-    $public_pages = ['login', 'register', 'forgot_password', 'reset_password'];
+    $public_pages = ['login', 'register', 'forgot_password', 'reset_password', 'autologin'];
 
+    // --- 追加：すでにログインしている場合の挙動 ---
+    if (isset($_SESSION['user_id'])) {
+        // ログイン済みユーザーが、ログイン・登録系ページにアクセスしたらダッシュボードへ
+        if (in_array($page, ['login', 'register', 'autologin'])) {
+            header("Location: index.php?page=home");
+            exit;
+        }
+    }
+
+    // --- 既存：ログインしていない場合の挙動 ---
     if (!in_array($page, $public_pages)) {
         if (!isset($_SESSION['user_id'])) {
-            // ログインしていない場合はログイン画面へ強制移動
             header("Location: index.php?page=login");
             exit;
         }
     }
 }
+
 function route($page)
 {
     checkAuthentication($page);
 
     // --- Auth系 ---
-    if (in_array($page, ['login', 'register', 'logout', 'forgot_password', 'reset_password'])) {
+    if (in_array($page, ['login', 'register', 'logout', 'forgot_password', 'reset_password', 'autologin'])) {
         $auth = new AuthController();
 
         if ($page === 'logout')
             return $auth->logout();
+
         if ($_SERVER['REQUEST_METHOD'] === 'POST')
             return $auth->$page();
+
+        if ($page === 'autologin') {
+            return $auth->autologin();
+        }
+
     }
 
     // パスワード再設定

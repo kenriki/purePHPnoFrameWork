@@ -5,6 +5,10 @@
             <label>ユーザー名</label>
             <input type="text" name="username" style="width: 100%; padding: 8px; box-sizing: border-box;" required>
         </div>
+        <div style="margin-bottom: 10px;">
+            <label>メールアドレス</label>
+            <input type="text" name="email" style="width: 100%; padding: 8px; box-sizing: border-box;" required>
+        </div>
         
         <div style="margin-bottom: 10px; position: relative;">
             <label>パスワード</label>

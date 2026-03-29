@@ -180,44 +180,33 @@ class MemoController
     // MemoController.php 内の generatePdf メソッド
     private function generatePdf($content)
     {
-        if (ob_get_length())
-            ob_clean();
-
-        // 1. ライブラリの読み込み（public直下の実ファイルを指定）
-        $baseDir = 'C:\\Apache24\\htdocs\\sample\\public\\';
-        $tfpdfPath = $baseDir . 'tfpdf.php';
-
-        if (!file_exists($tfpdfPath)) {
-            die("ライブラリが見つかりません: " . $tfpdfPath);
+        // 1. 出力バッファにあるゴミをすべて捨て、クリーンな状態にする
+        while (ob_get_level()) {
+            ob_end_clean();
         }
-        require_once $tfpdfPath;
 
-        // 2. インスタンス生成
+        // --- ライブラリ読み込み・生成（ここはこれまでのパスで） ---
+        $baseDir = 'C:\\Apache24\\htdocs\\sample\\public\\';
+        require_once $baseDir . 'tfpdf.php';
         $pdf = new tFPDF();
         $pdf->AddPage();
+        $pdf->AddFont('NotoSansJP', '', 'NotoSansJP-VariableFont_wght.ttf', true);
+        $pdf->SetFont('NotoSansJP', '', 11);
 
-        /**
-         * 3. 日本語フォント設定
-         * tFPDFは「tfpdf.phpと同じ階層の font/unifont/」を自動で探します。
-         * 第3引数にはパスを含めず、ファイル名のみを指定するのが正解です。
-         */
-        // image_c41261.png で確認した実際のファイル名に合わせてください
-        $fontFileName = 'NotoSansJP-VariableFont_wght.ttf';
-
-        $pdf->AddFont('NotoSansJP', '', $fontFileName, true);
-        $pdf->SetFont('NotoSansJP', '', 9);
-
-        // 4. コンテンツ出力
-        $pdf->Cell(0, 10, '仕事メモ エクスポート', 0, 1);
-        $pdf->Ln(5);
+        // 行間を狭く (6)
         $pdf->MultiCell(0, 5, $content);
 
-        // 5. ブラウザ出力
+        // 2. ファイル名の生成
         $filename = "memo_" . date('Ymd_His') . ".pdf";
-        header('Content-Type: application/pdf');
-        header("Content-Disposition: inline; filename*=UTF-8''" . rawurlencode($filename));
 
-        $pdf->Output('I');
+        // 3. ブラウザに「PDFファイル」であることを認識させるヘッダー
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Cache-Control: public, must-revalidate, max-age=0');
+        header('Pragma: public');
+
+        // 4. PDFを出力して即座に終了（これ以降のHTMLを混ぜない）
+        $pdf->Output('D', $filename);
         exit;
     }
 }

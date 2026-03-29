@@ -105,7 +105,7 @@ $display_user = $user ?? $_SESSION['user'] ?? 'guest';
 
                 <button type="submit" name="pdf_export" formtarget="_blank"
                     style="padding: 12px 20px; background: #6c757d; color: #fff; border: none; border-radius: 5px; cursor: pointer; font-size: 1rem; font-weight: bold;">
-                    PDFを作成
+                    PDFでダウンロード
                 </button>
 
                 <?php if ($current_id): ?>

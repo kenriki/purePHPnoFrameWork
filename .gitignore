@@ -8,5 +8,5 @@ phpmyadmin/
 .bk
 f*.php
 tf*.php
-/app/data/user_memos
+/app/data/user_memos    
 phpinfo.php

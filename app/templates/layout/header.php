@@ -9,6 +9,7 @@ if (session_status() === PHP_SESSION_NONE) {
 <head>
     <meta charset="UTF-8">
     <title><?= htmlspecialchars($page['title']) ?></title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="stylesheet" href="/assets/css/style.css">
     <style>
         table {

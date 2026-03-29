@@ -103,6 +103,11 @@ $display_user = $user ?? $_SESSION['user'] ?? 'guest';
                     保存する
                 </button>
 
+                <button type="submit" name="pdf_export" formtarget="_blank"
+                    style="padding: 12px 20px; background: #6c757d; color: #fff; border: none; border-radius: 5px; cursor: pointer; font-size: 1rem; font-weight: bold;">
+                    PDFを作成
+                </button>
+
                 <?php if ($current_id): ?>
                     <button type="submit" name="delete" onclick="return confirm('本当にこのメモを削除しますか？')"
                         style="background: none; border: none; color: #dc3545; cursor: pointer; font-size: 0.85rem;">

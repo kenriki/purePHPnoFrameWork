@@ -26,6 +26,13 @@ class MemoController
     public function handleRequest()
     {
         $action = $_GET['action'] ?? 'list';
+
+        // PDF作成ボタンが押された場合
+        if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pdf_export'])) {
+            $this->generatePdf($_POST['content']);
+            return;
+        }
+
         $id = $_GET['id'] ?? null;
 
         // POSTリクエスト（保存・削除）の処理
@@ -168,5 +175,49 @@ class MemoController
         $newId = $lastId + 1;
         file_put_contents($idFile, $newId);
         return sprintf('%06d', $newId); // 000001 形式
+    }
+
+    // MemoController.php 内の generatePdf メソッド
+    private function generatePdf($content)
+    {
+        if (ob_get_length())
+            ob_clean();
+
+        // 1. ライブラリの読み込み（public直下の実ファイルを指定）
+        $baseDir = 'C:\\Apache24\\htdocs\\sample\\public\\';
+        $tfpdfPath = $baseDir . 'tfpdf.php';
+
+        if (!file_exists($tfpdfPath)) {
+            die("ライブラリが見つかりません: " . $tfpdfPath);
+        }
+        require_once $tfpdfPath;
+
+        // 2. インスタンス生成
+        $pdf = new tFPDF();
+        $pdf->AddPage();
+
+        /**
+         * 3. 日本語フォント設定
+         * tFPDFは「tfpdf.phpと同じ階層の font/unifont/」を自動で探します。
+         * 第3引数にはパスを含めず、ファイル名のみを指定するのが正解です。
+         */
+        // image_c41261.png で確認した実際のファイル名に合わせてください
+        $fontFileName = 'NotoSansJP-VariableFont_wght.ttf';
+
+        $pdf->AddFont('NotoSansJP', '', $fontFileName, true);
+        $pdf->SetFont('NotoSansJP', '', 9);
+
+        // 4. コンテンツ出力
+        $pdf->Cell(0, 10, '仕事メモ エクスポート', 0, 1);
+        $pdf->Ln(5);
+        $pdf->MultiCell(0, 5, $content);
+
+        // 5. ブラウザ出力
+        $filename = "memo_" . date('Ymd_His') . ".pdf";
+        header('Content-Type: application/pdf');
+        header("Content-Disposition: inline; filename*=UTF-8''" . rawurlencode($filename));
+
+        $pdf->Output('I');
+        exit;
     }
 }

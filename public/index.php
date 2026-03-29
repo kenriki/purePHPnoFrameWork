@@ -11,30 +11,42 @@ require_once __DIR__ . '/../app/router.php';
 
 // 2. ページパラメータの取得
 $page = $_GET['page'] ?? 'home';
+$action = $_GET['action'] ?? ''; // 💡 actionを追加取得
 
 /**
- * 3. 特定のページ（memo）に対するカスタムルーティング
- * router.php の route($page) を呼ぶ前に、新しいコントローラーを差し込みます。
+ * 💡 3. 【追加】合言葉（guest_name）のセッション保存処理
+ * フォームから 'set_guest_name' が送られてきたら、ここでセッションに焼く
  */
-if ($page === 'memo') {
-    // --- MemoController の実行 ---
-    require_once __DIR__ . '/../app/controllers/MemoController.php';
-
-    $controller = new MemoController();
-    $data = $controller->handleRequest(); // ここでブレークポイントが止まるはず！
-
-    // データの展開（Viewで $memos や $action を使えるようにする）
-    extract($data);
-
-    // ビューの表示（共通レイアウトを使っている場合は、ここで include する）
-    // もし既存の共通ヘッダー等があるなら、それに合わせて include してください
-    include __DIR__ . '/../app/templates/memo/page.php';
-
-    exit; // memo の処理が終わったらここで終了（下の route($page) は実行させない）
+if ($page === 'memo' && $action === 'set_guest_name') {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        // 入力された値をセッションに保存
+        $_SESSION['guest_name'] = $_POST['guest_name'] ?? '';
+    }
+    // 保存後、パラメータを綺麗にして一覧画面へリダイレクト（二重送信防止）
+    header("Location: /index.php?page=memo&action=list");
+    exit;
 }
 
 /**
- * 4. 既存のルーティングの実行（memo 以外はこちらで処理）
+ * 4. 特定のページ（memo）に対するカスタムルーティング
+ */
+if ($page === 'memo') {
+    require_once __DIR__ . '/../app/controllers/MemoController.php';
+
+    $controller = new MemoController();
+    $data = $controller->handleRequest();
+
+    // データの展開
+    extract($data);
+
+    // ビューの表示
+    include __DIR__ . '/../app/templates/memo/page.php';
+
+    exit;
+}
+
+/**
+ * 5. 既存のルーティングの実行（memo 以外）
  */
 route($page);
 ?>

@@ -4,24 +4,37 @@ header('Content-Type: text/html; charset=UTF-8');
 mb_internal_encoding("UTF-8");
 
 /**
- * 1. DB接続設定の読み込み
- * config.php を dbconfig.php にリネームしたものを読み込みます
+ * 1. 設定・共通ファイルの読み込み
  */
 require_once __DIR__ . '/../app/dbconfig.php';
-
-/**
- * 2. ルーターの読み込み
- * ここで session_start() や 認証チェック(403判定) が行われます
- */
 require_once __DIR__ . '/../app/router.php';
 
-// 3. ページパラメータの取得（デフォルトは home）
+// 2. ページパラメータの取得
 $page = $_GET['page'] ?? 'home';
 
 /**
- * 4. ルーティングの実行
- * router.php 内で定義した checkAuthentication($page) が走り、
- * 未ログインかつ制限ページなら、ここで 403 を出して終了(exit)します。
+ * 3. 特定のページ（memo）に対するカスタムルーティング
+ * router.php の route($page) を呼ぶ前に、新しいコントローラーを差し込みます。
+ */
+if ($page === 'memo') {
+    // --- MemoController の実行 ---
+    require_once __DIR__ . '/../app/controllers/MemoController.php';
+
+    $controller = new MemoController();
+    $data = $controller->handleRequest(); // ここでブレークポイントが止まるはず！
+
+    // データの展開（Viewで $memos や $action を使えるようにする）
+    extract($data);
+
+    // ビューの表示（共通レイアウトを使っている場合は、ここで include する）
+    // もし既存の共通ヘッダー等があるなら、それに合わせて include してください
+    include __DIR__ . '/../app/templates/memo/page.php';
+
+    exit; // memo の処理が終わったらここで終了（下の route($page) は実行させない）
+}
+
+/**
+ * 4. 既存のルーティングの実行（memo 以外はこちらで処理）
  */
 route($page);
 ?>

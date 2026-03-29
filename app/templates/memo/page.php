@@ -1,15 +1,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <?php
-// URLから状態を直接取得（コントローラーとの連携ミスを防止）
+// URLから状態を直接取得
 $current_action = $_GET['action'] ?? 'list';
 $current_id = $_GET['id'] ?? null;
-$display_content = isset($content) && is_string($content) ? $content : "";
 
 // 右上の表示用ユーザー判定
 $display_user = $user ?? $_SESSION['user'] ?? 'guest';
 
-// 💡 判定ロジックを修正：
-// $display_user が 'guest' か、空、もしくは未定義の場合を「未ログイン」とみなす
+// 💡 判定ロジック：$display_user が 'guest' か空ならゲストモード
 $isGuestMode = ($display_user === 'guest' || empty($display_user));
 ?>
 
@@ -40,7 +38,7 @@ $isGuestMode = ($display_user === 'guest' || empty($display_user));
         box-sizing: border-box;
     }
 
-    /* スマホ画面（幅600px以下）専用の調整 */
+    /* スマホ画面専用の調整 */
     @media (max-width: 600px) {
         .memo-container {
             padding: 10px !important;
@@ -51,12 +49,6 @@ $isGuestMode = ($display_user === 'guest' || empty($display_user));
 
         .memo-container h2 {
             font-size: 1.2rem;
-        }
-
-        .memo-container th:nth-child(2),
-        .memo-container td:nth-child(2) {
-            width: 100px;
-            font-size: 0.8rem;
         }
     }
 </style>
@@ -74,13 +66,11 @@ $isGuestMode = ($display_user === 'guest' || empty($display_user));
 
     <div style="margin-bottom: 20px; display: flex; gap: 10px;">
         <a href="/index.php?page=memo&action=list"
-            style="text-decoration: none; padding: 10px 15px; border: 1px solid #ddd; border-radius: 5px; color: #555; background: #fff; font-weight: bold; font-size: 0.9rem;">
-            📋 一覧
-        </a>
+            style="text-decoration: none; padding: 10px 15px; border: 1px solid #ddd; border-radius: 5px; color: #555; background: #fff; font-weight: bold; font-size: 0.9rem;">📋
+            一覧</a>
         <a href="/index.php?page=memo&action=new"
-            style="text-decoration: none; padding: 10px 15px; border: none; border-radius: 5px; color: #fff; background: #28a745; font-weight: bold; font-size: 0.9rem;">
-            ＋ 新規作成
-        </a>
+            style="text-decoration: none; padding: 10px 15px; border: none; border-radius: 5px; color: #fff; background: #28a745; font-weight: bold; font-size: 0.9rem;">＋
+            新規作成</a>
     </div>
 
     <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
@@ -106,10 +96,7 @@ $isGuestMode = ($display_user === 'guest' || empty($display_user));
                         style="color: #d9534f; font-weight: bold; font-size: 0.9rem; display: flex; align-items: center; gap: 5px;">
                         <span>⚠️</span> セッションが切れています（Guestモード）
                     </label>
-                    <p style="font-size: 0.8rem; color: #666; margin: 5px 0 8px 0;">
-                        保存やPDF作成時に、以下の名前が末尾に追記されます。
-                    </p>
-                    <div style="display: flex; gap: 10px; align-items: center;">
+                    <div style="display: flex; gap: 10px; align-items: center; margin-top: 8px;">
                         <span style="font-size: 0.8rem; color: #444; font-weight: bold;">署名:</span>
                         <input type="text" name="guest_name" placeholder="例：田中"
                             style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem;">
@@ -120,34 +107,26 @@ $isGuestMode = ($display_user === 'guest' || empty($display_user));
             <div
                 style="background: #f9f9f9; padding: 15px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #eee;">
                 <label style="display: block; font-weight: bold; margin-bottom: 10px; color: #444;">
-                    <?= (isset($current_action) && $current_action === 'new') ? '✨ 新規メモ作成' : '✍️ メモ編集' ?>
+                    <?= ($current_action === 'new') ? '✨ 新規メモ作成' : '✍️ メモ編集' ?>
                 </label>
 
-                <textarea name="content"
+                <textarea name="content" id="memo-content"
                     style="width: 100%; height: 450px; padding: 15px; border: 1px solid #ccc; border-radius: 5px; font-family: 'Consolas', 'Monaco', monospace; line-height: 1.6; resize: vertical; box-sizing: border-box; font-size: 1rem;"
-                    placeholder="ここに入力してください..."><?= htmlspecialchars($display_content ?? '') ?></textarea>
+                    placeholder="ここに入力してください..."><?php echo htmlspecialchars($content ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
             </div>
 
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                 <div style="display: flex; gap: 10px;">
                     <button type="submit"
-                        style="padding: 12px 30px; background: #007bff; color: #fff; border: none; border-radius: 5px; cursor: pointer; font-size: 1rem; font-weight: bold; transition: opacity 0.2s;"
-                        onmouseover="this.style.opacity=0.8" onmouseout="this.style.opacity=1">
-                        保存する
-                    </button>
-
+                        style="padding: 12px 30px; background: #007bff; color: #fff; border: none; border-radius: 5px; cursor: pointer; font-size: 1rem; font-weight: bold;">保存する</button>
                     <button type="submit" name="pdf_export" formtarget="_blank"
-                        style="padding: 12px 20px; background: #6c757d; color: #fff; border: none; border-radius: 5px; cursor: pointer; font-size: 1rem; font-weight: bold; transition: opacity 0.2s;"
-                        onmouseover="this.style.opacity=0.8" onmouseout="this.style.opacity=1">
-                        PDFでダウンロード
-                    </button>
+                        style="padding: 12px 20px; background: #6c757d; color: #fff; border: none; border-radius: 5px; cursor: pointer; font-size: 1rem; font-weight: bold;">PDFでダウンロード</button>
                 </div>
 
                 <?php if (!empty($current_id)): ?>
                     <button type="submit" name="delete" onclick="return confirm('本当にこのメモを削除しますか？')"
-                        style="background: none; border: none; color: #dc3545; cursor: pointer; font-size: 0.85rem; text-decoration: underline;">
-                        🗑️ このメモを削除
-                    </button>
+                        style="background: none; border: none; color: #dc3545; cursor: pointer; font-size: 0.85rem; text-decoration: underline;">🗑️
+                        このメモを削除</button>
                 <?php endif; ?>
             </div>
         </form>
@@ -168,22 +147,18 @@ $isGuestMode = ($display_user === 'guest' || empty($display_user));
                 <tbody>
                     <?php if (empty($memos)): ?>
                         <tr>
-                            <td colspan="2" style="padding: 30px; text-align: center; color: #999;">
-                                <?= ($user ?? 'guest') === 'guest' ? '合言葉を入力して「適用」を押してください。' : '保存されたメモはまだありません。' ?>
-                            </td>
+                            <td colspan="2" style="padding: 30px; text-align: center; color: #999;">メモはまだありません。</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($memos as $m): ?>
                             <tr style="border-bottom: 1px solid #f1f1f1;">
                                 <td style="padding: 15px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;">
                                     <a href="/index.php?page=memo&action=edit&id=<?= htmlspecialchars($m['id']) ?>"
-                                        style="color: #007bff; text-decoration: none; font-weight: bold; font-size: 1rem; display: block; overflow: hidden; text-overflow: ellipsis;">
-                                        📄 <?= $m['display_title_html'] ?>
-                                    </a>
+                                        style="color: #007bff; text-decoration: none; font-weight: bold; font-size: 1rem; display: block;">📄
+                                        <?= $m['display_title_html'] ?></a>
                                 </td>
                                 <td style="padding: 15px; text-align: right; color: #888; font-size: 0.85rem; white-space: nowrap;">
-                                    <?= htmlspecialchars($m['time']) ?>
-                                </td>
+                                    <?= htmlspecialchars($m['time']) ?></td>
                             </tr>
                         <?php endforeach; ?>
                     <?php endif; ?>
@@ -194,8 +169,6 @@ $isGuestMode = ($display_user === 'guest' || empty($display_user));
 
     <div style="margin-top: 25px; padding-top: 15px; border-top: 1px solid #eee;">
         <a href="/index.php?page=home"
-            style="text-decoration: none; color: #007bff; font-size: 0.9rem; font-weight: bold;">
-            ← ホームへ戻る
-        </a>
+            style="text-decoration: none; color: #007bff; font-size: 0.9rem; font-weight: bold;">← ホームへ戻る</a>
     </div>
 </div>

@@ -27,7 +27,7 @@ class MemoController
     {
         $action = $_GET['action'] ?? 'list';
 
-        // 一覧表示の前に、無記名メモを現在の合言葉に紐付け直す
+        // 1. 一覧表示の前に、無記名メモを現在の合言葉に紐付け直す
         if ($action === 'list') {
             $this->syncGuestMemos();
         }
@@ -36,7 +36,6 @@ class MemoController
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pdf_export'])) {
             $content = $_POST['content'] ?? '';
             $guestName = $_POST['guest_name'] ?? '';
-
             $this->generatePdf($content, $guestName);
             return;
         }
@@ -50,19 +49,24 @@ class MemoController
 
             if (isset($_POST['delete'])) {
                 $this->deleteMemo($memo_id);
-                header("Location: /index.php?page=memo&message=deleted");
+                // 2. 削除後のリダイレクト先を list に固定
+                header("Location: /index.php?page=memo&action=list&message=deleted");
                 exit;
             }
 
             // 保存実行
             $this->saveMemo($memo_id, $content);
+            // 3. 保存後のリダイレクト先
             header("Location: /index.php?page=memo&action=list&message=saved");
             exit;
         }
 
-        // 表示用データの取得
+        // 4. 表示用データの取得（ここが最重要修正）
         $memos = ($action === 'list') ? $this->getMemoList() : [];
-        $content = ($id) ? $this->getMemoContent($id) : "";
+
+        // 修正前: getMemoContent($id) 
+        // 修正後: getMemo($id) に変更して定義済みのメソッドを呼ぶようにする
+        $content = ($id) ? $this->getMemo($id) : "";
 
         return [
             'action' => $action,
@@ -72,6 +76,31 @@ class MemoController
             'user' => $this->user,
             'message' => $_GET['message'] ?? ""
         ];
+    }
+
+    /**
+     * IDをキーにして、DBからメモの内容（本文）を取得する
+     */
+    private function getMemo($id)
+    {
+        if (empty($id))
+            return "";
+
+        $db = getDB();
+
+        // ファイル (.txt) を見に行くのではなく、DBの content 列を直接引く
+        // これにより、ファイルとの不整合（幽霊データ）を防ぎます
+        $stmt = $db->prepare("
+        SELECT content 
+        FROM user_memos 
+        WHERE id = :id
+    ");
+
+        $stmt->execute([':id' => $id]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        // データがあれば中身を、なければ空文字を返す
+        return $result ? $result['content'] : "";
     }
 
     /**
@@ -241,40 +270,77 @@ class MemoController
     private function deleteMemo($id)
     {
         if (empty($id))
-            return;
+            return false;
 
-        // 現在のユーザー（guest含む）が所有しているメモかを確認して削除
-        // $this->user が 'guest' の場合は、そのセッションで作成されたものだけが対象
         $db = getDB();
 
-        // 1. まずDBから削除
+        // 💡 1. 削除権限を持つユーザー名を判定
+        $currentUser = $this->user ?? 'guest';
+        $targetUser = $currentUser;
+
+        if ($currentUser === 'guest') {
+            $guestName = $_SESSION['guest_name'] ?? '';
+            // 合言葉があれば 'guest_りき'、なければ 'guest'
+            $targetUser = !empty($guestName) ? 'guest_' . $guestName : 'guest';
+        }
+
+        // 💡 2. DBから削除（IDとユーザー名が一致する場合のみ）
         $stmt = $db->prepare("
         DELETE FROM user_memos 
         WHERE id = :id AND username = :username
     ");
+
         $stmt->execute([
             ':id' => $id,
-            ':username' => $this->user
+            ':username' => $targetUser
         ]);
 
-        // 2. DBで削除された（＝権限があった）場合のみ、物理ファイルも消す
+        // 💡 3. DBで削除に成功した場合のみ、物理ファイルも消す
         if ($stmt->rowCount() > 0) {
             $path = $this->baseDir . $id . ".txt";
             if (file_exists($path)) {
                 unlink($path);
             }
-
-            // ★ ID管理ファイル (last_id.txt) は消さない（欠番は許容するのが一般的）
+            return true;
         }
+
+        return false;
     }
 
     private function generateNextId()
     {
-        $idFile = $this->baseDir . "last_id.txt";
-        $lastId = file_exists($idFile) ? (int) file_get_contents($idFile) : 0;
-        $newId = $lastId + 1;
-        file_put_contents($idFile, $newId);
-        return sprintf('%06d', $newId); // 000001 形式
+        $db = getDB();
+
+        /**
+         * 削除されたID（欠番）を優先的に見つけるSQL
+         * 1から順に「存在しない番号」の最小値を探します。
+         */
+        $sql = "
+            SELECT min_id + 1 AS next_id
+            FROM (
+                SELECT 0 AS min_id
+                UNION ALL
+                SELECT CAST(id AS UNSIGNED) FROM user_memos
+            ) AS existing_ids
+            WHERE NOT EXISTS (
+                SELECT 1 FROM user_memos 
+                WHERE CAST(id AS UNSIGNED) = existing_ids.min_id + 1
+            )
+            ORDER BY next_id ASC
+            LIMIT 1
+        ";
+
+        $stmt = $db->query($sql);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        // 取得失敗（初期状態など）なら 1 を使う
+        $nextIdNum = $result['next_id'] ?? 1;
+
+        /**
+         * 💡 000001 形式（6桁）のゼロ埋めで返す
+         * ※以前は 5桁でしたが、元のコードに合わせて 6桁に調整しました。
+         */
+        return sprintf('%06d', $nextIdNum);
     }
 
     // MemoController.php 内の generatePdf メソッド
@@ -284,17 +350,17 @@ class MemoController
      */
     private function generatePdf($content, $guestName = '')
     {
-        // 1. 出力バッファをクリア（PDF破損防止）
-        if (ob_get_length())
-            ob_clean();
+        // 1. 強力に出力バッファを掃除（PDFバイナリの破損を徹底防止）
+        while (ob_get_level()) {
+            ob_end_clean();
+        }
 
-        // 2. Guest（未ログイン）かつ名前がある場合、本文末尾に追記
-        // セッションが切れていても「誰のメモか」を物理的に残す
-        if (!$this->user && !empty($guestName)) {
+        // 2. 署名の追記ロジック
+        if ($this->user === 'guest' && !empty($guestName)) {
             $content .= "\n\n---\n作成者: " . $guestName . " (Guest投稿)";
         }
 
-        // --- 以下、以前設定したtFPDFのロジック ---
+        // 3. tFPDFのロードと描画
         $baseDir = 'C:\\Apache24\\htdocs\\sample\\public\\';
         require_once $baseDir . 'tfpdf.php';
 
@@ -312,11 +378,24 @@ class MemoController
         // 第2引数を 5 にして行間を詰める
         $pdf->MultiCell(0, 5, $content);
 
-        $filename = "memo_" . date('Ymd_His') . ".pdf";
-        header('Content-Type: application/pdf');
-        header("Content-Disposition: inline; filename*=UTF-8''" . rawurlencode($filename));
+        // 💡 ポイント1：PDFデータを一旦「文字列」として取得
+        $pdf_data = $pdf->Output('S');
+        $pdf_size = strlen($pdf_data);
 
-        $pdf->Output('I', $filename); // 'D'にすれば直接ダウンロード
+        // 💡 ポイント2：ファイル名の生成
+        $filename = "memo_" . date('Ymd_His') . ".pdf";
+        $encoded_filename = rawurlencode($filename);
+
+        // 💡 ポイント3：スマホが「ダウンロード」と認識するヘッダー群
+        header('Content-Type: application/pdf');
+        // inline ではなく attachment を指定
+        header("Content-Disposition: attachment; filename*=UTF-8''" . $encoded_filename);
+        header("Content-Length: " . $pdf_size);
+        header('Cache-Control: public, must-revalidate, max-age=0');
+        header('Pragma: public');
+
+        // 最終出力
+        echo $pdf_data;
         exit;
     }
 }

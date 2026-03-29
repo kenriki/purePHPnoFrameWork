@@ -11,10 +11,10 @@ require_once __DIR__ . '/../app/router.php';
 
 // 2. ページパラメータの取得
 $page = $_GET['page'] ?? 'home';
-$action = $_GET['action'] ?? ''; // 💡 actionを追加取得
+$action = $_GET['action'] ?? ''; // actionを追加取得
 
 /**
- * 💡 3. 【追加】合言葉（guest_name）のセッション保存処理
+ * 3. 【追加】合言葉（guest_name）のセッション保存処理
  * フォームから 'set_guest_name' が送られてきたら、ここでセッションに焼く
  */
 if ($page === 'memo' && $action === 'set_guest_name') {

@@ -151,7 +151,7 @@ $display_user = $user ?? $_SESSION['user'] ?? 'guest';
     <div style="margin-top: 25px; padding-top: 15px; border-top: 1px solid #eee;">
         <a href="/index.php?page=home"
             style="text-decoration: none; color: #007bff; font-size: 0.9rem; font-weight: bold;">
-            ← ホームページへ戻る
+            ← ホームへ戻る
         </a>
     </div>
 </div>

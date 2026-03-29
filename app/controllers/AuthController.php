@@ -59,20 +59,22 @@ class AuthController
 
             $user = $_POST['username'] ?? '';
             $email = $_POST['email'] ?? '';
-            $pass = $_POST['password'] ?? ''; // 生のパスワードを保持
+            $pass = $_POST['password'] ?? '';
 
-            // 自動ログイン用トークン（1回限りにしないためDBに保持し続ける）
             $token = bin2hex(random_bytes(32));
             $hashed_password = password_hash($pass, PASSWORD_DEFAULT);
 
             try {
-                $stmt = $db->prepare("INSERT INTO users (username, email, password, login_token) VALUES (?, ?, ?, ?)");
-                $stmt->execute([$user, $email, $hashed_password, $token]);
+                // ここで切り出したメソッドをコールします
+                $new_id = $this->getNextUserId($db);
+
+                // INSERT文の準備（? は 5 つ）
+                $stmt = $db->prepare("INSERT INTO users (id, username, email, password, login_token) VALUES (?, ?, ?, ?, ?)");
+                $stmt->execute([$new_id, $user, $email, $hashed_password, $token]);
 
                 $autoLoginUrl = "http://{$_SERVER['HTTP_HOST']}/index.php?page=autologin&token={$token}";
 
                 $subject = "【Sample Site】会員登録完了のお知らせ";
-                // ★本文にパスワードを追加
                 $body = "{$user} 様\n\n登録完了しました。\n\n"
                     . "■あなたのログイン情報\n"
                     . "ユーザー名: {$user}\n"
@@ -84,7 +86,6 @@ class AuthController
 
                 MailUtil::sendMail($email, $subject, $body);
 
-                // 完了表示（image_4ad0a3.pngをベースに）
                 echo "<div style='text-align:center; padding:100px 20px;'><h1>登録完了！</h1><p><a href='index.php?page=login'>ログイン画面へ</a></p></div>";
                 exit;
 
@@ -94,7 +95,6 @@ class AuthController
         }
     }
 
-    // 自動ログイン
     // 自動ログイン
     public function autologin()
     {
@@ -222,6 +222,36 @@ class AuthController
             // パスワード更新自体は成功しているので、その旨を伝える
             echo "<p style='color:orange;'>パスワードは更新されましたが、メール送信に失敗しました: {$mail->ErrorInfo}</p>";
         }
+    }
+
+    /**
+     * usersテーブルから、現在空いている最小のIDを取得する
+     */
+    private function getNextUserId()
+    {
+        $db = getDB();
+
+        // 1から順に「存在しない番号」の最小値を探します。
+        // 全くデータがない場合は 1、1,2,4 とあれば 3 を返します。
+        $sql = "
+            SELECT min_id + 1 AS next_id
+            FROM (
+                SELECT 0 AS min_id
+                UNION ALL
+                SELECT id FROM users
+            ) AS existing_ids
+            WHERE NOT EXISTS (
+                SELECT 1 FROM users 
+                WHERE id = existing_ids.min_id + 1
+            )
+            ORDER BY next_id ASC
+            LIMIT 1
+        ";
+
+        $stmt = $db->query($sql);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $result ? (int) $result['next_id'] : 1;
     }
 
 

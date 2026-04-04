@@ -2,7 +2,7 @@
     <h2 style="text-align: center;">ログイン</h2>
     <form action="?page=login" method="POST">
         <div style="margin-bottom: 10px;">
-            <label>ユーザー名</label>
+            <label>ユーザー名またはメールアドレス</label>
             <input type="text" name="username" style="width: 100%; padding: 8px;" required>
         </div>
         <div style="margin-bottom: 15px;">

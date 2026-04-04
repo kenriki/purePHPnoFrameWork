@@ -15,24 +15,29 @@ class AuthController
     {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $db = getDB();
-            $username = $_POST['username'] ?? '';
+
+            $login_id = $_POST['username'] ?? ''; 
             $password = $_POST['password'] ?? '';
 
-            $stmt = $db->prepare("SELECT * FROM users WHERE username = ?");
-            $stmt->execute([$username]);
+            // username または email のどちらでもログイン可能にする
+            $stmt = $db->prepare("
+            SELECT * FROM users 
+             WHERE username = ? 
+                OR email = ?
+            LIMIT 1
+        ");
+            $stmt->execute([$login_id, $login_id]);
             $user = $stmt->fetch();
 
-            // password_verify でハッシュを照合
             if ($user && password_verify($password, $user['password'])) {
                 $_SESSION['user_id'] = $user['id'];
                 $_SESSION['username'] = $user['username'];
                 $_SESSION['email'] = $user['email'];
-                // var_dump($user);
-                // exit;
+
                 header("Location: index.php?page=home");
                 exit;
             } else {
-                echo "<script>alert('ユーザー名またはパスワードが違います'); location.href='?page=login';</script>";
+                echo "<script>alert('ユーザー名/メールアドレス または パスワードが違います'); location.href='?page=login';</script>";
                 exit;
             }
         }

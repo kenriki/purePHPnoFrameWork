@@ -68,6 +68,13 @@ class AuthController
                 // ここで切り出したメソッドをコールします
                 $new_id = $this->getNextUserId($db);
 
+                // email 重複チェック
+                $stmt = $db->prepare("SELECT id FROM users WHERE email = ?");
+                $stmt->execute([$email]);
+                if ($stmt->fetch()) {
+                    echo "<script>alert('このメールアドレスは既に登録されています'); history.back();</script>";
+                    return;
+                }
                 // INSERT文の準備（? は 5 つ）
                 $stmt = $db->prepare("INSERT INTO users (id, username, email, password, login_token) VALUES (?, ?, ?, ?, ?)");
                 $stmt->execute([$new_id, $user, $email, $hashed_password, $token]);

@@ -10,8 +10,19 @@ foreach (glob(__DIR__ . '/controllers/*Controller.php') as $filename) {
 function checkAuthentication($page)
 {
     // ログインしていなくても見れるページ
-    $public_pages = ['login', 'register', 'forgot_password', 'reset_password', 'autologin'];
+    $public_pages = [
+        'login',
+        'register',
+        'forgot_password',
+        'reset_password',
+        'autologin',
 
+        //パスワードを忘れた人向けの新しいページ
+        'forgot_password_request',
+        'forgot_password_send',
+        'forgot_password_verify',
+        'forgot_password_reset'
+    ];
     // --- 追加：すでにログインしている場合の挙動 ---
     if (isset($_SESSION['user_id'])) {
         // ログイン済みユーザーが、ログイン・登録系ページにアクセスしたらダッシュボードへ
@@ -85,6 +96,27 @@ function route($page)
 
         // 普通にアクセスした時は show を実行
         return $controller->show();
+    }
+
+    // --- パスワード再設定（パスワードを忘れた人向け） ---
+    if ($page === 'forgot_password_request') {
+        include __DIR__ . '/templates/auth/forgot_password_request.php';
+        return;
+    }
+
+    if ($page === 'forgot_password_send') {
+        $auth = new AuthController();
+        return $auth->forgot_password_send();
+    }
+
+    if ($page === 'forgot_password_verify') {
+        $auth = new AuthController();
+        return $auth->forgot_password_verify();
+    }
+
+    if ($page === 'forgot_password_reset') {
+        $auth = new AuthController();
+        return $auth->forgot_password_reset();
     }
 
     // --- 通常の表示（render） ---

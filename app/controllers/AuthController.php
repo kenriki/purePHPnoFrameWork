@@ -254,6 +254,102 @@ class AuthController
         return $result ? (int) $result['next_id'] : 1;
     }
 
+    // 認証コード送信
+    public function forgot_password_send()
+    {
+        $email = trim($_POST['email'] ?? '');
+
+        $db = getDB();
+        $stmt = $db->prepare("SELECT id FROM users WHERE email = ?");
+        $stmt->execute([$email]);
+        $user = $stmt->fetch();
+
+        if (!$user) {
+            echo "<script>alert('メールアドレスが登録されていません'); history.back();</script>";
+            return;
+        }
+
+        // 6桁コード生成
+        $code = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        $expires = (new DateTime('+1 hour'))->format('Y-m-d H:i:s');
+
+        // DB保存
+        $stmt = $db->prepare("UPDATE users SET reset_code=?, reset_expires=? WHERE id=?");
+        $stmt->execute([$code, $expires, $user['id']]);
+
+        // メール送信
+        MailUtil::sendMail(
+            $email,
+            "【Sample Site】パスワード再設定コード",
+            "認証コード：{$code}\n有効期限：1時間"
+        );
+
+        header("Location: index.php?page=forgot_password_verify&email={$email}");
+        exit;
+    }
+
+    public function forgot_password_verify()
+    {
+        $email = $_POST['email'] ?? $_GET['email'] ?? '';
+        $code = $_POST['code'] ?? '';
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $db = getDB();
+            $stmt = $db->prepare("SELECT id, reset_code, reset_expires FROM users WHERE email=?");
+            $stmt->execute([$email]);
+            $user = $stmt->fetch();
+
+            if (!$user || $user['reset_code'] !== $code) {
+                echo "<script>alert('認証コードが違います'); history.back();</script>";
+                return;
+            }
+
+            if (new DateTime() > new DateTime($user['reset_expires'])) {
+                echo "<script>alert('認証コードの有効期限が切れています'); history.back();</script>";
+                return;
+            }
+
+            header("Location: index.php?page=forgot_password_reset&email={$email}");
+            exit;
+        }
+
+        include TEMPLATE_PATH . 'auth/forgot_password_verify.php';
+    }
+
+    public function forgot_password_reset()
+    {
+        $email = $_POST['email'] ?? $_GET['email'] ?? '';
+        $new = $_POST['new_password'] ?? '';
+        $conf = $_POST['confirm_password'] ?? '';
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+            if ($new !== $conf) {
+                echo "<script>alert('パスワードが一致しません'); history.back();</script>";
+                return;
+            }
+
+            $db = getDB();
+            $hashed = password_hash($new, PASSWORD_DEFAULT);
+
+            $stmt = $db->prepare("
+                UPDATE users 
+                SET password=?, reset_code=NULL, reset_expires=NULL, update_date = NOW()
+                WHERE email=?
+            ");
+            $stmt->execute([$hashed, $email]);
+
+            echo "
+            <div style='max-width:300px; margin:50px auto; padding:20px; text-align:center;'>
+                <p>パスワードを更新しました。</p>
+                <p><a href='index.php?page=login'>ログイン画面へ戻る</a></p>
+            </div>
+            ";
+            return;
+        }
+
+        include TEMPLATE_PATH . 'auth/forgot_password_reset.php';
+    }
 
 
 }

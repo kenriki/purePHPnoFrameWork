@@ -13,13 +13,16 @@ class AuthController
     // ログイン処理
     public function login()
     {
+        // JST に統一（index.php に書いてあっても念のため）
+        date_default_timezone_set('Asia/Tokyo');
+
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $db = getDB();
 
-            $login_id = $_POST['username'] ?? ''; 
+            $login_id = $_POST['username'] ?? '';
             $password = $_POST['password'] ?? '';
 
-            // username または email のどちらでもログイン可能にする
+            // username または email のどちらでもログイン可能
             $stmt = $db->prepare("
             SELECT * FROM users 
              WHERE username = ? 
@@ -30,12 +33,50 @@ class AuthController
             $user = $stmt->fetch();
 
             if ($user && password_verify($password, $user['password'])) {
+
+                // セッションセット
                 $_SESSION['user_id'] = $user['id'];
                 $_SESSION['username'] = $user['username'];
                 $_SESSION['email'] = $user['email'];
 
+                // ----------------------------------------------------
+                // ★ パスワード更新日チェック（3か月）
+                // ----------------------------------------------------
+                // $rawDate = $user['update_date'];  // DB の値（例: 2026/04/04 11:21:34）
+
+                // // update_date が NULL または空 → 強制変更
+                // if (empty($rawDate)) {
+                //     $_SESSION['password_expired'] = true;
+                //     header("Location: index.php?page=forgot_password");
+                //     exit;
+                // }
+
+                // DB のフォーマットに合わせてパース（Y/m/d H:i:s）
+                // $lastUpdate = DateTime::createFromFormat('Y/m/d H:i:s', $rawDate);
+
+                // // パース失敗（フォーマット不一致） → 強制変更
+                // if ($lastUpdate === false) {
+                //     $_SESSION['password_expired'] = true;
+                //     header("Location: index.php?page=forgot_password");
+                //     exit;
+                // }
+
+                // $lastUpdateTs = $lastUpdate->getTimestamp();
+                // $threeMonthsAgo = strtotime('-3 months');
+
+                // // 3か月以上経過 → 強制パスワード変更
+                // if ($lastUpdateTs < $threeMonthsAgo) {
+                //     $_SESSION['password_expired'] = true;
+                //     header("Location: index.php?page=forgot_password");
+                //     exit;
+                // }
+
+                // ----------------------------------------------------
+                // ★ 通常ログイン
+                // ----------------------------------------------------
                 header("Location: index.php?page=home");
                 exit;
+
             } else {
                 echo "<script>alert('ユーザー名/メールアドレス または パスワードが違います'); location.href='?page=login';</script>";
                 exit;

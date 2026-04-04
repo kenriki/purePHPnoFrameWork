@@ -1,0 +1,18 @@
+sequenceDiagram
+    participant User as ユーザー
+    participant Router as router.php
+    participant PageController as PageController
+    participant JSON as pages.json
+    participant Template as auth/login_form.php
+
+    User->>Router: /index.php?page=login にアクセス（GET）
+    Router->>Router: 認証チェック（public_pages に含まれる）
+    Router->>PageController: render("login") を呼び出し
+
+    PageController->>JSON: pages.json を読み込む
+    JSON-->>PageController: "auth/login_form.php" を返す
+
+    PageController->>Template: login_form.php を include
+    Template-->>PageController: HTML（body 部分）を返す
+
+    PageController->>User: header.php + login_form.php + footer.php を出力

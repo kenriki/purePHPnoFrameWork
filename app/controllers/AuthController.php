@@ -39,6 +39,9 @@ class AuthController
                 $_SESSION['username'] = $user['username'];
                 $_SESSION['email'] = $user['email'];
 
+                // ★ 追加：DBから取得した権限（admin/user等）をセッションに格納
+                $_SESSION['role'] = $user['role'] ?? 'user';
+
                 // ----------------------------------------------------
                 // ★ パスワード更新日チェック（3か月）
                 // ----------------------------------------------------

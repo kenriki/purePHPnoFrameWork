@@ -84,7 +84,12 @@
 
 <div class="memo-container">
     <div class="memo-header">
-        <h2 style="margin:0;">📝 <?= htmlspecialchars($page['title'] ?? 'メモシステム') ?></h2>
+        <h2 style="margin:0;">
+            📄 <?= isset($page['target_date']) ? htmlspecialchars($page['target_date']) . " のメモ" : "メモ一覧" ?>
+        </h2>
+        <?php if (isset($page['target_date'])): ?>
+            <a href="index.php?page=memo&action=list" style="font-size: 0.8rem; color: #007bff;">全件表示に戻る</a>
+        <?php endif; ?>
     </div>
 
     <?php if (isset($page['memo']) && $page['memo']): ?>
@@ -130,12 +135,33 @@
                 locale: 'ja',
                 height: 'auto',
                 events: dbData.events || [], // データが空でもエラーにしない
+                dayMaxEvents: true, // セルの高さに合わせて制限
+                locale: 'ja',
+                moreLinkText: '件', // 「+3 more」を「+3 件」にするなら
+                dayMaxEvents: 3,
                 eventClick: function (info) {
                     if (info.event.id) {
                         // 【修正】指定された編集URLへ遷移
                         window.location.href = `index.php?page=memo&action=edit&id=${info.event.id}&username=${loginUser}`;
                         info.jsEvent.preventDefault();
                     }
+                },
+                // FullCalendar オプション内
+                moreLinkClick: function (info) {
+                    // クリックした日付（YYYY-MM-DD）を取得
+                    const year = info.date.getFullYear();
+                    const month = ('0' + (info.date.getMonth() + 1)).slice(-2);
+                    const day = ('0' + info.date.getDate()).slice(-2);
+                    const targetDate = `${year}-${month}-${day}`;
+
+                    // 一覧画面（action=list）へ日付パラメータ付きで遷移
+                    window.location.href = `index.php?page=memo&action=list&date=${targetDate}`;
+                    return false; // デフォルトのポップアップ表示を防止
+                },
+
+                // 日付セルそのものをクリックした時は「その日の新規作成」へ
+                dateClick: function (info) {
+                    window.location.href = `index.php?page=memo&action=new&date=${info.dateStr}`;
                 }
             });
             calendar.render();

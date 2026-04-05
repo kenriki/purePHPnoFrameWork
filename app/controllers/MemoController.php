@@ -46,12 +46,19 @@ class MemoController
         $id = $_GET['id'] ?? null;
         $target_date = $_GET['date'] ?? null; // カレンダー等からの日付指定を受け取る
 
+        // --- 1. ピン留め切り替え処理 (GET) ---
+        // 保存処理の前に判定することで、状態変更後にリストを再取得できるようにします
+        if ($action === 'toggle_pin') {
+            $this->togglePin($this->user, $id);
+            return; // togglePin 内で header 遷移するため終了
+        }
+
         // 一覧表示の前に、無記名メモを現在の合言葉に紐付け直す
         if ($action === 'list') {
             $this->syncGuestMemos();
         }
 
-        // --- PDFエクスポート処理 (POST) ---
+        // --- 2. PDFエクスポート処理 (POST) ---
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pdf_export'])) {
             $content = $_POST['content'] ?? '';
             $guestName = $_POST['guest_name'] ?? '';
@@ -59,7 +66,7 @@ class MemoController
             return; // PDF出力後は終了
         }
 
-        // --- 保存・削除処理 (POST) ---
+        // --- 3. 保存・削除処理 (POST) ---
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $content = $_POST['content'] ?? '';
             $memo_id = $_POST['id'] ?? null;
@@ -67,28 +74,40 @@ class MemoController
             // 削除ボタン押下時
             if (isset($_POST['delete'])) {
                 $this->deleteMemo($memo_id);
-                header("Location: /index.php?page=memo&action=list&message=deleted");
+                header("Location: index.php?page=memo&action=list&message=deleted");
                 exit;
             }
 
             // 保存（新規・更新共通）実行
             $this->saveMemo($memo_id, $content);
-            header("Location: /index.php?page=memo&action=list&message=saved");
+            header("Location: index.php?page=memo&action=list&message=saved");
             exit;
         }
 
-        // --- 表示用データの準備 (GET) ---
-        // アクションが list の場合のみ一覧を取得、それ以外（編集等）は空配列
+        // --- 4. 表示用データの準備 (GET) ---
         $memos = ($action === 'list') ? $this->getMemoList($target_date) : [];
 
-        // ID指定がある場合はDBから本文を取得 (以前の getMemoContent を統合)
-        $content = ($id) ? $this->getMemo($id) : "";
+        // 詳細表示用データの取得
+        $memo = null;
+        $content = "";
+        if ($id) {
+            if ($action === 'show') {
+                // 詳細表示(show)の場合は、is_pinned 等の全カラムを含むデータを取得
+                $detailData = $this->showDetail();
+                $memo = $detailData['memo'];
+                $content = $memo['content'] ?? "";
+            } else {
+                // 編集(edit)等の場合は本文のみ取得
+                $content = $this->getMemo($id);
+            }
+        }
 
         return [
             'action' => $action,
             'id' => $id,
             'memos' => $memos,
-            'content' => $content,
+            'memo' => $memo,      // 詳細表示用の配列データ
+            'content' => $content, // テキストエリア表示用の本文
             'user' => $this->user,
             'target_date' => $target_date,
             'message' => $_GET['message'] ?? ""
@@ -269,36 +288,65 @@ class MemoController
     {
         $db = getDB();
 
-        // 1. カレンダー用イベント取得
+        // --- 1. カレンダー用イベント取得（すべてのメモ） ---
         $stmt = $db->prepare("SELECT id, content, DATE(update_date) as start FROM user_memos WHERE username = :username");
         $stmt->execute([':username' => $username]);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         $events = [];
         foreach ($rows as $row) {
-            $firstLine = explode("\n", $row['content'])[0];
+            // 最初の1行目をタイトルとして抽出
+            $firstLine = explode("\n", trim($row['content']))[0];
             $events[] = [
                 'id' => $row['id'],
                 'title' => mb_strimwidth($firstLine, 0, 30, "..."),
                 'start' => $row['start'],
-                // カレンダー内クリックで直接編集画面へ
-                'url' => "index.php?page=memo&action=edit&id=" . $row['id'] . "&username=" . $username
+                // カレンダー内は詳細表示(show)へ
+                'url' => "index.php?page=memo&action=show&id=" . $row['id']
             ];
         }
 
-        // 2. 活動グラフ用（直近7日間の件数推移）
+        // --- 2. ピン留めされた重要メモの取得 ---
+        // A5:SQL Mk-2 で '1' に設定されたデータを、更新日時の新しい順に取得
         $stmt = $db->prepare("
-            SELECT DATE(update_date) as date, COUNT(*) as count 
-            FROM user_memos 
-            WHERE username = :username 
-              AND update_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-            GROUP BY date
-            ORDER BY date ASC
-        ");
+        SELECT id, content, update_date 
+        FROM user_memos 
+        WHERE username = :username AND is_pinned = 1 
+        ORDER BY update_date DESC
+    ");
+        $stmt->execute([':username' => $username]);
+        $pinnedRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $pinned = [];
+        foreach ($pinnedRows as $p) {
+            $firstLine = explode("\n", trim($p['content']))[0];
+            $pinned[] = [
+                'id' => $p['id'],
+                'title' => mb_strimwidth($firstLine, 0, 50, "..."),
+                'update_date' => $p['update_date'],
+                // ピン留めエリアからは直接編集(edit)または詳細(show)へ
+                'url' => "index.php?page=memo&action=edit&id=" . $p['id']
+            ];
+        }
+
+        // --- 3. 活動グラフ用（直近7日間の件数推移） ---
+        $stmt = $db->prepare("
+        SELECT DATE(update_date) as date, COUNT(*) as count 
+        FROM user_memos 
+        WHERE username = :username 
+        AND update_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+        GROUP BY date
+        ORDER BY date ASC
+    ");
         $stmt->execute([':username' => $username]);
         $chart = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        return ['events' => $events, 'chart' => $chart];
+        // ビュー側で $page['dashboard']['pinned'] 等で参照できるよう構造化して返す
+        return [
+            'events' => $events,
+            'pinned' => $pinned,
+            'chart' => $chart
+        ];
     }
 
     /**
@@ -430,6 +478,45 @@ class MemoController
         header('Pragma: public');
 
         echo $pdf_data;
+        exit;
+    }
+    // MemoController.php
+
+    /**
+     * ピン留め状態を反転させる
+     */
+    private function togglePin($username, $id)
+    {
+        if (!$id)
+            return;
+
+        // getDB() 関数を使用してデータベース接続を取得
+        $db = getDB();
+
+        // 1. 現在の is_pinned の状態を取得する
+        $stmt = $db->prepare("SELECT is_pinned FROM user_memos WHERE id = ? AND username = ?");
+        $stmt->execute([$id, $username]);
+        $currentStatus = $stmt->fetchColumn();
+
+        // 2. 状態を反転させる (1なら0、0なら1)
+        $newStatus = ($currentStatus == 1) ? 0 : 1;
+
+        // 3. アップデート実行
+        $updateStmt = $db->prepare("UPDATE user_memos SET is_pinned = ? WHERE id = ? AND username = ?");
+        $updateStmt->execute([$newStatus, $id, $username]);
+
+        // 4. 元の画面（一覧 or 詳細）に戻す
+        $from = $_GET['from'] ?? 'list';
+        $redirectUrl = ($from === 'detail')
+            ? "index.php?page=memo&action=edit&id=" . $id
+            : "index.php?page=memo&action=list";
+
+        // カレンダーの日付指定がある場合は引き継ぐ
+        if (isset($_GET['date'])) {
+            $redirectUrl .= "&date=" . $_GET['date'];
+        }
+
+        header("Location: " . $redirectUrl);
         exit;
     }
 }

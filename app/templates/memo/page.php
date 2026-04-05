@@ -31,6 +31,39 @@ $isGuestMode = ($display_user === 'guest' || empty($display_user));
         overflow-wrap: break-word;
     }
 
+    /* --- ピン留めボタンのスタイル（強化版） --- */
+    .pin-link {
+        text-decoration: none;
+        font-size: 1.4rem;
+        margin-right: 12px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        transition: all 0.2s ease;
+        background: #f0f0f0;
+        /* デフォルト背景 */
+    }
+
+    /* ピン留め済み：オレンジ背景に赤いピン */
+    .pin-active {
+        background: #fff3cd !important;
+        border: 1px solid #ffeeba;
+        transform: scale(1.1);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    /* ピン留め中行のハイライト */
+    .row-pinned {
+        background-color: #fffdf5 !important;
+    }
+
+    .pin-link:active {
+        transform: scale(1.4);
+    }
+
     /* 入力エリアのフォントサイズ（iPhoneの自動ズーム防止） */
     textarea {
         font-size: 16px !important;
@@ -38,7 +71,6 @@ $isGuestMode = ($display_user === 'guest' || empty($display_user));
         box-sizing: border-box;
     }
 
-    /* スマホ画面専用の調整 */
     @media (max-width: 600px) {
         .memo-container {
             padding: 10px !important;
@@ -65,28 +97,28 @@ $isGuestMode = ($display_user === 'guest' || empty($display_user));
     </div>
 
     <div style="margin-bottom: 20px; display: flex; gap: 10px;">
-        <a href="/index.php?page=memo&action=list"
+        <a href="index.php?page=memo&action=list"
             style="text-decoration: none; padding: 10px 15px; border: 1px solid #ddd; border-radius: 5px; color: #555; background: #fff; font-weight: bold; font-size: 0.9rem;">📋
             一覧</a>
-        <a href="/index.php?page=memo&action=new"
+        <a href="index.php?page=memo&action=new"
             style="text-decoration: none; padding: 10px 15px; border: none; border-radius: 5px; color: #fff; background: #28a745; font-weight: bold; font-size: 0.9rem;">＋
             新規作成</a>
     </div>
 
-    <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-        <?php if (($user ?? 'guest') === 'guest'): ?>
-            <form action="/index.php?page=memo&action=set_guest_name" method="POST"
+    <?php if ($display_user === 'guest'): ?>
+        <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <form action="index.php?page=memo&action=set_guest_name" method="POST"
                 style="display: flex; gap: 5px; margin-left: auto;">
                 <input type="text" name="guest_name" value="<?= htmlspecialchars($_SESSION['guest_name'] ?? '') ?>"
                     placeholder="合言葉(例:なまえ)"
                     style="padding: 6px; border: 1px solid #ccc; border-radius: 4px; width: 140px; font-size: 0.9rem;">
                 <button type="submit" class="btn btn-primary" style="padding: 6px 12px; font-size: 0.9rem;">適用</button>
             </form>
-        <?php endif; ?>
-    </div>
+        </div>
+    <?php endif; ?>
 
     <?php if ($current_action === 'new' || $current_action === 'edit'): ?>
-        <form method="post" action="/index.php?page=memo">
+        <form method="post" action="index.php?page=memo">
             <input type="hidden" name="id" value="<?= htmlspecialchars($current_id ?? '') ?>">
 
             <?php if ($isGuestMode): ?>
@@ -106,9 +138,19 @@ $isGuestMode = ($display_user === 'guest' || empty($display_user));
 
             <div
                 style="background: #f9f9f9; padding: 15px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #eee;">
-                <label style="display: block; font-weight: bold; margin-bottom: 10px; color: #444;">
-                    <?= ($current_action === 'new') ? '✨ 新規メモ作成' : '✍️ メモ編集' ?>
-                </label>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <label style="font-weight: bold; color: #444;">
+                        <?= ($current_action === 'new') ? '✨ 新規メモ作成' : '✍️ メモ編集' ?>
+                    </label>
+
+                    <?php if ($current_action === 'edit' && isset($page['memo'])): ?>
+                        <?php $isPinned = ($page['memo']['is_pinned'] ?? 0); ?>
+                        <a href="index.php?page=memo&action=toggle_pin&id=<?= $current_id ?>&from=detail"
+                            style="text-decoration: none; font-size: 0.9rem; padding: 6px 15px; border-radius: 20px; border: 2px solid <?= $isPinned ? '#ffc107' : '#ccc' ?>; background: <?= $isPinned ? '#fff9e6' : '#fff' ?>; color: <?= $isPinned ? '#856404' : '#666' ?>; font-weight: bold;">
+                            <?= $isPinned ? '📌 ピン留め解除' : '📍 ピン留めする' ?>
+                        </a>
+                    <?php endif; ?>
+                </div>
 
                 <textarea name="content" id="memo-content"
                     style="width: 100%; height: 450px; padding: 15px; border: 1px solid #ccc; border-radius: 5px; font-family: 'Consolas', 'Monaco', monospace; line-height: 1.6; resize: vertical; box-sizing: border-box; font-size: 1rem;"
@@ -120,7 +162,7 @@ $isGuestMode = ($display_user === 'guest' || empty($display_user));
                     <button type="submit"
                         style="padding: 12px 30px; background: #007bff; color: #fff; border: none; border-radius: 5px; cursor: pointer; font-size: 1rem; font-weight: bold;">保存する</button>
                     <button type="submit" name="pdf_export" formtarget="_blank"
-                        style="padding: 12px 20px; background: #6c757d; color: #fff; border: none; border-radius: 5px; cursor: pointer; font-size: 1rem; font-weight: bold;">PDFでダウンロード</button>
+                        style="padding: 12px 20px; background: #6c757d; color: #fff; border: none; border-radius: 5px; cursor: pointer; font-size: 1rem; font-weight: bold;">PDF</button>
                 </div>
 
                 <?php if (!empty($current_id)): ?>
@@ -151,14 +193,24 @@ $isGuestMode = ($display_user === 'guest' || empty($display_user));
                         </tr>
                     <?php else: ?>
                         <?php foreach ($memos as $m): ?>
-                            <tr style="border-bottom: 1px solid #f1f1f1;">
+                            <?php $isPinned = ($m['is_pinned'] ?? 0); ?>
+                            <tr style="border-bottom: 1px solid #f1f1f1;" class="<?= $isPinned ? 'row-pinned' : '' ?>">
                                 <td style="padding: 15px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;">
-                                    <a href="/index.php?page=memo&action=edit&id=<?= htmlspecialchars($m['id']) ?>"
-                                        style="color: #007bff; text-decoration: none; font-weight: bold; font-size: 1rem; display: block;">📄
-                                        <?= $m['display_title_html'] ?></a>
+                                    <div style="display: flex; align-items: center;">
+                                        <a href="index.php?page=memo&action=toggle_pin&id=<?= $m['id'] ?><?= !empty($target_date) ? '&date=' . $target_date : '' ?>"
+                                            class="pin-link <?= $isPinned ? 'pin-active' : '' ?>" title="ピン留め切替">
+                                            <?= $isPinned ? '📌' : '📍' ?>
+                                        </a>
+
+                                        <a href="index.php?page=memo&action=edit&id=<?= htmlspecialchars($m['id']) ?>"
+                                            style="color: #007bff; text-overflow: ellipsis; overflow: hidden; text-decoration: none; font-weight: <?= $isPinned ? '900' : 'bold' ?>; font-size: 1rem; flex: 1;">
+                                            <?= $m['display_title_html'] ?>
+                                        </a>
+                                    </div>
                                 </td>
                                 <td style="padding: 15px; text-align: right; color: #888; font-size: 0.85rem; white-space: nowrap;">
-                                    <?= htmlspecialchars($m['time']) ?></td>
+                                    <?= htmlspecialchars($m['time']) ?>
+                                </td>
                             </tr>
                         <?php endforeach; ?>
                     <?php endif; ?>
@@ -168,7 +220,7 @@ $isGuestMode = ($display_user === 'guest' || empty($display_user));
     <?php endif; ?>
 
     <div style="margin-top: 25px; padding-top: 15px; border-top: 1px solid #eee;">
-        <a href="/index.php?page=home"
+        <a href="index.php?page=home"
             style="text-decoration: none; color: #007bff; font-size: 0.9rem; font-weight: bold;">← ホームへ戻る</a>
     </div>
 </div>

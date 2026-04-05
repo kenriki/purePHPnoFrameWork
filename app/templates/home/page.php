@@ -61,6 +61,36 @@
         padding: 15px;
         border-radius: 10px;
         border: 1px solid #eee;
+        margin-top: 20px;
+    }
+
+    /* ピン留めセクションのスタイル */
+    .pinned-section {
+        background: #fffdf0;
+        padding: 15px;
+        border-radius: 10px;
+        border: 1px solid #f0e68c;
+        margin-bottom: 0px;
+    }
+
+    .pinned-item {
+        display: block;
+        text-decoration: none;
+        color: #333;
+        background: #fff;
+        padding: 12px;
+        border-radius: 6px;
+        border: 1px solid #dee2e6;
+        font-size: 0.85rem;
+        margin-top: 10px;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    }
+
+    .pinned-item:hover {
+        transform: translateX(5px);
+        border-color: #ffc107;
+        background: #fffef5;
     }
 
     .btn-new-memo {
@@ -85,37 +115,77 @@
 <div class="memo-container">
     <div class="memo-header">
         <h2 style="margin:0;">
-            📄 <?= isset($page['target_date']) ? htmlspecialchars($page['target_date']) . " のメモ" : "メモ一覧" ?>
+            📄 <?= isset($page['target_date']) ? htmlspecialchars($page['target_date']) . " のメモ" : "ダッシュボード" ?>
         </h2>
-        <?php if (isset($page['target_date'])): ?>
-            <a href="index.php?page=memo&action=list" style="font-size: 0.8rem; color: #007bff;">全件表示に戻る</a>
-        <?php endif; ?>
+        <div class="header-actions">
+            <?php if (isset($page['target_date'])): ?>
+                <a href="index.php?page=memo&action=list" style="font-size: 0.85rem; color: #007bff; text-decoration: none;">全件表示に戻る</a>
+            <?php else: ?>
+                <span class="user-badge">User: <?= htmlspecialchars($page['login_user'] ?? 'Guest') ?></span>
+            <?php endif; ?>
+        </div>
     </div>
 
     <?php if (isset($page['memo']) && $page['memo']): ?>
         <div class="memo-detail-view">
-            <div class="memo-info" style="color: #666; font-size: 0.85em; margin-bottom: 10px;">
-                最終更新：<?= htmlspecialchars($page['memo']['update_date'] ?? '不明') ?>
+            <div class="memo-header" style="border-bottom: none; margin-bottom: 10px;">
+                <div class="memo-info" style="color: #666; font-size: 0.85em;">
+                    最終更新：<?= htmlspecialchars($page['memo']['update_date'] ?? '不明') ?>
+                </div>
+
+                <div class="pin-action">
+                    <?php $isPinned = $page['memo']['is_pinned'] ?? 0; ?>
+                    <a href="index.php?page=memo&action=toggle_pin&id=<?= $page['memo']['id'] ?>&from=detail"
+                        style="text-decoration: none; padding: 6px 12px; border: 1px solid <?= $isPinned ? '#ffc107' : '#ccc' ?>; border-radius: 20px; font-size: 0.9em; background: <?= $isPinned ? '#fffdf5' : '#fff' ?>; color: <?= $isPinned ? '#856404' : '#666' ?>;">
+                        <?= $isPinned ? '📌 ピン留め中' : '📍 ピン留めする' ?>
+                    </a>
+                </div>
             </div>
-            <div class="memo-body"><?= htmlspecialchars($page['memo']['content']) ?></div>
-            <div style="display: flex; gap: 10px;">
+
+            <div class="memo-body">
+                <?= htmlspecialchars($page['memo']['content']) ?>
+            </div>
+
+            <div style="display: flex; gap: 12px; margin-bottom: 20px;">
                 <a href="index.php?page=home"
-                    style="background:#6c757d; color:white; padding:10px 20px; border-radius:5px; text-decoration:none;">ホームへ戻る</a>
+                    style="background:#6c757d; color:white; padding:10px 20px; border-radius:5px; text-decoration:none; font-size: 0.9em;">ホームへ戻る</a>
                 <a href="index.php?page=memo&action=edit&id=<?= $page['memo']['id'] ?>"
-                    style="background:#007bff; color:white; padding:10px 20px; border-radius:5px; text-decoration:none;">編集する</a>
+                    style="background:#007bff; color:white; padding:10px 20px; border-radius:5px; text-decoration:none; font-size: 0.9em;">このメモを編集する</a>
             </div>
         </div>
         <hr style="margin: 40px 0; border: 0; border-top: 1px dashed #ccc;">
     <?php endif; ?>
 
     <div class="dashboard-grid">
-        <div id="calendar"></div>
+        <div class="calendar-wrapper">
+            <div id="calendar"></div>
+        </div>
+
         <div class="analysis-side">
+            <?php if (!empty($page['dashboard']['pinned'])): ?>
+                <div class="pinned-section">
+                    <h4 style="margin:0 0 10px 0; font-size:0.95rem; color:#856404; display: flex; align-items: center;">
+                        <span style="margin-right: 5px;">📌</span> ピン留めされたメモ
+                    </h4>
+                    <?php foreach ($page['dashboard']['pinned'] as $pinnedMemo): ?>
+                        <a href="<?= htmlspecialchars($pinnedMemo['url']) ?>" class="pinned-item">
+                            <div style="font-weight:bold; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-bottom: 3px;">
+                                <?= htmlspecialchars($pinnedMemo['title']) ?>
+                            </div>
+                            <div style="font-size:0.75rem; color:#888;">
+                                <?= date('Y/m/d H:i', strtotime($pinnedMemo['update_date'])) ?>
+                            </div>
+                        </a>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+
+            <a href="index.php?page=memo&action=new" class="btn-new-memo">＋ 新規メモを作成</a>
+
             <div class="chart-container">
-                <h4 style="margin:0 0 15px 0;">📈 直近7日の活動</h4>
+                <h4 style="margin:0 0 15px 0; font-size: 1rem;">📈 直近7日の活動</h4>
                 <canvas id="activityChart"></canvas>
             </div>
-            <a href="index.php?page=memo&action=new" class="btn-new-memo">＋ 新規メモ作成</a>
         </div>
     </div>
 </div>
@@ -124,42 +194,41 @@
     document.addEventListener('DOMContentLoaded', function () {
         // --- 1. データの安全な取得 ---
         const dbData = <?= json_encode($page['dashboard'] ?? ['events' => [], 'chart' => []]) ?>;
-        // ログインユーザー名をPHPセッションから直接取得（確実性を上げるため）
         const loginUser = <?= json_encode($_SESSION['username'] ?? 'guest') ?>;
 
-        // --- 2. カレンダーの描画 ---
+        // --- 2. カレンダーの描画 (FullCalendar v6) ---
         const calendarEl = document.getElementById('calendar');
         if (calendarEl) {
             const calendar = new FullCalendar.Calendar(calendarEl, {
                 initialView: 'dayGridMonth',
                 locale: 'ja',
                 height: 'auto',
-                events: dbData.events || [], // データが空でもエラーにしない
-                dayMaxEvents: true, // セルの高さに合わせて制限
-                locale: 'ja',
-                moreLinkText: '件', // 「+3 more」を「+3 件」にするなら
+                headerToolbar: {
+                    left: 'prev,next today',
+                    center: 'title',
+                    right: 'dayGridMonth,dayGridWeek'
+                },
+                events: dbData.events || [],
                 dayMaxEvents: 3,
+                moreLinkText: '件',
+                
+                // イベントクリック：編集画面へ
                 eventClick: function (info) {
                     if (info.event.id) {
-                        // 【修正】指定された編集URLへ遷移
                         window.location.href = `index.php?page=memo&action=edit&id=${info.event.id}&username=${loginUser}`;
                         info.jsEvent.preventDefault();
                     }
                 },
-                // FullCalendar オプション内
-                moreLinkClick: function (info) {
-                    // クリックした日付（YYYY-MM-DD）を取得
-                    const year = info.date.getFullYear();
-                    const month = ('0' + (info.date.getMonth() + 1)).slice(-2);
-                    const day = ('0' + info.date.getDate()).slice(-2);
-                    const targetDate = `${year}-${month}-${day}`;
 
-                    // 一覧画面（action=list）へ日付パラメータ付きで遷移
+                // 「他 +N 件」クリック：その日のリストへ
+                moreLinkClick: function (info) {
+                    const d = info.date;
+                    const targetDate = `${d.getFullYear()}-${('0' + (d.getMonth() + 1)).slice(-2)}-${('0' + d.getDate()).slice(-2)}`;
                     window.location.href = `index.php?page=memo&action=list&date=${targetDate}`;
-                    return false; // デフォルトのポップアップ表示を防止
+                    return false;
                 },
 
-                // 日付セルそのものをクリックした時は「その日の新規作成」へ
+                // 空白日付クリック：その日の新規作成へ
                 dateClick: function (info) {
                     window.location.href = `index.php?page=memo&action=new&date=${info.dateStr}`;
                 }
@@ -167,13 +236,12 @@
             calendar.render();
         }
 
-        // --- 3. グラフの描画（ループ・エラー対策版） ---
+        // --- 3. グラフの描画 (Chart.js) ---
         const canvasEl = document.getElementById('activityChart');
-        // canvasが存在し、かつデータが1件以上ある場合のみ実行
         if (canvasEl && dbData.chart && dbData.chart.length > 0) {
             const ctx = canvasEl.getContext('2d');
 
-            // 既存のチャートがある場合は破棄（ループ防止策）
+            // 既存インスタンス破棄（メモリリーク防止）
             if (window.myChart instanceof Chart) {
                 window.myChart.destroy();
             }
@@ -181,19 +249,26 @@
             window.myChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: dbData.chart.map(d => (d.date ? d.date.slice(5) : '')),
+                    labels: dbData.chart.map(d => (d.date ? d.date.slice(5) : '')), // MM-DD形式
                     datasets: [{
-                        label: '件数',
+                        label: '投稿数',
                         data: dbData.chart.map(d => d.count),
-                        backgroundColor: '#007bff'
+                        backgroundColor: 'rgba(0, 123, 255, 0.7)',
+                        borderColor: 'rgba(0, 123, 255, 1)',
+                        borderWidth: 1,
+                        borderRadius: 4
                     }]
                 },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { display: false }
+                    },
                     scales: {
                         y: {
                             beginAtZero: true,
-                            ticks: { stepSize: 1 }
+                            ticks: { stepSize: 1, precision: 0 }
                         }
                     }
                 }

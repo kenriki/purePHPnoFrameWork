@@ -9,7 +9,6 @@
         margin: 0 auto;
     }
 
-    /* レイアウト：左メイン、右サイド */
     .dashboard-grid {
         display: grid;
         grid-template-columns: 1fr 300px;
@@ -17,7 +16,6 @@
         margin-top: 20px;
     }
 
-    /* ビュー切替ボタン */
     .view-selector {
         display: flex;
         gap: 8px;
@@ -40,29 +38,7 @@
         border-color: #007bff;
     }
 
-    /* 年間グリッド表示 */
-    #year-view-container {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-        gap: 15px;
-    }
-
-    .month-card {
-        border: 1px solid #eee;
-        border-radius: 10px;
-        padding: 10px;
-        background: #fafafa;
-    }
-
-    .month-card h3 {
-        text-align: center;
-        font-size: 1rem;
-        margin-top: 0;
-        color: #007bff;
-        border-bottom: 1px solid #eee;
-    }
-
-    /* サイドパネル要素 */
+    /* サイドパネル */
     .side-panel {
         display: flex;
         flex-direction: column;
@@ -99,22 +75,22 @@
         font-weight: bold;
     }
 
-    .chart-container {
-        background: #fff;
-        padding: 15px;
-        border: 1px solid #eee;
-        border-radius: 10px;
+    /* --- 土日の背景色 (CSS) --- */
+    .fc-day-sat {
+        background-color: #f0f7ff !important;
     }
 
-    /* カレンダー微調整 */
-    .fc {
-        font-size: 0.9rem;
-        background: #fff;
+    /* 土曜：薄い青 */
+    .fc-day-sun {
+        background-color: #fff5f5 !important;
     }
 
-    .fc-event {
-        cursor: pointer;
+    /* 日曜：薄い赤 */
+    .fc-day-today {
+        background-color: #fffde7 !important;
     }
+
+    /* 今日：薄い黄 */
 
     @media (max-width: 992px) {
         .dashboard-grid {
@@ -144,8 +120,9 @@
 
             <div id="year-view-container" style="display: none;">
                 <?php for ($m = 1; $m <= 12; $m++): ?>
-                    <div class="month-card">
-                        <h3><?= $m ?>月</h3>
+                    <div class="month-card"
+                        style="border:1px solid #eee; border-radius:10px; padding:10px; margin-bottom:15px; background:#fafafa;">
+                        <h3 style="text-align:center; color:#007bff; border-bottom:1px solid #eee;"><?= $m ?>月</h3>
                         <div id="calendar-year-<?= $m ?>"></div>
                     </div>
                 <?php endfor; ?>
@@ -167,7 +144,8 @@
                 </div>
             <?php endif; ?>
 
-            <div class="chart-container">
+            <div class="chart-container"
+                style="background:#fff; padding:15px; border:1px solid #eee; border-radius:10px;">
                 <h4 style="margin:0 0 10px 0; font-size:0.9rem;">📈 活動ログ</h4>
                 <canvas id="activityChart"></canvas>
             </div>
@@ -181,26 +159,68 @@
     const dbData = <?= json_encode($page['dashboard'] ?? ['events' => [], 'chart' => []]) ?>;
 
     document.addEventListener('DOMContentLoaded', function () {
-        // メインカレンダー初期化
         const mainEl = document.getElementById('calendar-main');
+
         mainCalendar = new FullCalendar.Calendar(mainEl, {
             initialView: 'dayGridMonth',
             locale: 'ja',
+            height: 'auto',
             headerToolbar: { left: 'prev,next today', center: 'title', right: '' },
-            events: dbData.events || [],
-            // メインカレンダーと年間カレンダー、両方の eventClick をこれに書き換え
+
+            // --- 重要：メモのだぶりを防ぐためここには events を書かない ---
+            dayMaxEvents: 3,
+
+            // --- moreクリックでその日の新規作成画面へ ---
+            moreLinkClick: function (info) {
+                const d = info.date;
+                const dateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+
+                // action=new ではなく 一覧表示(index.php?page=memo) に日付を渡す
+                window.location.href = `index.php?page=memo&date=${dateStr}`;
+                return false;
+            },
+
+            // --- 日付クリックや詳細リンク設定 ---
+            navLinks: true,
+            navLinkDayClick: function (date, jsEvent) {
+                switchView('day');
+                mainCalendar.gotoDate(date);
+            },
+
+            views: {
+                dayGridMonth: { dayMaxEvents: 3 },
+                dayGridWeek: { dayMaxEvents: false },
+                dayGridDay: { dayMaxEvents: false }
+            },
+
+            // --- データの読み込み（ここに集約） ---
+            eventSources: [
+                {
+                    id: 'memo-data',
+                    events: dbData.events || []
+                },
+                {
+                    id: 'holidays',
+                    url: 'https://calendar.google.com/calendar/ical/ja.japanese%23holiday%40group.v.calendar.google.com/public/basic.ics',
+                    format: 'ics',
+                    display: 'background',
+                    color: '#ffebee'
+                }
+            ],
+
             eventClick: function (info) {
                 if (info.event.id) {
-                    // action=show ではなく action=edit (または詳細画面の正しいaction名) に変更
                     window.location.href = `index.php?page=memo&action=edit&id=${info.event.id}`;
-                    info.jsEvent.preventDefault(); // ブラウザのデフォルト動作を阻止
+                    info.jsEvent.preventDefault();
                 }
             },
-            dateClick: (info) => { window.location.href = `index.php?page=memo&action=new&date=${info.dateStr}`; }
+            dateClick: (info) => {
+                window.location.href = `index.php?page=memo&action=new&date=${info.dateStr}`;
+            }
         });
         mainCalendar.render();
 
-        // 年間カレンダー（12個）初期化
+        // 年間カレンダー (12ヶ月分) の初期化
         const currentYear = new Date().getFullYear();
         for (let m = 1; m <= 12; m++) {
             const el = document.getElementById('calendar-year-' + m);
@@ -210,15 +230,19 @@
                 initialDate: `${currentYear}-${String(m).padStart(2, '0')}-01`,
                 headerToolbar: false,
                 height: 'auto',
-                events: dbData.events || [],
-                eventClick: (info) => { window.location.href = `index.php?page=memo&action=edit&id=${info.event.id}`; }
+                events: dbData.events || [], // 年間側もだぶりがないか確認
+                eventClick: (info) => {
+                    if (info.event.id) {
+                        window.location.href = `index.php?page=memo&action=edit&id=${info.event.id}`;
+                    }
+                }
             });
             yearCalendars.push(cal);
         }
 
-        // 活動グラフ
+        // 活動グラフ (Chart.js)
         const ctx = document.getElementById('activityChart');
-        if (ctx && dbData.chart.length > 0) {
+        if (ctx && dbData.chart && dbData.chart.length > 0) {
             new Chart(ctx, {
                 type: 'bar',
                 data: {
@@ -233,9 +257,14 @@
     function switchView(type) {
         const mainCont = document.getElementById('main-calendar-container');
         const yearCont = document.getElementById('year-view-container');
+        const btns = document.querySelectorAll('.view-btn');
 
-        document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
-        event.target.classList.add('active');
+        btns.forEach(b => {
+            b.classList.remove('active');
+            if (b.getAttribute('onclick').includes(`'${type}'`)) {
+                b.classList.add('active');
+            }
+        });
 
         if (type === 'year') {
             mainCont.style.display = 'none';
@@ -244,7 +273,13 @@
         } else {
             yearCont.style.display = 'none';
             mainCont.style.display = 'block';
-            const views = { month: 'dayGridMonth', week: 'timeGridWeek', day: 'timeGridDay' };
+
+            // 時間軸を表示させない設定
+            const views = {
+                month: 'dayGridMonth',
+                week: 'dayGridWeek',
+                day: 'dayGridDay'
+            };
             mainCalendar.changeView(views[type]);
             mainCalendar.render();
         }

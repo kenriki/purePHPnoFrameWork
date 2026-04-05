@@ -38,7 +38,13 @@
         border-color: #007bff;
     }
 
-    /* サイドパネル */
+    /* 年間カレンダーのグリッド配置 */
+    #year-view-container {
+        display: none;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 15px;
+    }
+
     .side-panel {
         display: flex;
         flex-direction: column;
@@ -75,22 +81,18 @@
         font-weight: bold;
     }
 
-    /* --- 土日の背景色 (CSS) --- */
+    /* 土日の背景色 */
     .fc-day-sat {
         background-color: #f0f7ff !important;
     }
 
-    /* 土曜：薄い青 */
     .fc-day-sun {
         background-color: #fff5f5 !important;
     }
 
-    /* 日曜：薄い赤 */
     .fc-day-today {
         background-color: #fffde7 !important;
     }
-
-    /* 今日：薄い黄 */
 
     @media (max-width: 992px) {
         .dashboard-grid {
@@ -118,11 +120,12 @@
                 <div id="calendar-main"></div>
             </div>
 
-            <div id="year-view-container" style="display: none;">
+            <div id="year-view-container">
                 <?php for ($m = 1; $m <= 12; $m++): ?>
                     <div class="month-card"
-                        style="border:1px solid #eee; border-radius:10px; padding:10px; margin-bottom:15px; background:#fafafa;">
-                        <h3 style="text-align:center; color:#007bff; border-bottom:1px solid #eee;"><?= $m ?>月</h3>
+                        style="border:1px solid #eee; border-radius:10px; padding:10px; background:#fafafa;">
+                        <h3 style="text-align:center; color:#007bff; border-bottom:1px solid #eee; margin-top:0;"><?= $m ?>月
+                        </h3>
                         <div id="calendar-year-<?= $m ?>"></div>
                     </div>
                 <?php endfor; ?>
@@ -158,64 +161,48 @@
     const yearCalendars = [];
     const dbData = <?= json_encode($page['dashboard'] ?? ['events' => [], 'chart' => []]) ?>;
 
+    // 祝日設定を共通化
+    const holidaySource = {
+        id: 'holidays',
+        url: 'https://calendar.google.com/calendar/ical/ja.japanese%23holiday%40group.v.calendar.google.com/public/basic.ics',
+        format: 'ics',
+        display: 'background',
+        color: '#ffebee'
+    };
+
     document.addEventListener('DOMContentLoaded', function () {
         const mainEl = document.getElementById('calendar-main');
 
+        // メインカレンダー初期化
         mainCalendar = new FullCalendar.Calendar(mainEl, {
             initialView: 'dayGridMonth',
             locale: 'ja',
             height: 'auto',
             headerToolbar: { left: 'prev,next today', center: 'title', right: '' },
-
-            // --- 重要：メモのだぶりを防ぐためここには events を書かない ---
             dayMaxEvents: 3,
-
-            // --- moreクリックでその日の新規作成画面へ ---
-            moreLinkClick: function (info) {
-                const d = info.date;
-                const dateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-
-                // action=new ではなく 一覧表示(index.php?page=memo) に日付を渡す
-                window.location.href = `index.php?page=memo&date=${dateStr}`;
-                return false;
-            },
-
-            // --- 日付クリックや詳細リンク設定 ---
             navLinks: true,
             navLinkDayClick: function (date, jsEvent) {
                 switchView('day');
                 mainCalendar.gotoDate(date);
             },
-
-            views: {
-                dayGridMonth: { dayMaxEvents: 3 },
-                dayGridWeek: { dayMaxEvents: false },
-                dayGridDay: { dayMaxEvents: false }
-            },
-
-            // --- データの読み込み（ここに集約） ---
             eventSources: [
-                {
-                    id: 'memo-data',
-                    events: dbData.events || []
-                },
-                {
-                    id: 'holidays',
-                    url: 'https://calendar.google.com/calendar/ical/ja.japanese%23holiday%40group.v.calendar.google.com/public/basic.ics',
-                    format: 'ics',
-                    display: 'background',
-                    color: '#ffebee'
-                }
+                { id: 'memo-data', events: dbData.events || [] },
+                holidaySource
             ],
-
             eventClick: function (info) {
-                if (info.event.id) {
+                if (info.event.id && info.event.display !== 'background') {
                     window.location.href = `index.php?page=memo&action=edit&id=${info.event.id}`;
                     info.jsEvent.preventDefault();
                 }
             },
             dateClick: (info) => {
                 window.location.href = `index.php?page=memo&action=new&date=${info.dateStr}`;
+            },
+            moreLinkClick: function (info) {
+                const d = info.date;
+                const dateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+                window.location.href = `index.php?page=memo&date=${dateStr}`;
+                return false;
             }
         });
         mainCalendar.render();
@@ -224,17 +211,26 @@
         const currentYear = new Date().getFullYear();
         for (let m = 1; m <= 12; m++) {
             const el = document.getElementById('calendar-year-' + m);
+            if (!el) continue;
+
             const cal = new FullCalendar.Calendar(el, {
                 initialView: 'dayGridMonth',
                 locale: 'ja',
                 initialDate: `${currentYear}-${String(m).padStart(2, '0')}-01`,
                 headerToolbar: false,
                 height: 'auto',
-                events: dbData.events || [], // 年間側もだぶりがないか確認
-                eventClick: (info) => {
-                    if (info.event.id) {
+                eventSources: [
+                    { id: 'memo-data-' + m, events: dbData.events || [] },
+                    holidaySource
+                ],
+                eventClick: function (info) {
+                    if (info.event.id && info.event.display !== 'background') {
                         window.location.href = `index.php?page=memo&action=edit&id=${info.event.id}`;
+                        info.jsEvent.preventDefault();
                     }
+                },
+                dateClick: function (info) {
+                    window.location.href = `index.php?page=memo&action=new&date=${info.dateStr}`;
                 }
             });
             yearCalendars.push(cal);
@@ -269,17 +265,19 @@
         if (type === 'year') {
             mainCont.style.display = 'none';
             yearCont.style.display = 'grid';
-            yearCalendars.forEach(c => c.render());
+
+            // 表示直後に再描画を強制実行
+            setTimeout(() => {
+                yearCalendars.forEach(c => {
+                    c.updateSize();
+                    c.render();
+                });
+            }, 50);
+
         } else {
             yearCont.style.display = 'none';
             mainCont.style.display = 'block';
-
-            // 時間軸を表示させない設定
-            const views = {
-                month: 'dayGridMonth',
-                week: 'dayGridWeek',
-                day: 'dayGridDay'
-            };
+            const views = { month: 'dayGridMonth', week: 'dayGridWeek', day: 'dayGridDay' };
             mainCalendar.changeView(views[type]);
             mainCalendar.render();
         }

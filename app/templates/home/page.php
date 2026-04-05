@@ -120,8 +120,6 @@
         <div class="header-actions">
             <?php if (isset($page['target_date'])): ?>
                 <a href="index.php?page=memo&action=list" style="font-size: 0.85rem; color: #007bff; text-decoration: none;">全件表示に戻る</a>
-            <?php else: ?>
-                <span class="user-badge">User: <?= htmlspecialchars($page['login_user'] ?? 'Guest') ?></span>
             <?php endif; ?>
         </div>
     </div>

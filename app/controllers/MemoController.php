@@ -483,40 +483,66 @@ class MemoController
     // MemoController.php
 
     /**
-     * ピン留め状態を反転させる
+     * メモのピン留め状態を切り替える
+     * $db = getDB(); を使用し、更新日時(update_date)を維持する
      */
-    private function togglePin($username, $id)
+    public function togglePin()
     {
-        if (!$id)
-            return;
-
-        // getDB() 関数を使用してデータベース接続を取得
+        // 1. データベース接続の取得
         $db = getDB();
 
-        // 1. 現在の is_pinned の状態を取得する
-        $stmt = $db->prepare("SELECT is_pinned FROM user_memos WHERE id = ? AND username = ?");
-        $stmt->execute([$id, $username]);
-        $currentStatus = $stmt->fetchColumn();
+        // 2. パラメータの取得
+        $id = $_GET['id'] ?? null;
+        $username = $_SESSION['username'] ?? 'guest';
+        $target_date = $_GET['date'] ?? ''; // 一覧画面の特定日付に戻る用
+        $from = $_GET['from'] ?? 'list';    // 遷移元判定（detail か list か）
 
-        // 2. 状態を反転させる (1なら0、0なら1)
-        $newStatus = ($currentStatus == 1) ? 0 : 1;
-
-        // 3. アップデート実行
-        $updateStmt = $db->prepare("UPDATE user_memos SET is_pinned = ? WHERE id = ? AND username = ?");
-        $updateStmt->execute([$newStatus, $id, $username]);
-
-        // 4. 元の画面（一覧 or 詳細）に戻す
-        $from = $_GET['from'] ?? 'list';
-        $redirectUrl = ($from === 'detail')
-            ? "index.php?page=memo&action=edit&id=" . $id
-            : "index.php?page=memo&action=list";
-
-        // カレンダーの日付指定がある場合は引き継ぐ
-        if (isset($_GET['date'])) {
-            $redirectUrl .= "&date=" . $_GET['date'];
+        if (!$id) {
+            header("Location: index.php?page=memo&action=list");
+            exit;
         }
 
-        header("Location: " . $redirectUrl);
-        exit;
+        try {
+            // 3. 現在のピン留め状態を確認
+            $selectSql = "SELECT is_pinned FROM user_memos WHERE id = ? AND username = ?";
+            $stmt = $db->prepare($selectSql);
+            $stmt->execute([$id, $username]);
+            $memo = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($memo) {
+                // 現在の状態を反転させる (0→1, 1→0)
+                $newStatus = $memo['is_pinned'] ? 0 : 1;
+
+                // 4. 【最重要】update_dateを今の値で固定して更新
+                // update_date = update_date と書くことで、DBの自動更新を防止します
+                $updateSql = "UPDATE user_memos 
+                          SET is_pinned = ?, 
+                              update_date = update_date 
+                          WHERE id = ? AND username = ?";
+
+                $updateStmt = $db->prepare($updateSql);
+                $updateStmt->execute([$newStatus, $id, $username]);
+            }
+
+            // 5. リダイレクト処理
+            if ($from === 'detail') {
+                // 編集（詳細）画面から実行された場合
+                header("Location: index.php?page=memo&action=edit&id=" . urlencode($id));
+            } else {
+                // 一覧画面から実行された場合
+                $redirectUrl = "index.php?page=memo&action=list";
+                if (!empty($target_date)) {
+                    $redirectUrl .= "&date=" . urlencode($target_date);
+                }
+                header("Location: " . $redirectUrl);
+            }
+            exit;
+
+        } catch (PDOException $e) {
+            // エラーが発生した場合はログに記録して一覧に戻す
+            error_log("togglePin Error: " . $e->getMessage());
+            header("Location: index.php?page=memo&action=list");
+            exit;
+        }
     }
 }

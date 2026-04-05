@@ -110,7 +110,7 @@
                 <h4 style="margin:0 0 15px 0;">📈 直近7日の活動</h4>
                 <canvas id="activityChart"></canvas>
             </div>
-            <a href="index.php?page=memo_create" class="btn-new-memo">＋ 新規メモ作成</a>
+            <a href="index.php?page=memo&action=new" class="btn-new-memo">＋ 新規メモ作成</a>
         </div>
     </div>
 </div>

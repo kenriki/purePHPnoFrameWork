@@ -13,7 +13,11 @@
                 "type": "text",
                 "content": "このページはJSONファイルから動的に生成されています。"
             }
-        ]
+        ],
+        "dashboard": {
+            "show_calendar": true,
+            "show_activity": true
+        }
     },
     "autologin": {
         "title": "自動ログイン中...",

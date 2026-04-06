@@ -12,33 +12,77 @@ $isGuestMode = ($display_user === 'guest' || empty($display_user));
 ?>
 
 <style>
-    /* モバイル・デスクトップ共通のベース調整 */
+    /* 全体コンテナのベース調整 */
     .memo-container {
         box-sizing: border-box;
+        padding: 20px;
+        width: 100%;
+        max-width: 900px;
+        margin: 20px auto;
+        background: #fff;
+        border: 1px solid #eee;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
     }
 
-    /* 一覧テーブルのスマホ最適化 */
+    /* テーブルのレスポンシブ・フォント調整 */
     .memo-container table {
         font-size: 16px !important;
         width: 100% !important;
         table-layout: fixed;
+        border-collapse: collapse;
     }
 
     .memo-container td,
     .memo-container th {
-        padding: 12px 8px !important;
+        padding: 15px 10px !important;
         word-wrap: break-word;
         overflow-wrap: break-word;
     }
 
-    /* 入力エリアのフォントサイズ（iPhoneの自動ズーム防止） */
+    /* --- ピン留めボタン（アイコン）のスタイル --- */
+    .pin-link {
+        text-decoration: none;
+        font-size: 1.4rem;
+        margin-right: 12px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        transition: all 0.2s ease;
+        background: #f8f9fa;
+        border: 1px solid #ddd;
+    }
+
+    /* ピン留め済み：目立つ背景色と枠線 */
+    .pin-active {
+        background: #fff3cd !important;
+        /* 薄いオレンジ */
+        border: 2px solid #ffc107 !important;
+        transform: scale(1.05);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    /* ピン留めされている行全体の背景色 */
+    .row-pinned {
+        background-color: #fffef0 !important;
+    }
+
+    .pin-link:active {
+        transform: scale(1.3);
+    }
+
+    /* 入力エリアのズーム防止 */
     textarea {
         font-size: 16px !important;
         width: 100%;
         box-sizing: border-box;
+        font-family: 'Consolas', 'Monaco', monospace;
     }
 
-    /* スマホ画面専用の調整 */
+    /* モバイル表示の最適化 */
     @media (max-width: 600px) {
         .memo-container {
             padding: 10px !important;
@@ -50,115 +94,129 @@ $isGuestMode = ($display_user === 'guest' || empty($display_user));
         .memo-container h2 {
             font-size: 1.2rem;
         }
+
+        .pin-link {
+            width: 36px;
+            height: 36px;
+            font-size: 1.2rem;
+        }
     }
 </style>
 
-<div class="memo-container"
-    style="padding: 20px; width: 100%; max-width: 900px; margin: 20px auto; background: #fff; border: 1px solid #eee; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+<div class="memo-container">
 
     <div
         style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #007bff; margin-bottom: 20px; padding-bottom: 10px;">
-        <h2 style="margin: 0; color: #333;">📝 メモ</h2>
+        <h2 style="margin: 0; color: #333;">📝 メモ管理</h2>
         <span style="background: #f0f0f0; padding: 4px 12px; border-radius: 20px; font-size: 0.85rem;">
-            ログイン：<?= htmlspecialchars($display_user) ?>
+            User: <?= htmlspecialchars($display_user) ?>
         </span>
     </div>
 
-    <div style="margin-bottom: 20px; display: flex; gap: 10px;">
-        <a href="/index.php?page=memo&action=list"
-            style="text-decoration: none; padding: 10px 15px; border: 1px solid #ddd; border-radius: 5px; color: #555; background: #fff; font-weight: bold; font-size: 0.9rem;">📋
-            一覧</a>
-        <a href="/index.php?page=memo&action=new"
-            style="text-decoration: none; padding: 10px 15px; border: none; border-radius: 5px; color: #fff; background: #28a745; font-weight: bold; font-size: 0.9rem;">＋
+    <div style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center;">
+        <a href="index.php?page=memo&action=list"
+            style="text-decoration: none; padding: 10px 18px; border: 1px solid #ddd; border-radius: 5px; color: #555; background: #fff; font-weight: bold; font-size: 0.9rem;">📋
+            一覧表示</a>
+        <a href="index.php?page=memo&action=new"
+            style="text-decoration: none; padding: 10px 18px; border: none; border-radius: 5px; color: #fff; background: #28a745; font-weight: bold; font-size: 0.9rem;">＋
             新規作成</a>
-    </div>
 
-    <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-        <?php if (($user ?? 'guest') === 'guest'): ?>
-            <form action="/index.php?page=memo&action=set_guest_name" method="POST"
-                style="display: flex; gap: 5px; margin-left: auto;">
+        <?php if ($display_user === 'guest'): ?>
+            <form action="index.php?page=memo&action=set_guest_name" method="POST"
+                style="margin-left: auto; display: flex; gap: 5px;">
                 <input type="text" name="guest_name" value="<?= htmlspecialchars($_SESSION['guest_name'] ?? '') ?>"
-                    placeholder="合言葉(例:なまえ)"
-                    style="padding: 6px; border: 1px solid #ccc; border-radius: 4px; width: 140px; font-size: 0.9rem;">
-                <button type="submit" class="btn btn-primary" style="padding: 6px 12px; font-size: 0.9rem;">適用</button>
+                    placeholder="名前を入力" style="padding: 6px; border: 1px solid #ccc; border-radius: 4px; width: 120px;">
+                <button type="submit"
+                    style="padding: 6px 10px; background:#007bff; color:#fff; border:none; border-radius:4px; cursor:pointer;">適用</button>
             </form>
         <?php endif; ?>
     </div>
 
     <?php if ($current_action === 'new' || $current_action === 'edit'): ?>
-        <form method="post" action="/index.php?page=memo">
+        <form method="post" action="index.php?page=memo">
             <input type="hidden" name="id" value="<?= htmlspecialchars($current_id ?? '') ?>">
 
             <?php if ($isGuestMode): ?>
                 <div
                     style="background: #fff5f5; padding: 12px; border: 1px solid #d9534f; border-radius: 5px; margin-bottom: 15px;">
-                    <label
-                        style="color: #d9534f; font-weight: bold; font-size: 0.9rem; display: flex; align-items: center; gap: 5px;">
-                        <span>⚠️</span> セッションが切れています（Guestモード）
-                    </label>
-                    <div style="display: flex; gap: 10px; align-items: center; margin-top: 8px;">
-                        <span style="font-size: 0.8rem; color: #444; font-weight: bold;">署名:</span>
-                        <input type="text" name="guest_name" placeholder="例：田中"
-                            style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem;">
-                    </div>
+                    <label style="color: #d9534f; font-weight: bold; font-size: 0.9rem;">⚠️ ゲストモード：保存時に署名が必要です</label>
+                    <input type="text" name="guest_name" placeholder="お名前"
+                        style="width: 100%; margin-top: 5px; padding: 8px; border: 1px solid #ccc;">
                 </div>
             <?php endif; ?>
 
             <div
                 style="background: #f9f9f9; padding: 15px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #eee;">
-                <label style="display: block; font-weight: bold; margin-bottom: 10px; color: #444;">
-                    <?= ($current_action === 'new') ? '✨ 新規メモ作成' : '✍️ メモ編集' ?>
-                </label>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <label style="font-weight: bold; color: #444;">
+                        <?= ($current_action === 'new') ? '✨ 新規メモ' : '✍️ 編集モード' ?>
+                    </label>
 
-                <textarea name="content" id="memo-content"
-                    style="width: 100%; height: 450px; padding: 15px; border: 1px solid #ccc; border-radius: 5px; font-family: 'Consolas', 'Monaco', monospace; line-height: 1.6; resize: vertical; box-sizing: border-box; font-size: 1rem;"
-                    placeholder="ここに入力してください..."><?php echo htmlspecialchars($content ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
-            </div>
-
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                <div style="display: flex; gap: 10px;">
-                    <button type="submit"
-                        style="padding: 12px 30px; background: #007bff; color: #fff; border: none; border-radius: 5px; cursor: pointer; font-size: 1rem; font-weight: bold;">保存する</button>
-                    <button type="submit" name="pdf_export" formtarget="_blank"
-                        style="padding: 12px 20px; background: #6c757d; color: #fff; border: none; border-radius: 5px; cursor: pointer; font-size: 1rem; font-weight: bold;">PDFでダウンロード</button>
+                    <?php if ($current_action === 'edit' && isset($page['memo'])): ?>
+                        <?php $isPinned = ($page['memo']['is_pinned'] ?? 0); ?>
+                        <a href="index.php?page=memo&action=toggle_pin&id=<?= $current_id ?>&from=detail"
+                            style="text-decoration: none; font-size: 0.85rem; padding: 6px 12px; border-radius: 20px; border: 2px solid <?= $isPinned ? '#ffc107' : '#ccc' ?>; background: <?= $isPinned ? '#fff9e6' : '#fff' ?>; color: <?= $isPinned ? '#856404' : '#666' ?>; font-weight: bold;">
+                            <?= $isPinned ? '📌 ピン留めを外す' : '📍 ピン留めする' ?>
+                        </a>
+                    <?php endif; ?>
                 </div>
 
+                <textarea name="content" id="memo-content"
+                    style="height: 400px; padding: 15px; border: 1px solid #ccc; border-radius: 5px; line-height: 1.6; resize: vertical;"
+                    placeholder="内容を入力してください..."><?php echo htmlspecialchars($content ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; gap: 10px;">
+                    <button type="submit"
+                        style="padding: 12px 25px; background: #007bff; color: #fff; border: none; border-radius: 5px; font-weight: bold; cursor: pointer;">💾
+                        保存して更新</button>
+                    <button type="submit" name="pdf_export" formtarget="_blank"
+                        style="padding: 12px 15px; background: #6c757d; color: #fff; border: none; border-radius: 5px; cursor: pointer;">PDF出力</button>
+                </div>
                 <?php if (!empty($current_id)): ?>
-                    <button type="submit" name="delete" onclick="return confirm('本当にこのメモを削除しますか？')"
-                        style="background: none; border: none; color: #dc3545; cursor: pointer; font-size: 0.85rem; text-decoration: underline;">🗑️
-                        このメモを削除</button>
+                    <button type="submit" name="delete" onclick="return confirm('削除してもよろしいですか？')"
+                        style="color: #dc3545; background: none; border: none; text-decoration: underline; cursor: pointer;">🗑️
+                        削除</button>
                 <?php endif; ?>
             </div>
         </form>
 
     <?php else: ?>
         <div style="background: #fff; border: 1px solid #eee; border-radius: 8px; overflow: hidden;">
-            <table style="width: 100%; border-collapse: collapse; table-layout: fixed;">
+            <table>
                 <thead style="background: #f8f9fa;">
                     <tr>
-                        <th
-                            style="padding: 15px; text-align: left; border-bottom: 2px solid #eee; color: #666; width: 75%;">
-                            内容</th>
-                        <th
-                            style="padding: 15px; text-align: right; border-bottom: 2px solid #eee; color: #666; width: 25%;">
-                            最終更新</th>
+                        <th style="width: 70%; border-bottom: 2px solid #dee2e6;">メモ内容</th>
+                        <th style="width: 30%; border-bottom: 2px solid #dee2e6; text-align: right;">作成日</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php if (empty($memos)): ?>
                         <tr>
-                            <td colspan="2" style="padding: 30px; text-align: center; color: #999;">メモはまだありません。</td>
+                            <td colspan="2" style="text-align:center; color:#999; padding:40px;">メモが見つかりません。</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($memos as $m): ?>
-                            <tr style="border-bottom: 1px solid #f1f1f1;">
-                                <td style="padding: 15px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;">
-                                    <a href="/index.php?page=memo&action=edit&id=<?= htmlspecialchars($m['id']) ?>"
-                                        style="color: #007bff; text-decoration: none; font-weight: bold; font-size: 1rem; display: block;">📄
-                                        <?= $m['display_title_html'] ?></a>
+                            <?php $isPinned = ($m['is_pinned'] ?? 0); ?>
+                            <tr class="<?= $isPinned ? 'row-pinned' : '' ?>" style="border-bottom: 1px solid #eee;">
+                                <td>
+                                    <div style="display: flex; align-items: center;">
+                                        <a href="index.php?page=memo&action=toggle_pin&id=<?= $m['id'] ?><?= !empty($target_date) ? '&date=' . $target_date : '' ?>"
+                                            class="pin-link <?= $isPinned ? 'pin-active' : '' ?>"
+                                            title="<?= $isPinned ? 'ピンを外す（更新日は維持されます）' : 'ピン留めする（更新日は維持されます）' ?>">
+                                            <?= $isPinned ? '📌' : '📍' ?>
+                                        </a>
+
+                                        <a href="index.php?page=memo&action=edit&id=<?= htmlspecialchars($m['id']) ?>"
+                                            style="color: #007bff; text-decoration: none; font-weight: <?= $isPinned ? '900' : 'bold' ?>; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                            <?= $m['display_title_html'] ?>
+                                        </a>
+                                    </div>
                                 </td>
-                                <td style="padding: 15px; text-align: right; color: #888; font-size: 0.85rem; white-space: nowrap;">
-                                    <?= htmlspecialchars($m['time']) ?></td>
+                                <td style="text-align: right; color: #888; font-size: 0.85rem; white-space: nowrap;">
+                                    <?= htmlspecialchars($m['time']) ?>
+                                </td>
                             </tr>
                         <?php endforeach; ?>
                     <?php endif; ?>
@@ -167,8 +225,10 @@ $isGuestMode = ($display_user === 'guest' || empty($display_user));
         </div>
     <?php endif; ?>
 
-    <div style="margin-top: 25px; padding-top: 15px; border-top: 1px solid #eee;">
-        <a href="/index.php?page=home"
-            style="text-decoration: none; color: #007bff; font-size: 0.9rem; font-weight: bold;">← ホームへ戻る</a>
+    <div style="margin-top: 30px; padding-top: 15px; border-top: 1px solid #eee;">
+        <a href="index.php?page=home"
+            style="text-decoration: none; color: #007bff; font-weight: bold; display: inline-flex; align-items: center; gap: 5px;">
+            🏠 ホーム画面へ戻る
+        </a>
     </div>
 </div>

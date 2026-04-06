@@ -35,6 +35,9 @@
             パスワードを更新
         </button>
     </form>
+    <p style="text-align:center; margin-top: 15px;">
+        <a href="index.php?page=forgot_password_request">現在のパスワードを忘れた方はこちら</a>
+    </p>
 </div>
 
 <script>

@@ -37,47 +37,46 @@ if (session_status() === PHP_SESSION_NONE) {
     </header>
     <main>
         <?php if (isset($_SESSION['user_id'])): ?>
-            <li class="logout-item">
-                <a href="/index.php?page=logout" style="color: #ff4d4d; font-weight: bold;">
-                    ログアウト (
-                    <?= htmlspecialchars($_SESSION['username'] ?? 'ユーザー') ?>)
-                </a>
-            </li>
             <nav class="scroll-nav">
                 <button class="nav-arrow left">‹</button>
                 <ul>
                     <?php
-                    // 1. JSONファイルを読み込む
                     $menuData = json_decode(file_get_contents(DATA_PATH), true);
+                    $userRole = $_SESSION['role'] ?? 'user';
 
-                    // 2. ループで li タグを生成
                     if ($menuData):
                         foreach ($menuData as $id => $content):
-                            // 1. 表示名（title）を取得
                             $title = $content['title'] ?? '';
 
-                            // 2. 表示名が以下のいずれかに一致したら除外する
-                            $exclude_titles = ['ログイン', '新規会員登録', 'ログアウト', 'createPDF','アンケート送信完了','パスワード再設定','パスワード更新', '自動ログイン中...'];
+                            // --- 表示判定 ---
+                            $shouldShow = false;
 
-                            if (in_array($title, $exclude_titles)) {
-                                continue;
+                            // 1. 「メモ」は全員
+                            if ($title === 'メモ') {
+                                $shouldShow = true;
                             }
-                            ?>
-                            <li>
-                                <a href="/index.php?page=<?= htmlspecialchars($id) ?>">
-                                    <?= htmlspecialchars($title) ?>
-                                </a>
-                            </li>
-                            <?php
+                            // 2. 「サンプル」が含まれる項目は admin のみ表示
+                            // ※判定を 'サンプル' だけでなく 'サンプルページ' 等にも対応させる
+                            elseif (strpos($title, 'サンプル') !== false && $userRole === 'admin') {
+                                $shouldShow = true;
+                            }
+
+                            if ($shouldShow): ?>
+                                <li>
+                                    <a href="/index.php?page=<?= htmlspecialchars($id) ?>">
+                                        <?= htmlspecialchars($title) ?>
+                                    </a>
+                                </li>
+                            <?php endif;
                         endforeach;
                     endif;
+                    ?>
 
-                    // 最後にログアウトボタンだけ別枠で追加
-                    if (isset($_SESSION['user_id'])): ?>
-                        <li class="logout-item">
-                            <a href="/index.php?page=logout" style="color: #ff4d4d;">ログアウト</a>
-                        </li>
-                    <?php endif; ?>
+                    <li class="logout-item">
+                        <a href="/index.php?page=logout" style="color: #ff4d4d; font-weight: bold;">
+                            ログアウト (<?= htmlspecialchars($_SESSION['username'] ?? 'ユーザー') ?>)
+                        </a>
+                    </li>
                 </ul>
                 <button class="nav-arrow right">›</button>
             </nav>

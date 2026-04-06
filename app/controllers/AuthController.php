@@ -13,26 +13,75 @@ class AuthController
     // ログイン処理
     public function login()
     {
+        // JST に統一（index.php に書いてあっても念のため）
+        date_default_timezone_set('Asia/Tokyo');
+
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $db = getDB();
-            $username = $_POST['username'] ?? '';
+
+            $login_id = $_POST['username'] ?? '';
             $password = $_POST['password'] ?? '';
 
-            $stmt = $db->prepare("SELECT * FROM users WHERE username = ?");
-            $stmt->execute([$username]);
+            // username または email のどちらでもログイン可能
+            $stmt = $db->prepare("
+            SELECT * FROM users 
+             WHERE username = ? 
+                OR email = ?
+            LIMIT 1
+        ");
+            $stmt->execute([$login_id, $login_id]);
             $user = $stmt->fetch();
 
-            // password_verify でハッシュを照合
             if ($user && password_verify($password, $user['password'])) {
+
+                // セッションセット
                 $_SESSION['user_id'] = $user['id'];
                 $_SESSION['username'] = $user['username'];
                 $_SESSION['email'] = $user['email'];
-                // var_dump($user);
-                // exit;
+
+                // ★ 追加：DBから取得した権限（admin/user等）をセッションに格納
+                $_SESSION['role'] = $user['role'] ?? 'user';
+
+                // ----------------------------------------------------
+                // ★ パスワード更新日チェック（3か月）
+                // ----------------------------------------------------
+                // $rawDate = $user['update_date'];  // DB の値（例: 2026/04/04 11:21:34）
+
+                // // update_date が NULL または空 → 強制変更
+                // if (empty($rawDate)) {
+                //     $_SESSION['password_expired'] = true;
+                //     header("Location: index.php?page=forgot_password");
+                //     exit;
+                // }
+
+                // DB のフォーマットに合わせてパース（Y/m/d H:i:s）
+                // $lastUpdate = DateTime::createFromFormat('Y/m/d H:i:s', $rawDate);
+
+                // // パース失敗（フォーマット不一致） → 強制変更
+                // if ($lastUpdate === false) {
+                //     $_SESSION['password_expired'] = true;
+                //     header("Location: index.php?page=forgot_password");
+                //     exit;
+                // }
+
+                // $lastUpdateTs = $lastUpdate->getTimestamp();
+                // $threeMonthsAgo = strtotime('-3 months');
+
+                // // 3か月以上経過 → 強制パスワード変更
+                // if ($lastUpdateTs < $threeMonthsAgo) {
+                //     $_SESSION['password_expired'] = true;
+                //     header("Location: index.php?page=forgot_password");
+                //     exit;
+                // }
+
+                // ----------------------------------------------------
+                // ★ 通常ログイン
+                // ----------------------------------------------------
                 header("Location: index.php?page=home");
                 exit;
+
             } else {
-                echo "<script>alert('ユーザー名またはパスワードが違います'); location.href='?page=login';</script>";
+                echo "<script>alert('ユーザー名/メールアドレス または パスワードが違います'); location.href='?page=login';</script>";
                 exit;
             }
         }
@@ -68,6 +117,13 @@ class AuthController
                 // ここで切り出したメソッドをコールします
                 $new_id = $this->getNextUserId($db);
 
+                // email 重複チェック
+                $stmt = $db->prepare("SELECT id FROM users WHERE email = ?");
+                $stmt->execute([$email]);
+                if ($stmt->fetch()) {
+                    echo "<script>alert('このメールアドレスは既に登録されています'); history.back();</script>";
+                    return;
+                }
                 // INSERT文の準備（? は 5 つ）
                 $stmt = $db->prepare("INSERT INTO users (id, username, email, password, login_token) VALUES (?, ?, ?, ?, ?)");
                 $stmt->execute([$new_id, $user, $email, $hashed_password, $token]);
@@ -254,6 +310,102 @@ class AuthController
         return $result ? (int) $result['next_id'] : 1;
     }
 
+    // 認証コード送信
+    public function forgot_password_send()
+    {
+        $email = trim($_POST['email'] ?? '');
+
+        $db = getDB();
+        $stmt = $db->prepare("SELECT id FROM users WHERE email = ?");
+        $stmt->execute([$email]);
+        $user = $stmt->fetch();
+
+        if (!$user) {
+            echo "<script>alert('メールアドレスが登録されていません'); history.back();</script>";
+            return;
+        }
+
+        // 6桁コード生成
+        $code = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        $expires = (new DateTime('+1 hour'))->format('Y-m-d H:i:s');
+
+        // DB保存
+        $stmt = $db->prepare("UPDATE users SET reset_code=?, reset_expires=? WHERE id=?");
+        $stmt->execute([$code, $expires, $user['id']]);
+
+        // メール送信
+        MailUtil::sendMail(
+            $email,
+            "【Sample Site】パスワード再設定コード",
+            "認証コード：{$code}\n有効期限：1時間"
+        );
+
+        header("Location: index.php?page=forgot_password_verify&email={$email}");
+        exit;
+    }
+
+    public function forgot_password_verify()
+    {
+        $email = $_POST['email'] ?? $_GET['email'] ?? '';
+        $code = $_POST['code'] ?? '';
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $db = getDB();
+            $stmt = $db->prepare("SELECT id, reset_code, reset_expires FROM users WHERE email=?");
+            $stmt->execute([$email]);
+            $user = $stmt->fetch();
+
+            if (!$user || $user['reset_code'] !== $code) {
+                echo "<script>alert('認証コードが違います'); history.back();</script>";
+                return;
+            }
+
+            if (new DateTime() > new DateTime($user['reset_expires'])) {
+                echo "<script>alert('認証コードの有効期限が切れています'); history.back();</script>";
+                return;
+            }
+
+            header("Location: index.php?page=forgot_password_reset&email={$email}");
+            exit;
+        }
+
+        include TEMPLATE_PATH . 'auth/forgot_password_verify.php';
+    }
+
+    public function forgot_password_reset()
+    {
+        $email = $_POST['email'] ?? $_GET['email'] ?? '';
+        $new = $_POST['new_password'] ?? '';
+        $conf = $_POST['confirm_password'] ?? '';
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+            if ($new !== $conf) {
+                echo "<script>alert('パスワードが一致しません'); history.back();</script>";
+                return;
+            }
+
+            $db = getDB();
+            $hashed = password_hash($new, PASSWORD_DEFAULT);
+
+            $stmt = $db->prepare("
+                UPDATE users 
+                SET password=?, reset_code=NULL, reset_expires=NULL, update_date = NOW()
+                WHERE email=?
+            ");
+            $stmt->execute([$hashed, $email]);
+
+            echo "
+            <div style='max-width:300px; margin:50px auto; padding:20px; text-align:center;'>
+                <p>パスワードを更新しました。</p>
+                <p><a href='index.php?page=login'>ログイン画面へ戻る</a></p>
+            </div>
+            ";
+            return;
+        }
+
+        include TEMPLATE_PATH . 'auth/forgot_password_reset.php';
+    }
 
 
 }

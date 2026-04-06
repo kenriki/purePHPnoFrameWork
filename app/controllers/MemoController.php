@@ -1,104 +1,127 @@
 <?php
 
 /**
- * MemoController
- * * 機能一覧:
- * 1. ユーザー別ディレクトリ管理 (C:/Apache24/htdocs/sample/app/data/user_memos/{user}/)
- * 2. メモ一覧取得 (通常一覧 / 日付フィルタ対応)
- * 3. メモ詳細・編集データ取得 (DB直接参照)
- * 4. メモ保存 (物理ファイル保存 + DB REPLACE INTO 同期)
- * 5. メモ削除 (DB削除成功時のみ物理ファイルを削除)
- * 6. ゲストメモ同期 (無記名 'guest' を 'guest_合言葉' へ一括更新)
- * 7. 自動採番 (欠番を優先埋めする 6桁 000001 形式)
- * 8. PDFエクスポート (tFPDF利用、日本語対応、署名追記)
- * 9. ダッシュボード連携 (FullCalendar用イベント / Chart.js用直近7日集計)
+ * MemoController - 高機能メモ管理コントローラ
+ * * 主な機能:
+ * 1. AES-256-CBC によるコンテンツの暗号化・復号
+ * 2. 既存の平文データとの互換性維持（自動判別）
+ * 3. 作成日(create_date)と更新日(update_date)の完全分離
+ * 4. ユーザー別ディレクトリ管理と物理ファイル同期
+ * 5. 6桁IDの自動採番（欠番利用型）
+ * 6. tFPDFによる日本語PDFエクスポート
+ * 7. ダッシュボード（カレンダー・ピン留め・グラフ）連携
  */
 class MemoController
 {
     private $baseDir;
     private $user;
+    private $cipher_method = 'aes-256-cbc';
+    private $cipher_key = 'your-secret-key-here'; // 運用時は .env 等へ
 
+    /**
+     * コンストラクタ
+     */
     public function __construct()
     {
-        // セッションが開始されていなければ開始
         if (session_status() === PHP_SESSION_NONE) {
             session_start();
         }
 
-        // 1. ログインユーザー名を取得（未ログインなら guest）
+        // ログインユーザーの特定
         $this->user = $_SESSION['user'] ?? $_SESSION['username'] ?? 'guest';
 
-        // 2. ユーザーごとにディレクトリを分ける
+        // 物理保存ディレクトリの決定と作成
         $this->baseDir = "C:/Apache24/htdocs/sample/app/data/user_memos/" . $this->user . "/";
-
-        // 3. フォルダがなければ自動作成
         if (!is_dir($this->baseDir)) {
             mkdir($this->baseDir, 0777, true);
         }
     }
 
     /**
-     * メインのリクエスト処理（ルーティング相当）
+     * コンテンツの復号（暗号・平文を自動判別）
+     * image_aa4e6b.png の復号エラー対策
+     */
+    private function decryptContent($data)
+    {
+        if (empty($data))
+            return "";
+
+        // 1. Base64デコードを試みる
+        $decoded = base64_decode($data, true);
+        if ($decoded === false) {
+            return $data; // Base64ですらなければ旧来の平文
+        }
+
+        // 2. IV（初期化ベクトル）の長さを確認
+        $ivLength = openssl_cipher_iv_length($this->cipher_method);
+        if (strlen($decoded) <= $ivLength) {
+            return $data; // 長さが足りなければ平文（または破損）
+        }
+
+        // 3. 復号処理
+        $iv = substr($decoded, 0, $ivLength);
+        $encryptedRaw = substr($decoded, $ivLength);
+        $decrypted = openssl_decrypt($encryptedRaw, $this->cipher_method, $this->cipher_key, 0, $iv);
+
+        // 復号に失敗した場合は平文として返す（移行期セーフティ）
+        return ($decrypted === false) ? $data : $decrypted;
+    }
+
+    /**
+     * メインのリクエストハンドラ
      */
     public function handleRequest()
     {
         $action = $_GET['action'] ?? 'list';
         $id = $_GET['id'] ?? null;
-        $target_date = $_GET['date'] ?? null; // カレンダー等からの日付指定を受け取る
+        $target_date = $_GET['date'] ?? null;
 
-        // --- 1. ピン留め切り替え処理 (GET) ---
-        // 保存処理の前に判定することで、状態変更後にリストを再取得できるようにします
+        // --- アクション分岐 ---
+
+        // ピン留め
         if ($action === 'toggle_pin') {
-            $this->togglePin($this->user, $id);
-            return; // togglePin 内で header 遷移するため終了
+            $this->togglePin();
+            return;
         }
 
-        // 一覧表示の前に、無記名メモを現在の合言葉に紐付け直す
+        // ゲストユーザーの同期
         if ($action === 'list') {
             $this->syncGuestMemos();
         }
 
-        // --- 2. PDFエクスポート処理 (POST) ---
+        // PDF出力 (POST)
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pdf_export'])) {
-            $content = $_POST['content'] ?? '';
-            $guestName = $_POST['guest_name'] ?? '';
-            $this->generatePdf($content, $guestName);
-            return; // PDF出力後は終了
+            $this->generatePdf($_POST['content'] ?? '', $_POST['guest_name'] ?? '');
+            return;
         }
 
-        // --- 3. 保存・削除処理 (POST) ---
+        // 保存・削除 (POST)
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $content = $_POST['content'] ?? '';
             $memo_id = $_POST['id'] ?? null;
 
-            // 削除ボタン押下時
             if (isset($_POST['delete'])) {
                 $this->deleteMemo($memo_id);
-                header("Location: index.php?page=memo&action=list&message=deleted");
-                exit;
+                $this->redirect("list", "deleted");
             }
 
-            // 保存（新規・更新共通）実行
             $this->saveMemo($memo_id, $content);
-            header("Location: index.php?page=memo&action=list&message=saved");
-            exit;
+            $this->redirect("list", "saved");
         }
 
-        // --- 4. 表示用データの準備 (GET) ---
+        // 表示用データの構築 (GET)
         $memos = ($action === 'list') ? $this->getMemoList($target_date) : [];
-
-        // 詳細表示用データの取得
-        $memo = null;
         $content = "";
+        $memo = null;
+
         if ($id) {
-            if ($action === 'show') {
-                // 詳細表示(show)の場合は、is_pinned 等の全カラムを含むデータを取得
-                $detailData = $this->showDetail();
-                $memo = $detailData['memo'];
-                $content = $memo['content'] ?? "";
-            } else {
-                // 編集(edit)等の場合は本文のみ取得
-                $content = $this->getMemo($id);
+            $db = getDB();
+            $stmt = $db->prepare("SELECT * FROM user_memos WHERE id = ? AND (username = ? OR username LIKE 'guest%')");
+            $stmt->execute([$id, $this->user]);
+            $memo = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($memo) {
+                $content = $this->decryptContent($memo['content']);
             }
         }
 
@@ -106,8 +129,8 @@ class MemoController
             'action' => $action,
             'id' => $id,
             'memos' => $memos,
-            'memo' => $memo,      // 詳細表示用の配列データ
-            'content' => $content, // テキストエリア表示用の本文
+            'memo' => $memo,
+            'content' => $content,
             'user' => $this->user,
             'target_date' => $target_date,
             'message' => $_GET['message'] ?? ""
@@ -115,434 +138,221 @@ class MemoController
     }
 
     /**
-     * ホーム画面（ダッシュボード）用データ提供
-     */
-    public function home()
-    {
-        // カレンダーとグラフ用のデータを一括取得
-        $dashboardData = $this->getDashboardData($this->user);
-
-        return [
-            'title' => 'ホームページ',
-            'dashboard' => $dashboardData,
-            'login_user' => $this->user, // 右上表示用
-        ];
-    }
-
-    /**
-     * DBからメモ一覧を取得する
-     * @param string|null $target_date 'YYYY-MM-DD' 形式でフィルタリング
+     * メモ一覧の取得（復号・タイトル抽出処理含む）
      */
     private function getMemoList($target_date = null)
     {
         $db = getDB();
-        $currentUser = $this->user ?? 'guest';
         $params = [];
+        $sql = "SELECT id, username, content, is_pinned, 
+                       DATE_FORMAT(create_date, '%Y-%m-%d %H:%i') as time 
+                FROM user_memos WHERE ";
 
-        // 1. ユーザー状態に応じた基本SQLの構築
-        if ($currentUser !== 'guest' && !empty($currentUser)) {
-            // ログインユーザー用
-            $sql = "SELECT id, username, content, DATE_FORMAT(update_date, '%Y-%m-%d %H:%i') as time 
-                    FROM user_memos WHERE username = :username";
-            $params[':username'] = $currentUser;
+        // ユーザー条件
+        if ($this->user !== 'guest' && !empty($this->user)) {
+            $sql .= "username = :username";
+            $params[':username'] = $this->user;
         } else {
-            // ゲストユーザー用（合言葉の有無で分岐）
-            $guestName = $_SESSION['guest_name'] ?? null;
-            if (!empty($guestName)) {
-                $sql = "SELECT id, username, content, DATE_FORMAT(update_date, '%Y-%m-%d %H:%i') as time 
-                        FROM user_memos WHERE username = :guest_sig";
-                $params[':guest_sig'] = 'guest_' . $guestName;
-            } else {
-                $sql = "SELECT id, username, content, DATE_FORMAT(update_date, '%Y-%m-%d %H:%i') as time 
-                        FROM user_memos WHERE username = 'guest'";
-            }
+            $guestSig = 'guest_' . ($_SESSION['guest_name'] ?? '');
+            $sql .= "username = " . (($_SESSION['guest_name'] ?? '') ? ":guest_sig" : "'guest'");
+            if ($_SESSION['guest_name'] ?? '')
+                $params[':guest_sig'] = $guestSig;
         }
 
-        // 2. 日付フィルタリング（カレンダーの「+more」等からの遷移時）
+        // カレンダー日付条件
         if ($target_date) {
-            $sql .= " AND DATE(update_date) = :target_date";
+            $sql .= " AND DATE(create_date) = :target_date";
             $params[':target_date'] = $target_date;
         }
 
-        $sql .= " ORDER BY update_date DESC";
-
+        $sql .= " ORDER BY is_pinned DESC, update_date DESC";
         $stmt = $db->prepare($sql);
         $stmt->execute($params);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // 3. 表示用データの整形（1行目をタイトル化、署名付与）
         foreach ($rows as &$row) {
-            $content = $row['content'] ?? "";
-            $lines = explode("\n", str_replace(["\r\n", "\r"], "\n", $content));
-            $firstLine = trim($lines[0] ?? "");
+            $decrypted = $this->decryptContent($row['content'] ?? "");
+            $firstLine = trim(explode("\n", str_replace(["\r\n", "\r"], "\n", $decrypted))[0] ?? "");
 
-            // タイトルを60文字でカット
-            $displayTitle = !empty($firstLine) ? mb_strimwidth($firstLine, 0, 60, "...") : "メモ #" . $row['id'];
+            $displayTitle = !empty($firstLine) ? mb_strimwidth($firstLine, 0, 60, "...") : "無題のメモ #" . $row['id'];
 
-            $u = $row['username'];
             $suffix = "";
-            // 合言葉（guest_りき 等）がある場合は (りき) を後ろに付ける
-            if ($u !== 'guest' && strpos($u, 'guest_') === 0) {
-                $nameOnly = str_replace('guest_', '', $u);
-                $suffix = " <span style='color:#888; font-size:0.8rem;'>(" . htmlspecialchars($nameOnly) . ")</span>";
+            if (strpos($row['username'], 'guest_') === 0) {
+                $suffix = " <span class='guest-label'>(" . htmlspecialchars(substr($row['username'], 6)) . ")</span>";
             }
-
-            // view側でそのまま出力するためのHTML
             $row['display_title_html'] = htmlspecialchars($displayTitle) . $suffix;
         }
         return $rows;
     }
 
     /**
-     * IDをキーにしてDBからメモ本文を取得
-     */
-    private function getMemo($id)
-    {
-        if (empty($id))
-            return "";
-
-        $db = getDB();
-        $stmt = $db->prepare("SELECT content FROM user_memos WHERE id = :id");
-        $stmt->execute([':id' => $id]);
-        $result = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        return $result ? $result['content'] : "";
-    }
-
-    /**
-     * メモの保存（ファイル & DB）
+     * メモの新規保存・更新
      */
     private function saveMemo($id, $content)
     {
-        // IDがなければ採番
-        if (empty($id)) {
+        $db = getDB();
+        $isNew = empty($id);
+        if ($isNew)
             $id = $this->generateNextId();
+
+        $saveUser = $this->user;
+        if ($saveUser === 'guest' && !empty($_POST['guest_name'])) {
+            $_SESSION['guest_name'] = $_POST['guest_name'];
+            $saveUser = 'guest_' . $_POST['guest_name'];
         }
 
-        $currentUser = $this->user ?? 'guest';
-        $saveUser = $currentUser;
-        $formGuestName = $_POST['guest_name'] ?? '';
+        // --- 暗号化 ---
+        $ivLength = openssl_cipher_iv_length($this->cipher_method);
+        $iv = openssl_random_pseudo_bytes($ivLength);
+        $encrypted = openssl_encrypt($content, $this->cipher_method, $this->cipher_key, 0, $iv);
+        $saveData = base64_encode($iv . $encrypted);
 
-        // ゲスト保存時に合言葉があれば反映
-        if ($currentUser === 'guest' && !empty($formGuestName)) {
-            $_SESSION['guest_name'] = $formGuestName;
-            $saveUser = 'guest_' . $formGuestName;
+        // 物理ファイル同期
+        file_put_contents($this->baseDir . $id . ".txt", $saveData);
+
+        // DB更新
+        if ($isNew) {
+            $stmt = $db->prepare("INSERT INTO user_memos (id, username, content, create_date, update_date) VALUES (?, ?, ?, NOW(), NOW())");
+            $stmt->execute([$id, $saveUser, $saveData]);
+        } else {
+            $stmt = $db->prepare("UPDATE user_memos SET content = ?, update_date = NOW() WHERE id = ?");
+            $stmt->execute([$saveData, $id]);
         }
-
-        // 物理ファイル保存
-        $filePath = $this->baseDir . $id . ".txt";
-        $fileResult = file_put_contents($filePath, $content);
-
-        // DB同期
-        if ($fileResult !== false) {
-            $db = getDB();
-            $stmt = $db->prepare("REPLACE INTO user_memos (id, username, content, update_date) VALUES (:id, :username, :content, NOW())");
-            $stmt->execute([
-                ':id' => $id,
-                ':username' => $saveUser,
-                ':content' => $content
-            ]);
-        }
-        return $fileResult;
     }
 
     /**
-     * メモの削除（DB & ファイル）
+     * メモの物理・論理削除
      */
     private function deleteMemo($id)
     {
-        if (empty($id))
-            return false;
-
+        if (!$id)
+            return;
         $db = getDB();
-        $currentUser = $this->user ?? 'guest';
-        $targetUser = $currentUser;
+        $stmt = $db->prepare("DELETE FROM user_memos WHERE id = ? AND (username = ? OR username LIKE 'guest%')");
+        $stmt->execute([$id, $this->user]);
 
-        if ($currentUser === 'guest') {
-            $guestName = $_SESSION['guest_name'] ?? '';
-            $targetUser = !empty($guestName) ? 'guest_' . $guestName : 'guest';
-        }
-
-        // DBから削除（権限チェックを兼ねてユーザー名も条件に含める）
-        $stmt = $db->prepare("DELETE FROM user_memos WHERE id = :id AND username = :username");
-        $stmt->execute([
-            ':id' => $id,
-            ':username' => $targetUser
-        ]);
-
-        // DB削除成功時のみファイルを消す
         if ($stmt->rowCount() > 0) {
             $path = $this->baseDir . $id . ".txt";
-            if (file_exists($path)) {
+            if (file_exists($path))
                 unlink($path);
-            }
-            return true;
         }
-        return false;
     }
 
     /**
-     * ダッシュボード用データ取得（カレンダー・グラフ）
+     * ダッシュボード用データ取得
      */
     public function getDashboardData($username)
     {
         $db = getDB();
 
-        // --- 1. カレンダー用イベント取得（すべてのメモ） ---
-        $stmt = $db->prepare("SELECT id, content, DATE(update_date) as start FROM user_memos WHERE username = :username");
-        $stmt->execute([':username' => $username]);
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
+        // 1. カレンダー (作成日基準)
+        $stmt = $db->prepare("SELECT id, content, DATE(create_date) as start FROM user_memos WHERE username = ?");
+        $stmt->execute([$username]);
         $events = [];
-        foreach ($rows as $row) {
-            // 最初の1行目をタイトルとして抽出
-            $firstLine = explode("\n", trim($row['content']))[0];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $decrypted = $this->decryptContent($row['content']);
             $events[] = [
                 'id' => $row['id'],
-                'title' => mb_strimwidth($firstLine, 0, 30, "..."),
                 'start' => $row['start'],
-                // カレンダー内は詳細表示(show)へ
+                'title' => mb_strimwidth(explode("\n", trim($decrypted))[0], 0, 30, "..."),
                 'url' => "index.php?page=memo&action=show&id=" . $row['id']
             ];
         }
 
-        // --- 2. ピン留めされた重要メモの取得 ---
-        // A5:SQL Mk-2 で '1' に設定されたデータを、更新日時の新しい順に取得
-        $stmt = $db->prepare("
-        SELECT id, content, update_date 
-        FROM user_memos 
-        WHERE username = :username AND is_pinned = 1 
-        ORDER BY update_date DESC
-    ");
-        $stmt->execute([':username' => $username]);
-        $pinnedRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
+        // 2. ピン留め
+        $stmt = $db->prepare("SELECT id, content, update_date FROM user_memos WHERE username = ? AND is_pinned = 1 ORDER BY update_date DESC");
+        $stmt->execute([$username]);
         $pinned = [];
-        foreach ($pinnedRows as $p) {
-            $firstLine = explode("\n", trim($p['content']))[0];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $p) {
+            $decrypted = $this->decryptContent($p['content']);
             $pinned[] = [
                 'id' => $p['id'],
-                'title' => mb_strimwidth($firstLine, 0, 50, "..."),
                 'update_date' => $p['update_date'],
-                // ピン留めエリアからは直接編集(edit)または詳細(show)へ
+                'title' => mb_strimwidth(explode("\n", trim($decrypted))[0], 0, 50, "..."),
                 'url' => "index.php?page=memo&action=edit&id=" . $p['id']
             ];
         }
 
-        // --- 3. 活動グラフ用（直近7日間の件数推移） ---
-        $stmt = $db->prepare("
-        SELECT DATE(update_date) as date, COUNT(*) as count 
-        FROM user_memos 
-        WHERE username = :username 
-        AND update_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-        GROUP BY date
-        ORDER BY date ASC
-    ");
-        $stmt->execute([':username' => $username]);
-        $chart = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        // 3. 活動ログ (直近14日間)
+        $stmt = $db->prepare("SELECT DATE(update_date) as date, COUNT(*) as count FROM user_memos WHERE username = ? AND update_date >= DATE_SUB(CURDATE(), INTERVAL 14 DAY) GROUP BY date ORDER BY date ASC");
+        $stmt->execute([$username]);
 
-        // ビュー側で $page['dashboard']['pinned'] 等で参照できるよう構造化して返す
-        return [
-            'events' => $events,
-            'pinned' => $pinned,
-            'chart' => $chart
-        ];
+        return ['events' => $events, 'pinned' => $pinned, 'chart' => $stmt->fetchAll(PDO::FETCH_ASSOC)];
     }
 
     /**
-     * メモ詳細表示用
-     */
-    public function showDetail()
-    {
-        $username = $_GET['username'] ?? $_SESSION['username'] ?? 'guest';
-        $id = $_GET['id'] ?? null;
-
-        if (!$id) {
-            return ['memo' => null, 'login_user' => $username];
-        }
-
-        $db = getDB();
-        $stmt = $db->prepare("SELECT * FROM user_memos WHERE id = :id AND username = :username");
-        $stmt->execute(['id' => $id, 'username' => $username]);
-        $memo = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        return [
-            'memo' => $memo,
-            'login_user' => $username,
-        ];
-    }
-
-    /**
-     * 単一IDでのメモ取得（予備）
-     */
-    public function getMemoById($id)
-    {
-        $db = getDB();
-        $stmt = $db->prepare("SELECT * FROM user_memos WHERE id = :id");
-        $stmt->execute([':id' => $id]);
-        return $stmt->fetch(PDO::FETCH_ASSOC);
-    }
-
-    /**
-     * 無記名 'guest' 投稿を現在の 'guest_合言葉' へ一括同期
-     */
-    private function syncGuestMemos()
-    {
-        $guestName = $_SESSION['guest_name'] ?? '';
-        $currentUser = $this->user ?? 'guest';
-
-        if ($currentUser === 'guest' && !empty($guestName)) {
-            $db = getDB();
-            $targetName = 'guest_' . $guestName;
-
-            // 1. 重複回避：既に自分の合言葉で存在するIDと被る 'guest' データを消す
-            $stmtDel = $db->prepare("
-                DELETE FROM user_memos 
-                WHERE username = 'guest' 
-                AND id IN (SELECT id FROM (SELECT id FROM user_memos WHERE username = :new_name) as tmp)
-            ");
-            $stmtDel->execute([':new_name' => $targetName]);
-
-            // 2. 一括更新：残った 'guest' 名義をすべて自分の名前に書き換える
-            $stmtUpd = $db->prepare("UPDATE user_memos SET username = :new_name WHERE username = 'guest'");
-            $stmtUpd->execute([':new_name' => $targetName]);
-        }
-    }
-
-    /**
-     * 欠番を考慮した 6桁 ID の生成
+     * 6桁IDの採番（隙間を埋めるロジック）
      */
     private function generateNextId()
     {
         $db = getDB();
-        $sql = "
-            SELECT min_id + 1 AS next_id
-            FROM (
-                SELECT 0 AS min_id
-                UNION ALL
-                SELECT CAST(id AS UNSIGNED) FROM user_memos
-            ) AS existing_ids
-            WHERE NOT EXISTS (
-                SELECT 1 FROM user_memos 
-                WHERE CAST(id AS UNSIGNED) = existing_ids.min_id + 1
-            )
-            ORDER BY next_id ASC
-            LIMIT 1
-        ";
-        $stmt = $db->query($sql);
-        $result = $stmt->fetch(PDO::FETCH_ASSOC);
-        $nextIdNum = $result['next_id'] ?? 1;
-
-        return sprintf('%06d', $nextIdNum);
+        $sql = "SELECT min_id + 1 AS next_id FROM (SELECT 0 AS min_id UNION ALL SELECT CAST(id AS UNSIGNED) FROM user_memos) AS t WHERE NOT EXISTS (SELECT 1 FROM user_memos WHERE CAST(id AS UNSIGNED) = t.min_id + 1) ORDER BY next_id ASC LIMIT 1";
+        $res = $db->query($sql)->fetch();
+        return sprintf('%06d', $res['next_id'] ?? 1);
     }
 
     /**
-     * PDFエクスポート機能 (tFPDF)
+     * ピン留め状態の反転
+     */
+    public function togglePin()
+    {
+        $db = getDB();
+        $id = $_GET['id'] ?? '';
+        $stmt = $db->prepare("SELECT is_pinned FROM user_memos WHERE id = ?");
+        $stmt->execute([$id]);
+        if ($row = $stmt->fetch()) {
+            $newStatus = $row['is_pinned'] ? 0 : 1;
+            // update_dateを更新せずにピン状態だけ変える
+            $db->prepare("UPDATE user_memos SET is_pinned = ?, update_date = update_date WHERE id = ?")->execute([$newStatus, $id]);
+        }
+        $this->redirect("list", "pinned");
+    }
+
+    /**
+     * ゲストメモの一括紐付け
+     */
+    private function syncGuestMemos()
+    {
+        $guestName = $_SESSION['guest_name'] ?? '';
+        if ($this->user === 'guest' && !empty($guestName)) {
+            $db = getDB();
+            $target = 'guest_' . $guestName;
+            $db->prepare("UPDATE user_memos SET username = ? WHERE username = 'guest'")->execute([$target]);
+        }
+    }
+
+    /**
+     * tFPDFによるPDF生成
      */
     private function generatePdf($content, $guestName = '')
     {
-        // 出力バッファをクリアしてPDFバイナリの破損を防ぐ
-        while (ob_get_level()) {
+        while (ob_get_level())
             ob_end_clean();
-        }
-
-        // 署名追記
-        if ($this->user === 'guest' && !empty($guestName)) {
-            $content .= "\n\n---\n作成者: " . $guestName . " (Guest投稿)";
-        }
-
         require_once 'C:\\Apache24\\htdocs\\sample\\public\\tfpdf.php';
 
         $pdf = new tFPDF();
         $pdf->AddPage();
-
-        // フォント設定（NotoSansJPを使用）
         $pdf->AddFont('NotoSansJP', '', 'NotoSansJP-VariableFont_wght.ttf', true);
-        $pdf->SetFont('NotoSansJP', '', 9);
+        $pdf->SetFont('NotoSansJP', '', 10);
 
-        $pdf->Cell(0, 10, 'メモ エクスポート', 0, 1);
+        $header = "メモ エクスポート (" . date('Y-m-d H:i') . ")";
+        $pdf->Cell(0, 10, $header, 'B', 1);
         $pdf->Ln(5);
+        $pdf->MultiCell(0, 6, $content . ($guestName ? "\n\n---\n署名: $guestName" : ""));
 
-        // 本文出力
-        $pdf->MultiCell(0, 5, $content);
-
-        // PDFデータの生成
-        $pdf_data = $pdf->Output('S');
-        $filename = "memo_" . date('Ymd_His') . ".pdf";
-
-        // ダウンロード用ヘッダー
         header('Content-Type: application/pdf');
-        header("Content-Disposition: attachment; filename*=UTF-8''" . rawurlencode($filename));
-        header("Content-Length: " . strlen($pdf_data));
-        header('Cache-Control: public, must-revalidate, max-age=0');
-        header('Pragma: public');
-
-        echo $pdf_data;
+        header("Content-Disposition: attachment; filename=memo_" . date('YmdHis') . ".pdf");
+        echo $pdf->Output('S');
         exit;
     }
-    // MemoController.php
 
     /**
-     * メモのピン留め状態を切り替える
-     * $db = getDB(); を使用し、更新日時(update_date)を維持する
+     * ユーティリティ: リダイレクト
      */
-    public function togglePin()
+    private function redirect($action, $msg)
     {
-        // 1. データベース接続の取得
-        $db = getDB();
-
-        // 2. パラメータの取得
-        $id = $_GET['id'] ?? null;
-        $username = $_SESSION['username'] ?? 'guest';
-        $target_date = $_GET['date'] ?? ''; // 一覧画面の特定日付に戻る用
-        $from = $_GET['from'] ?? 'list';    // 遷移元判定（detail か list か）
-
-        if (!$id) {
-            header("Location: index.php?page=memo&action=list");
-            exit;
-        }
-
-        try {
-            // 3. 現在のピン留め状態を確認
-            $selectSql = "SELECT is_pinned FROM user_memos WHERE id = ? AND username = ?";
-            $stmt = $db->prepare($selectSql);
-            $stmt->execute([$id, $username]);
-            $memo = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            if ($memo) {
-                // 現在の状態を反転させる (0→1, 1→0)
-                $newStatus = $memo['is_pinned'] ? 0 : 1;
-
-                // 4. 【最重要】update_dateを今の値で固定して更新
-                // update_date = update_date と書くことで、DBの自動更新を防止します
-                $updateSql = "UPDATE user_memos 
-                          SET is_pinned = ?, 
-                              update_date = update_date 
-                          WHERE id = ? AND username = ?";
-
-                $updateStmt = $db->prepare($updateSql);
-                $updateStmt->execute([$newStatus, $id, $username]);
-            }
-
-            // 5. リダイレクト処理
-            if ($from === 'detail') {
-                // 編集（詳細）画面から実行された場合
-                header("Location: index.php?page=memo&action=edit&id=" . urlencode($id));
-            } else {
-                // 一覧画面から実行された場合
-                $redirectUrl = "index.php?page=memo&action=list";
-                if (!empty($target_date)) {
-                    $redirectUrl .= "&date=" . urlencode($target_date);
-                }
-                header("Location: " . $redirectUrl);
-            }
-            exit;
-
-        } catch (PDOException $e) {
-            // エラーが発生した場合はログに記録して一覧に戻す
-            error_log("togglePin Error: " . $e->getMessage());
-            header("Location: index.php?page=memo&action=list");
-            exit;
-        }
+        header("Location: index.php?page=memo&action=$action&message=$msg");
+        exit;
     }
 }
+?>

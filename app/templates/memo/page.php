@@ -188,7 +188,7 @@ $isGuestMode = ($display_user === 'guest' || empty($display_user));
                 <thead style="background: #f8f9fa;">
                     <tr>
                         <th style="width: 70%; border-bottom: 2px solid #dee2e6;">メモ内容</th>
-                        <th style="width: 30%; border-bottom: 2px solid #dee2e6; text-align: right;">最終更新日時</th>
+                        <th style="width: 30%; border-bottom: 2px solid #dee2e6; text-align: right;">作成日</th>
                     </tr>
                 </thead>
                 <tbody>

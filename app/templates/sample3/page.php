@@ -1,9 +1,9 @@
 <?php
-// セッション開始
 if (session_status() === PHP_SESSION_NONE)
     session_start();
 set_time_limit(60);
 
+// パス設定（環境に合わせて修正してください）
 $pythonPath = "C:\\Program Files\\Python314\\python.exe";
 $scriptPath = __DIR__ . '/../../scripts/process_data.py';
 $uploadDir = __DIR__ . '/../../data/uploads/';
@@ -11,65 +11,69 @@ $uploadDir = __DIR__ . '/../../data/uploads/';
 $csvInfo = null;
 $chartData = null;
 $error = null;
+
+// 現在保持している一時ファイルパス
 $tmpFile = $_POST['tmp_file_path'] ?? '';
 
-// --- 1. ファイルアップロード (初期読み込み) ---
+// --- 1. 新しいCSVがアップロードされた場合 ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file']) && $_FILES['csv_file']['error'] === UPLOAD_ERR_OK) {
-    // if (!is_dir($uploadDir))
-    //     mkdir($uploadDir, 0777, true);
-    //$tmpFile = $uploadDir . 'upload_' . session_id() . '_' . time() . '.csv';
+    if (!is_dir($uploadDir))
+        mkdir($uploadDir, 0777, true);
+
+    // 古い一時ファイルがあれば削除してリセット
+    if (!empty($tmpFile) && file_exists($tmpFile))
+        unlink($tmpFile);
+
+    // 新しいファイル名を作成
+    $tmpFile = $uploadDir . 'upload_' . session_id() . '_' . time() . '.csv';
 
     if (move_uploaded_file($_FILES['csv_file']['tmp_name'], $tmpFile)) {
+        // Pythonを呼び出してカラム一覧だけ取得
         $cmd = escapeshellarg($pythonPath) . " " . escapeshellarg($scriptPath) . " " . escapeshellarg($tmpFile);
         $output = shell_exec($cmd);
         $csvInfo = json_decode($output, true);
+
         if (!$csvInfo) {
-            $error = "初期読み込みエラー: Pythonの応答を確認してください。";
-            if (file_exists($tmpFile))
-                unlink($tmpFile);
+            $error = "CSVの読み込みに失敗しました。形式を確認してください。";
         }
+    } else {
+        $error = "ファイルの移動に失敗しました。フォルダの権限を確認してください。";
     }
 }
 
-// --- 2. 解析・グラフ描画処理 ---
+// --- 2. 解析ボタンが押された場合 ---
 if (isset($_POST['generate_chart']) && !empty($tmpFile)) {
-    $labelCol = $_POST['label_column'] ?? '';
-    $valueCol = $_POST['value_column'] ?? '';
-
-    // カスタムカテゴリ・ルールの取得
-    $rules = [];
-    if (isset($_POST['rules'])) {
-        foreach ($_POST['rules'] as $rule) {
-            if (!empty($rule['keywords'])) {
-                $rules[] = [
-                    'keywords' => $rule['keywords'],
-                    'category' => $rule['category'] ?: '未分類'
-                ];
+    if (!file_exists($tmpFile)) {
+        $error = "ファイルが見つかりません。もう一度アップロードしてください。";
+    } else {
+        $labelCol = $_POST['label_column'] ?? '';
+        $valueCol = $_POST['value_column'] ?? '';
+        $rules = [];
+        if (isset($_POST['rules'])) {
+            foreach ($_POST['rules'] as $rule) {
+                if (!empty($rule['keywords'])) {
+                    $rules[] = ['keywords' => $rule['keywords'], 'category' => $rule['category'] ?: '未分類'];
+                }
             }
         }
-    }
-    $rulesJson = json_encode($rules, JSON_UNESCAPED_UNICODE);
+        $rulesJson = json_encode($rules, JSON_UNESCAPED_UNICODE);
 
-    $command = escapeshellarg($pythonPath) . " " . escapeshellarg($scriptPath) . " " .
-        escapeshellarg($tmpFile) . " " .
-        escapeshellarg($labelCol) . " " .
-        escapeshellarg($valueCol) . " " .
-        escapeshellarg($rulesJson);
+        $command = escapeshellarg($pythonPath) . " " . escapeshellarg($scriptPath) . " " .
+            escapeshellarg($tmpFile) . " " . escapeshellarg($labelCol) . " " .
+            escapeshellarg($valueCol) . " " . escapeshellarg($rulesJson);
 
-    $output = shell_exec($command);
-    $chartData = json_decode($output, true);
+        $output = shell_exec($command);
+        $chartData = json_decode($output, true);
 
-    // 解析後にファイルを削除 (情報漏洩対策)
-    if (file_exists($tmpFile))
+        // 解析が終わったら即座にファイルを削除（他CSVとの混同・漏洩防止）
         unlink($tmpFile);
+        $tmpFile = ""; // パスをクリア
 
-    if (isset($chartData['error'])) {
-        $error = $chartData['error'];
-        $chartData = null;
+        if (isset($chartData['error'])) {
+            $error = "解析エラー: " . $chartData['error'];
+            $chartData = null;
+        }
     }
-
-    // エラー回避のため、カラム情報を hidden から復元
-    $csvInfo = ['columns' => $_POST['all_columns'] ?? []];
 }
 ?>
 
@@ -78,67 +82,57 @@ if (isset($_POST['generate_chart']) && !empty($tmpFile)) {
 
 <head>
     <meta charset="UTF-8">
-    <title>CSV統計解析ツール</title>
+    <title>CSV Multi-Analyzer</title>
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
     <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
     <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
-
     <style>
         body {
-            background: #f8f9fa;
+            background: #f0f2f5;
             font-family: sans-serif;
             padding: 20px;
         }
 
         .card {
             background: #fff;
-            border-radius: 8px;
+            border-radius: 10px;
             padding: 20px;
             margin-bottom: 20px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        .section-title {
-            border-left: 5px solid #007bff;
-            padding-left: 10px;
-            margin-bottom: 15px;
-            font-weight: bold;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         }
 
         .btn {
-            padding: 8px 16px;
-            border-radius: 4px;
-            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
             cursor: pointer;
+            border: none;
             font-weight: bold;
         }
 
-        .btn-primary {
+        .btn-blue {
             background: #007bff;
             color: white;
         }
 
-        .btn-excel {
-            background: #1D6F42;
+        .btn-green {
+            background: #28a745;
             color: white;
         }
 
         .rule-row {
             display: flex;
-            gap: 5px;
-            margin-bottom: 8px;
+            gap: 10px;
+            margin-bottom: 10px;
         }
 
-        .error-msg {
-            color: #d9534f;
-            background: #f2dede;
-            padding: 10px;
+        input,
+        select {
+            padding: 8px;
+            border: 1px solid #ddd;
             border-radius: 4px;
-            margin-bottom: 20px;
         }
     </style>
 </head>
@@ -146,15 +140,20 @@ if (isset($_POST['generate_chart']) && !empty($tmpFile)) {
 <body>
 
     <div class="card">
-        <div class="section-title">1. CSVアップロード</div>
+        <h3>1. CSVファイルを読み込む</h3>
         <form action="" method="post" enctype="multipart/form-data">
             <input type="file" name="csv_file" accept=".csv" required>
-            <button type="submit" class="btn btn-primary">読み込み</button>
+            <button type="submit" class="btn btn-blue">ファイルを読み込み</button>
+            <?php if ($chartData): ?>
+                <a href="" style="margin-left: 15px; font-size: 0.9em;">リセットして別のファイルを読み込む</a>
+            <?php endif; ?>
         </form>
     </div>
 
     <?php if ($error): ?>
-        <div class="error-msg"><strong>エラー:</strong> <?= htmlspecialchars($error) ?></div>
+        <div class="card" style="background: #fff5f5; border: 1px solid #feb2b2; color: #c53030;">
+            <?= htmlspecialchars($error) ?>
+        </div>
     <?php endif; ?>
 
     <?php if ($csvInfo && !$chartData): ?>
@@ -166,18 +165,17 @@ if (isset($_POST['generate_chart']) && !empty($tmpFile)) {
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                 <div class="card">
-                    <div class="section-title">2. 軸の設定</div>
-                    <p>横軸 (ラベル):</p>
-                    <select name="label_column" style="width:100%; padding:8px;">
+                    <h3>2. 軸の設定</h3>
+                    横軸（ラベル）:<br>
+                    <select name="label_column" style="width:100%; margin-bottom:15px;">
                         <?php foreach ($csvInfo['columns'] as $col): ?>
                             <option value="<?= htmlspecialchars($col) ?>"><?= htmlspecialchars($col) ?></option>
                         <?php endforeach; ?>
-                        <option value="曜日">曜日 (自動作成)</option>
-                        <option value="自動カテゴリ">自動カテゴリ (下記ルール適用)</option>
-                    </select>
-
-                    <p>縦軸 (数値合計/件数):</p>
-                    <select name="value_column" style="width:100%; padding:8px;">
+                        <option value="曜日">曜日 (自動生成)</option>
+                        <option value="自動カテゴリ">自動カテゴリ</option>
+                    </select><br>
+                    縦軸（数値/件数）:<br>
+                    <select name="value_column" style="width:100%;">
                         <?php foreach ($csvInfo['columns'] as $col): ?>
                             <option value="<?= htmlspecialchars($col) ?>"><?= htmlspecialchars($col) ?></option>
                         <?php endforeach; ?>
@@ -185,10 +183,10 @@ if (isset($_POST['generate_chart']) && !empty($tmpFile)) {
                 </div>
 
                 <div class="card">
-                    <div class="section-title">3. カスタムルール (カテゴリ分け)</div>
-                    <div id="rules-container">
+                    <h3>3. カテゴリ追加ルール</h3>
+                    <div id="rules-box">
                         <div class="rule-row">
-                            <input type="text" name="rules[0][keywords]" placeholder="例: 会議,打合せ" style="flex:2;">
+                            <input type="text" name="rules[0][keywords]" placeholder="キーワード" style="flex:2;">
                             <input type="text" name="rules[0][category]" placeholder="カテゴリ名" style="flex:1;">
                         </div>
                     </div>
@@ -196,26 +194,25 @@ if (isset($_POST['generate_chart']) && !empty($tmpFile)) {
                 </div>
             </div>
 
-            <div style="text-align: center; margin-top: 20px;">
-                <button type="submit" name="generate_chart" class="btn btn-primary" style="width:250px;">データを解析して描画</button>
+            <div style="text-align: center;">
+                <button type="submit" name="generate_chart" class="btn btn-blue"
+                    style="width: 300px; font-size: 1.2em;">解析を実行して表示</button>
             </div>
         </form>
     <?php endif; ?>
 
     <?php if ($chartData): ?>
-        <div style="text-align: right; margin-bottom: 15px;">
-            <button id="excelExportBtn" class="btn btn-excel">📊 グラフ付きExcelをダウンロード</button>
+        <div style="text-align: right; margin-bottom: 10px;">
+            <button id="btnExcel" class="btn btn-green">📊 グラフ付きExcelを保存</button>
         </div>
 
         <div class="card">
-            <div class="section-title">解析結果グラフ</div>
-            <div style="height: 400px;">
-                <canvas id="myChart"></canvas>
-            </div>
+            <h3>解析グラフ</h3>
+            <div style="height: 400px;"><canvas id="myChart"></canvas></div>
         </div>
 
         <div class="card">
-            <div class="section-title">データ詳細</div>
+            <h3>データ詳細</h3>
             <table id="resTable" class="display" style="width:100%">
                 <thead>
                     <tr><?php foreach ($chartData['columns'] as $col): ?>
@@ -233,7 +230,6 @@ if (isset($_POST['generate_chart']) && !empty($tmpFile)) {
         </div>
 
         <script>
-            // --- Chart.js ---
             const ctx = document.getElementById('myChart');
             const myChart = new Chart(ctx, {
                 type: 'bar',
@@ -250,71 +246,44 @@ if (isset($_POST['generate_chart']) && !empty($tmpFile)) {
                 options: { responsive: true, maintainAspectRatio: false }
             });
 
-            // --- DataTables ---
             $(document).ready(function () {
-                $('#resTable').DataTable({
-                    language: { url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/ja.json" },
-                    pageLength: 25,
-                    scrollX: true
-                });
+                $('#resTable').DataTable({ language: { url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/ja.json" }, pageLength: 10 });
             });
 
-            // --- ExcelJS: グラフと表をまとめたExcel出力 ---
-            document.getElementById('excelExportBtn').addEventListener('click', async () => {
+            document.getElementById('btnExcel').addEventListener('click', async () => {
                 const workbook = new ExcelJS.Workbook();
-                const worksheet = workbook.addWorksheet('解析レポート');
+                const worksheet = workbook.addWorksheet('Sheet1');
+                const img = workbook.addImage({ base64: myChart.toBase64Image(), extension: 'png' });
+                worksheet.addImage(img, { tl: { col: 0, row: 1 }, ext: { width: 800, height: 400 } });
 
-                // 1. グラフを画像として追加
-                const base64Image = myChart.toBase64Image();
-                const imageId = workbook.addImage({ base64: base64Image, extension: 'png' });
-                worksheet.addImage(imageId, {
-                    tl: { col: 0.2, row: 1 },
-                    ext: { width: 700, height: 350 }
-                });
+                const startRow = 25;
+                const cols = <?= json_encode($chartData['columns']) ?>;
+                const data = <?= json_encode($chartData['raw_data']) ?>;
 
-                // 2. データの書き込み開始行 (グラフの下)
-                const startRow = 22;
-                const columns = <?= json_encode($chartData['columns']) ?>;
-                const rows = <?= json_encode($chartData['raw_data']) ?>;
-
-                // ヘッダー
                 const header = worksheet.getRow(startRow);
-                columns.forEach((col, i) => {
-                    const cell = header.getCell(i + 1);
-                    cell.value = col;
-                    cell.font = { bold: true };
-                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
+                cols.forEach((c, i) => { header.getCell(i + 1).value = c; header.getCell(i + 1).font = { bold: true }; });
+                data.forEach((r, i) => {
+                    const row = worksheet.getRow(startRow + 1 + i);
+                    cols.forEach((c, j) => { row.getCell(j + 1).value = r[c]; });
                 });
 
-                // データ
-                rows.forEach((rowData, rIdx) => {
-                    const row = worksheet.getRow(startRow + 1 + rIdx);
-                    columns.forEach((colName, cIdx) => {
-                        row.getCell(cIdx + 1).value = rowData[colName];
-                    });
-                });
-
-                // 保存
-                const buffer = await workbook.xlsx.writeBuffer();
-                saveAs(new Blob([buffer]), `Report_${new Date().getTime()}.xlsx`);
+                const buf = await workbook.xlsx.writeBuffer();
+                saveAs(new Blob([buf]), `Analysis_${Date.now()}.xlsx`);
             });
         </script>
     <?php endif; ?>
 
     <script>
-        // カテゴリ追加UI用
-        let ruleIdx = 1;
+        let ruleCount = 1;
         function addRule() {
-            const container = document.getElementById('rules-container');
+            const box = document.getElementById('rules-box');
             const div = document.createElement('div');
             div.className = 'rule-row';
-            div.innerHTML = `
-                <input type="text" name="rules[${ruleIdx}][keywords]" placeholder="キーワード" style="flex:2;">
-                <input type="text" name="rules[${ruleIdx}][category]" placeholder="カテゴリ名" style="flex:1;">
-                <button type="button" onclick="this.parentElement.remove()" style="background:none; border:none; cursor:pointer;">❌</button>
-            `;
-            container.appendChild(div);
-            ruleIdx++;
+            div.innerHTML = `<input type="text" name="rules[${ruleCount}][keywords]" placeholder="キーワード" style="flex:2;">
+                             <input type="text" name="rules[${ruleCount}][category]" placeholder="カテゴリ名" style="flex:1;">
+                             <button type="button" onclick="this.parentElement.remove()" style="background:none; border:none; cursor:pointer;">❌</button>`;
+            box.appendChild(div);
+            ruleCount++;
         }
     </script>
 </body>

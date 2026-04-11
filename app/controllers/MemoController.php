@@ -354,5 +354,46 @@ class MemoController
         header("Location: index.php?page=memo&action=$action&message=$msg");
         exit;
     }
+
+    // app/controllers/MemoController.php 内に追加
+    public function getAllUserMemos()
+    {
+        $db = getDB();
+        // 全ユーザーのメモを結合して取得
+        $sql = "SELECT m.id, m.username, m.content, m.create_date 
+            FROM user_memos m 
+            ORDER BY m.create_date DESC";
+        $stmt = $db->prepare($sql);
+        $memos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($memos as &$memo) {
+            $memo['content_plain'] = $this->decryptContent($memo['content']);
+        }
+        return $memos;
+    }
+    public function getAllMemosForAdmin()
+    {
+        // 1. DB接続を関数から取得
+        $db = getDB();
+
+        // 2. 全ユーザーのメモを取得するSQL（テーブル名は既存のものに合わせる）
+        $sql = "SELECT id, username, content, create_date,update_date FROM user_memos ORDER BY update_date DESC";
+
+        $stmt = $db->prepare($sql);
+        $stmt->execute();
+
+        // 3. データを連想配列で全取得
+        $memos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // 4. データが存在する場合のみ復号ループを実行
+        if ($memos) {
+            foreach ($memos as &$memo) {
+                // PHPの openssl_decrypt なら、364バイトのデータも確実に復号できます
+                $memo['content_plain'] = $this->decryptContent($memo['content']);
+            }
+        }
+
+        return $memos; // 配列を返す（空なら空配列）
+    }
 }
 ?>

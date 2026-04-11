@@ -38,6 +38,11 @@ class PageController
                 // これで page.php 内で $page['dashboard'] が使えるようになります
                 $page['dashboard'] = $memoCtrl->getDashboardData($username);
             }
+            if ($pageId === 'sample6') {
+                $memoCtrl = new MemoController();
+                $page['allMemos'] = $memoCtrl->getAllMemosForAdmin();
+            }
+
             // --- ここまで ---
 
             // ページ固有テンプレートのパス設定

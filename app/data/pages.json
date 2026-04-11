@@ -112,6 +112,19 @@
             }
         ]
     },
+    "sample6": {
+        "title": "サンプル6のページ",
+        "sections": [
+            {
+                "type": "text",
+                "content": "暗号化複合化について学ぼう"
+            },
+            {
+                "type": "php",
+                "file": "sample6.php"
+            }
+        ]
+    },
     "login": {
         "title": "ログイン",
         "sections": [
@@ -136,6 +149,15 @@
             {
                 "type": "php",
                 "file": "auth/register_form.php"
+            }
+        ]
+    },
+    "change_username": {
+        "title": "ユーザー名の再設定",
+        "sections": [
+            {
+                "type": "php",
+                "file": "auth/change_username.php"
             }
         ]
     },

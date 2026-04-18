@@ -70,7 +70,7 @@ if (session_status() === PHP_SESSION_NONE) {
                             $shouldShow = false;
 
                             // A. ホーム（IDで判定）または「メモ」という名前のページは全員に表示
-                            if ($id === 'home' || $origTitle === 'メモ') {
+                            if ($id === 'home' || $origTitle === 'メモ'|| $origTitle === 'メモ一覧') {
                                 $shouldShow = true;
                             }
                             // B. タイトルに「サンプル」が含まれるページは admin のみ表示

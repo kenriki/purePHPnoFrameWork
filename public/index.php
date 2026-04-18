@@ -32,6 +32,7 @@ if ($page === 'memo' && $action === 'set_guest_name') {
  * 4. 特定のページ（memo）に対するカスタムルーティング
  */
 if ($page === 'memo') {
+    $pageId = 'memo';
     require_once __DIR__ . '/../app/controllers/MemoController.php';
 
     $controller = new MemoController();
@@ -43,6 +44,28 @@ if ($page === 'memo') {
     // ビューの表示
     include __DIR__ . '/../app/templates/memo/page.php';
 
+    exit;
+}
+
+/**
+ * マイメモ一覧（memo_list）に対するカスタムルーティング
+ */
+if ($page === 'memo_list') {
+    require_once __DIR__ . '/../app/controllers/PageController.php';
+
+    $controller = new PageController();
+    // メソッドを実行してデータを取得
+    $page = $controller->showMemoList(); 
+
+    // ヘッダーが期待している変数をセットしてエラーを回避
+    $pageId = 'memo_list';
+
+    // ヘッダーを読み込む
+    include __DIR__ . '/../app/templates/layout/header.php'; 
+    // コンテンツ本体を読み込む
+    include __DIR__ . '/../app/templates/memo_list/page.php';
+    // フッターが必要な場合はここに追加
+    include __DIR__ . '/../app/templates/layout/footer.php';
     exit;
 }
 

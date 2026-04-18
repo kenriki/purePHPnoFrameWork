@@ -41,7 +41,7 @@ class MemoController
      * コンテンツの復号（暗号・平文を自動判別）
      * image_aa4e6b.png の復号エラー対策
      */
-    private function decryptContent($data)
+    public function decryptContent($data)
     {
         if (empty($data))
             return "";

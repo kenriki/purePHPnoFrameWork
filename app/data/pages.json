@@ -1,6 +1,6 @@
 {
     "home": {
-        "title": "ホームページ",
+        "title": "ホーム",
         "subTitle": "TOPICS",
         "template": "home/page.php",
         "sections": [
@@ -32,6 +32,11 @@
         "title": "メモ",
         "template": "memo/page.php",
         "controller": "MemoController"
+    },
+    "memo_list": {
+        "title": "メモ一覧",
+        "template": "memo_list/page.php",
+        "controller": "PageController"
     },
     "sample": {
         "title": "サンプルページ",
@@ -122,6 +127,19 @@
             {
                 "type": "php",
                 "file": "sample6.php"
+            }
+        ]
+    },
+    "sample7": {
+        "title": "サンプル7のページ",
+        "sections": [
+            {
+                "type": "text",
+                "content": "サンプル検証"
+            },
+            {
+                "type": "php",
+                "file": "sample7.php"
             }
         ]
     },

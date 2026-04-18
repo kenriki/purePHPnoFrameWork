@@ -241,6 +241,10 @@ class MemoController
     /**
      * ダッシュボード用データ取得
      */
+    /**
+     * ダッシュボード用データ取得
+     * 活動ログを毎週月曜日0時にリセットする仕様に変更
+     */
     public function getDashboardData($username)
     {
         $db = getDB();
@@ -273,11 +277,23 @@ class MemoController
             ];
         }
 
-        // 3. 活動ログ (直近14日間)
-        $stmt = $db->prepare("SELECT DATE(update_date) as date, COUNT(*) as count FROM user_memos WHERE username = ? AND update_date >= DATE_SUB(CURDATE(), INTERVAL 14 DAY) GROUP BY date ORDER BY date ASC");
-        $stmt->execute([$username]);
+        // 3. 活動ログ (月曜リセット仕様)
+        // 「直近の月曜日 00:00:00」を取得（今日が月曜なら今日の0時、それ以外なら前の月曜）
+        $startOfWeek = date('Y-m-d 00:00:00', strtotime('last monday', strtotime('tomorrow')));
 
-        return ['events' => $events, 'pinned' => $pinned, 'chart' => $stmt->fetchAll(PDO::FETCH_ASSOC)];
+        $stmt = $db->prepare("SELECT DATE(update_date) as date, COUNT(*) as count 
+                               FROM user_memos 
+                               WHERE username = ? 
+                               AND update_date >= ? 
+                               GROUP BY date 
+                               ORDER BY date ASC");
+        $stmt->execute([$username, $startOfWeek]);
+
+        return [
+            'events' => $events,
+            'pinned' => $pinned,
+            'chart' => $stmt->fetchAll(PDO::FETCH_ASSOC)
+        ];
     }
 
     /**
@@ -353,6 +369,47 @@ class MemoController
     {
         header("Location: index.php?page=memo&action=$action&message=$msg");
         exit;
+    }
+
+    // app/controllers/MemoController.php 内に追加
+    public function getAllUserMemos()
+    {
+        $db = getDB();
+        // 全ユーザーのメモを結合して取得
+        $sql = "SELECT m.id, m.username, m.content, m.create_date 
+            FROM user_memos m 
+            ORDER BY m.create_date DESC";
+        $stmt = $db->prepare($sql);
+        $memos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($memos as &$memo) {
+            $memo['content_plain'] = $this->decryptContent($memo['content']);
+        }
+        return $memos;
+    }
+    public function getAllMemosForAdmin()
+    {
+        // 1. DB接続を関数から取得
+        $db = getDB();
+
+        // 2. 全ユーザーのメモを取得するSQL（テーブル名は既存のものに合わせる）
+        $sql = "SELECT id, username, content, create_date,update_date FROM user_memos ORDER BY update_date DESC";
+
+        $stmt = $db->prepare($sql);
+        $stmt->execute();
+
+        // 3. データを連想配列で全取得
+        $memos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // 4. データが存在する場合のみ復号ループを実行
+        if ($memos) {
+            foreach ($memos as &$memo) {
+                // PHPの openssl_decrypt なら、364バイトのデータも確実に復号できます
+                $memo['content_plain'] = $this->decryptContent($memo['content']);
+            }
+        }
+
+        return $memos; // 配列を返す（空なら空配列）
     }
 }
 ?>

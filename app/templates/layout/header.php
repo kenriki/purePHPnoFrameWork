@@ -8,9 +8,10 @@ if (session_status() === PHP_SESSION_NONE) {
 
 <head>
     <meta charset="UTF-8">
-    <title><?= htmlspecialchars($page['title']) ?></title>
+    <title><?= htmlspecialchars($page['title'] ?? 'システム') ?></title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         table {
             border-collapse: collapse;
@@ -28,12 +29,28 @@ if (session_status() === PHP_SESSION_NONE) {
         th {
             background: #eee;
         }
+
+        header {
+            padding: 20px;
+            background: #fff;
+            border-bottom: 1px solid #ddd;
+        }
+
+        /* 挨拶用のh2スタイル */
+        .greeting-title {
+            margin: 10px 0 0 0;
+            font-size: 1.25rem;
+            color: #4f46e5;
+            font-weight: bold;
+        }
     </style>
 </head>
 
 <body>
     <header>
-        <h1><?= htmlspecialchars($page['title']) ?></h1>
+        <h1 style="font-size: 1rem; color: #888; margin: 0;">My System</h1>
+
+        <h2 class="greeting-title"><?= htmlspecialchars($page['title'] ?? '') ?></h2>
     </header>
     <main>
         <?php if (isset($_SESSION['user_id'])): ?>
@@ -46,25 +63,29 @@ if (session_status() === PHP_SESSION_NONE) {
 
                     if ($menuData):
                         foreach ($menuData as $id => $content):
-                            $title = $content['title'] ?? '';
+                            // 判定には JSON から読み込んだ元のタイトルを使用する
+                            $origTitle = $content['title'] ?? '';
 
-                            // --- 表示判定 ---
+                            // --- 表示判定ロジックの修正（ホワイトリスト方式） ---
                             $shouldShow = false;
 
-                            // 1. 「メモ」は全員
-                            if ($title === 'メモ') {
+                            // A. ホーム（IDで判定）または「メモ」という名前のページは全員に表示
+                            if ($id === 'home' || $origTitle === 'メモ') {
                                 $shouldShow = true;
                             }
-                            // 2. 「サンプル」が含まれる項目は admin のみ表示
-                            // ※判定を 'サンプル' だけでなく 'サンプルページ' 等にも対応させる
-                            elseif (strpos($title, 'サンプル') !== false && $userRole === 'admin') {
-                                $shouldShow = true;
+                            // B. タイトルに「サンプル」が含まれるページは admin のみ表示
+                            elseif (strpos($origTitle, 'サンプル') !== false) {
+                                if ($userRole === 'admin') {
+                                    $shouldShow = true;
+                                }
                             }
-
+                            // C. それ以外（パスワード再設定、アンケート等）は $shouldShow が false のままなので表示されません
+                
                             if ($shouldShow): ?>
                                 <li>
-                                    <a href="/index.php?page=<?= htmlspecialchars($id) ?>">
-                                        <?= htmlspecialchars($title) ?>
+                                    <a href="/index.php?page=<?= htmlspecialchars($id) ?>"
+                                        class="<?= ($pageId === $id) ? 'active' : '' ?>">
+                                        <?= htmlspecialchars($origTitle) ?>
                                     </a>
                                 </li>
                             <?php endif;
@@ -74,6 +95,7 @@ if (session_status() === PHP_SESSION_NONE) {
 
                     <li class="logout-item">
                         <a href="/index.php?page=logout" style="color: #ff4d4d; font-weight: bold;">
+                            <i class="fa-solid fa-right-from-bracket"></i>
                             ログアウト (<?= htmlspecialchars($_SESSION['username'] ?? 'ユーザー') ?>)
                         </a>
                     </li>

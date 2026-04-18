@@ -26,18 +26,43 @@ class PageController
             $page = $json[$pageId];
 
             // --- ここからデータ注入の追加 ---
+
+            // 全ページ共通、または 'home' 専用でユーザー名を取得
+            $username = $_SESSION['username'] ?? 'kenmochi';
+
             if ($pageId === 'home') {
                 // MemoControllerを読み込んでインスタンス化
                 require_once __DIR__ . '/MemoController.php';
                 $memoCtrl = new MemoController();
 
-                // セッションからユーザー名を取得（なければ 'kenmochi'）
-                $username = $_SESSION['username'] ?? 'kenmochi';
+                // --- 挨拶メッセージ生成ロジック ---
+                $hour = (int) date("H");
+
+                // 時間帯による出し分け
+                if ($hour >= 5 && $hour < 11) {
+                    $greeting = "おはようございます！";
+                } elseif ($hour >= 11 && $hour < 18) {
+                    $greeting = "こんにちは！";
+                } else {
+                    $greeting = "こんばんは。";
+                }
+
+                // 17時以降は「お疲れ様です」を優先（必要に応じて調整してください）
+                if ($hour >= 17) {
+                    $greeting = "お疲れ様です。";
+                }
+
+                // JSONのタイトルを「挨拶＋ユーザー名」で上書き
+                $page['title'] = "{$greeting} {$username} さん";
 
                 // $page 配列に 'dashboard' キーとしてデータを追加
-                // これで page.php 内で $page['dashboard'] が使えるようになります
                 $page['dashboard'] = $memoCtrl->getDashboardData($username);
             }
+            if ($pageId === 'sample6') {
+                $memoCtrl = new MemoController();
+                $page['allMemos'] = $memoCtrl->getAllMemosForAdmin();
+            }
+
             // --- ここまで ---
 
             // ページ固有テンプレートのパス設定
@@ -53,3 +78,4 @@ class PageController
         include TEMPLATE_PATH . 'layout/footer.php';
     }
 }
+?>

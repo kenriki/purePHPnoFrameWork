@@ -241,6 +241,10 @@ class MemoController
     /**
      * ダッシュボード用データ取得
      */
+    /**
+     * ダッシュボード用データ取得
+     * 活動ログを毎週月曜日0時にリセットする仕様に変更
+     */
     public function getDashboardData($username)
     {
         $db = getDB();
@@ -273,11 +277,23 @@ class MemoController
             ];
         }
 
-        // 3. 活動ログ (直近14日間)
-        $stmt = $db->prepare("SELECT DATE(update_date) as date, COUNT(*) as count FROM user_memos WHERE username = ? AND update_date >= DATE_SUB(CURDATE(), INTERVAL 14 DAY) GROUP BY date ORDER BY date ASC");
-        $stmt->execute([$username]);
+        // 3. 活動ログ (月曜リセット仕様)
+        // 「直近の月曜日 00:00:00」を取得（今日が月曜なら今日の0時、それ以外なら前の月曜）
+        $startOfWeek = date('Y-m-d 00:00:00', strtotime('last monday', strtotime('tomorrow')));
 
-        return ['events' => $events, 'pinned' => $pinned, 'chart' => $stmt->fetchAll(PDO::FETCH_ASSOC)];
+        $stmt = $db->prepare("SELECT DATE(update_date) as date, COUNT(*) as count 
+                               FROM user_memos 
+                               WHERE username = ? 
+                               AND update_date >= ? 
+                               GROUP BY date 
+                               ORDER BY date ASC");
+        $stmt->execute([$username, $startOfWeek]);
+
+        return [
+            'events' => $events,
+            'pinned' => $pinned,
+            'chart' => $stmt->fetchAll(PDO::FETCH_ASSOC)
+        ];
     }
 
     /**

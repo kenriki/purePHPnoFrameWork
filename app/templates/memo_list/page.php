@@ -2,7 +2,6 @@
 /**
  * templates/memo_list/page.php
  */
-// Controllerから渡された $page 配列内のデータを使用するように調整
 $displayMemos = $page['myMemos'] ?? [];
 ?>
 
@@ -19,7 +18,7 @@ $displayMemos = $page['myMemos'] ?? [];
         border-collapse: collapse !important;
     }
 
-    /* メモ内容の左寄せとデザイン */
+    /* メモ内容のデザイン */
     .memo-content-cell {
         text-align: left !important;
         white-space: pre-wrap !important;
@@ -32,6 +31,26 @@ $displayMemos = $page['myMemos'] ?? [];
         font-size: 0.95em !important;
         line-height: 1.6;
     }
+
+    /* 「もっと見る」リンクのスタイル */
+    .memo-toggle {
+        color: #007bff;
+        cursor: pointer;
+        font-weight: bold;
+        display: inline-block;
+        margin-top: 5px;
+        text-decoration: underline;
+    }
+
+    .memo-toggle:hover {
+        color: #0056b3;
+    }
+
+    .full-text {
+        display: none;
+    }
+
+    /* 初期状態は非表示 */
 
     .btn-success {
         background-color: #28a745 !important;
@@ -49,6 +68,30 @@ $displayMemos = $page['myMemos'] ?? [];
         padding: 5px 10px;
         border-radius: 4px;
         cursor: pointer;
+    }
+
+    /* 上部・下部のレイアウト調整 */
+    .dataTables_wrapper .dataTables_info {
+        float: left !important;
+        padding-top: 10px !important;
+        margin-right: 20px;
+    }
+
+    .dataTables_wrapper .dataTables_paginate {
+        float: left !important;
+        margin-bottom: 10px;
+        padding-top: 5px !important;
+    }
+
+    .dataTables_length {
+        clear: both;
+        display: block;
+        padding-top: 10px;
+        margin-bottom: 10px;
+    }
+
+    .dt-buttons {
+        margin-bottom: 15px;
     }
 </style>
 
@@ -93,42 +136,57 @@ $displayMemos = $page['myMemos'] ?? [];
 <script>
     $(document).ready(function () {
         var table = $('#myMemosTable').DataTable({
-            dom: 'Bfrtip',
+            dom: 'iplBfrtip',
             buttons: [
-                {
-                    extend: 'excelHtml5',
-                    text: 'Excel出力',
-                    className: 'btn-success',
-                    title: 'MyMemos_' + new Date().toISOString().slice(0, 10),
-                    exportOptions: { columns: [0, 1, 2] }
-                },
-                {
-                    extend: 'csvHtml5',
-                    text: 'CSV出力',
-                    className: 'btn-primary',
-                    title: 'MyMemos_' + new Date().toISOString().slice(0, 10),
-                    exportOptions: { columns: [0, 1, 2] }
-                }
+                { extend: 'excelHtml5', text: 'Excel出力', className: 'btn-success', exportOptions: { columns: [0, 1, 2] } },
+                { extend: 'csvHtml5', text: 'CSV出力', className: 'btn-primary', exportOptions: { columns: [0, 1, 2] } }
             ],
+            lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "全件"]],
+            pageLength: 25,
             autoWidth: false,
             order: [[1, 'desc']],
             columnDefs: [
-                { "targets": 0, "className": "dt-left" },
+                {
+                    "targets": 0,
+                    "className": "dt-left",
+                    // もっと見る機能のレンダリング
+                    "render": function (data, type, row) {
+                        if (type === 'display' && data.length > 150) {
+                            var shortText = data.substr(0, 150) + '...';
+                            return '<div class="memo-wrapper">' +
+                                '<span class="short-text">' + shortText + '</span>' +
+                                '<span class="full-text">' + data + '</span>' +
+                                '<br><span class="memo-toggle">もっと見る</span>' +
+                                '</div>';
+                        }
+                        return data;
+                    }
+                },
                 { "targets": [1, 2], "className": "dt-center" }
             ],
-            pageLength: 25,
-            // 日本語化を確実にするため直接定義を記述
             language: {
                 "emptyTable": "データがありません",
                 "info": " _TOTAL_ 件中 _START_ から _END_ まで表示",
                 "infoEmpty": " 0 件中 0 から 0 まで表示",
+                "lengthMenu": "表示件数: _MENU_",
                 "search": "検索:",
-                "paginate": {
-                    "first": "先頭",
-                    "last": "最終",
-                    "next": "次",
-                    "previous": "前"
-                }
+                "paginate": { "first": "先頭", "last": "最終", "next": "次", "previous": "前" }
+            }
+        });
+
+        // クリックイベント（開閉切り替え）
+        $('#myMemosTable').on('click', '.memo-toggle', function () {
+            var wrapper = $(this).closest('.memo-wrapper');
+            var isShort = wrapper.find('.full-text').is(':hidden');
+
+            if (isShort) {
+                wrapper.find('.short-text').hide();
+                wrapper.find('.full-text').fadeIn(100);
+                $(this).text('閉じる');
+            } else {
+                wrapper.find('.full-text').hide();
+                wrapper.find('.short-text').fadeIn(100);
+                $(this).text('もっと見る');
             }
         });
     });

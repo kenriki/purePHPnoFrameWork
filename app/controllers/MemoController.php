@@ -114,14 +114,45 @@ class MemoController
         $content = "";
         $memo = null;
 
+        // if ($id) {
+        //     $db = getDB();
+        //     $stmt = $db->prepare("SELECT * FROM user_memos WHERE id = ? AND (username = ? OR username LIKE 'guest%')");
+        //     $stmt->execute([$id, $this->user]);
+        //     $memo = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        //     if ($memo) {
+        //         $content = $this->decryptContent($memo['content']);
+        //     }
+        // }
+
         if ($id) {
             $db = getDB();
-            $stmt = $db->prepare("SELECT * FROM user_memos WHERE id = ? AND (username = ? OR username LIKE 'guest%')");
-            $stmt->execute([$id, $this->user]);
+
+            // 1. 検索対象となるユーザー名のリストを作成
+            $allowedUsers = [$this->user]; // ログイン中なら 'kenmochi' などが入る
+
+            // 2. ゲスト名がセッションにある場合はそれも許可
+            if (!empty($_SESSION['guest_name'])) {
+                $allowedUsers[] = 'guest_' . $_SESSION['guest_name'];
+            }
+
+            // 3. 完全な未ログイン状態（guest）も常に許可リストに入れる場合
+            $allowedUsers[] = 'guest';
+
+            // 4. IN句を使って「自分のデータ」か「共通ゲストデータ」のみを取得
+            $placeholders = implode(',', array_fill(0, count($allowedUsers), '?'));
+            $sql = "SELECT * FROM user_memos WHERE id = ? AND username IN ($placeholders)";
+
+            $stmt = $db->prepare($sql);
+            $stmt->execute(array_merge([$id], $allowedUsers));
             $memo = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if ($memo) {
                 $content = $this->decryptContent($memo['content']);
+            } else {
+                // IDが他人のもの（例：'はやと' さんのものなど）であれば、ここで弾かれる
+                $this->redirect("list", "error_permission_denied");
+                return;
             }
         }
 

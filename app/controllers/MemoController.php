@@ -78,6 +78,17 @@ class MemoController
 
         // --- アクション分岐 ---
 
+        // 24時間共有URL発行処理
+        if ($action === 'generate_share_url') {
+            $this->generate_share_url();
+            return;
+        }
+
+        if ($action === 'view_share') {
+            $this->view_share();
+            return;
+        }
+
         // ピン留め
         if ($action === 'toggle_pin') {
             $this->togglePin();
@@ -484,6 +495,111 @@ class MemoController
         }
 
         return $memos; // 配列を返す（空なら空配列）
+    }
+    public function generate_share_url()
+    {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST')
+            return;
+
+        $memo_id = $_POST['memo_id'] ?? '';
+        $db = getDB();
+
+        // セキュリティチェック：所有者を確認（user_id ではなく username を使用）
+        $stmt = $db->prepare("SELECT id FROM user_memos WHERE id = ? AND username = ?");
+        $stmt->execute([$memo_id, $this->user]); // $this->user はコンストラクタで設定済み
+
+        if (!$stmt->fetch()) {
+            die("不正なアクセスです。所有権が確認できません。 ID:" . htmlspecialchars($memo_id));
+        }
+
+        // 2. 24時間限定の共有トークンを生成
+        $shareToken = bin2hex(random_bytes(16)); // 32文字のランダム文字列
+        $expiresAt = (new DateTime('+24 hours'))->format('Y-m-d H:i:s');
+
+        // 3. DBを更新
+        $stmt = $db->prepare("UPDATE user_memos SET share_token = ?, share_expires_at = ? WHERE id = ?");
+        $stmt->execute([$shareToken, $expiresAt, $memo_id]);
+
+        // 4. 共有URLを組み立てて画面に表示（またはリダイレクト）
+        $shareUrl = "http://{$_SERVER['HTTP_HOST']}/index.php?page=view_share&token={$shareToken}";
+
+        // 完了メッセージとURLを表示するテンプレートへ
+        include TEMPLATE_PATH . 'memo/share_result.php';
+        exit;
+    }
+    /**
+     * 共有用URLからの閲覧処理
+     */
+    /**
+     * 共有用URLからの閲覧処理
+     * 修正ポイント: 
+     * 1. 自クラスの decryptContent による確実な復号
+     * 2. DBのusernameに基づく作成者表示
+     * 3. ゲストユーザー名の整形
+     */
+    public function view_share()
+    {
+        $token = $_GET['token'] ?? '';
+        if (empty($token)) {
+            die("不正なアクセスです。");
+        }
+
+        $db = getDB();
+
+        // 1. トークン照合（期限内かつ削除されていないもの）
+        // ※ is_deleted カラムがない場合は、この行を削除してください
+        $stmt = $db->prepare("
+            SELECT * FROM user_memos 
+            WHERE share_token = ? 
+              AND share_expires_at > NOW()
+              AND is_deleted = 0
+        ");
+        $stmt->execute([$token]);
+        $memo = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$memo) {
+            die("このリンクは無効か、有効期限が切れています。");
+        }
+
+        // 2. 復号化処理
+        // saveMemoと同じ鍵・ロジックを使用するため、自クラスのメソッドを呼び出す
+        $decryptedContent = $this->decryptContent($memo['content']);
+
+        // 3. 表示用データの整理
+        // タイトル：復号した内容の1行目から抽出（getMemoListと同様のロジック）
+        $lines = explode("\n", str_replace(["\r\n", "\r"], "\n", $decryptedContent));
+        $firstLine = trim($lines[0] ?? "");
+        $title = !empty($firstLine) ? mb_strimwidth($firstLine, 0, 60, "...") : "共有されたメモ";
+
+        // 作成者：管理ユーザー固定ではなく、DBのusernameを使用
+        $creator = $memo['username'];
+        if (strpos($creator, 'guest_') === 0) {
+            // ゲストの場合はプレフィックスを除去して表示
+            $creator = htmlspecialchars(substr($creator, 6)) . " (ゲスト)";
+        } else {
+            $creator = htmlspecialchars($creator);
+        }
+
+        // 有効期限
+        $expires_at = $memo['share_expires_at'];
+
+        // テンプレートへ渡す変数
+        $content = $decryptedContent;
+
+        // 4. 表示
+        $templateFile = defined('TEMPLATE_PATH') ? TEMPLATE_PATH . 'memo/view_only.php' : null;
+        if ($templateFile && file_exists($templateFile)) {
+            // view_only.php 内では $title, $content, $creator, $expires_at を使用
+            include $templateFile;
+        } else {
+            // テンプレートがない場合のフォールバック表示
+            echo "<!DOCTYPE html><html lang='ja'><head><meta charset='UTF-8'><title>共有メモ</title></head><body>";
+            echo "<h1>" . htmlspecialchars($title) . "</h1>";
+            echo "<p style='color:#666;'>作成者: {$creator} / 有効期限: {$expires_at}</p><hr>";
+            echo "<div>" . nl2br(htmlspecialchars($content)) . "</div>";
+            echo "</body></html>";
+        }
+        exit;
     }
 }
 ?>

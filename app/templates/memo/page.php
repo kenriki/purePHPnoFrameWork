@@ -181,6 +181,15 @@ $isGuestMode = ($display_user === 'guest' || empty($display_user));
                 <?php endif; ?>
             </div>
         </form>
+        <div class="alert alert-info">
+            <p>このメモを誰かに共有しますか？</p>
+            <form action="index.php?page=generate_share_url" method="POST">
+                <input type="hidden" name="memo_id" value="<?= $memo['id'] ?>">
+                <button type="submit" class="btn btn-sm btn-info">
+                    <i class="fas fa-share-alt"></i> 24H限定の共有URLを発行
+                </button>
+            </form>
+        </div>
 
     <?php else: ?>
         <div style="background: #fff; border: 1px solid #eee; border-radius: 8px; overflow: hidden;">

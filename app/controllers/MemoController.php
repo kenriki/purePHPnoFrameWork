@@ -78,6 +78,17 @@ class MemoController
 
         // --- アクション分岐 ---
 
+        // 24時間共有URL発行処理
+        if ($action === 'generate_share_url') {
+            $this->generate_share_url();
+            return; 
+        }
+
+        if ($action === 'view_share') {
+            $this->view_share();
+            return;
+        }
+
         // ピン留め
         if ($action === 'toggle_pin') {
             $this->togglePin();
@@ -484,6 +495,62 @@ class MemoController
         }
 
         return $memos; // 配列を返す（空なら空配列）
+    }
+    public function generate_share_url()
+    {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST')
+            return;
+
+        $memo_id = $_POST['memo_id'] ?? '';
+        $db = getDB();
+
+        // セキュリティチェック：所有者を確認（user_id ではなく username を使用）
+        $stmt = $db->prepare("SELECT id FROM user_memos WHERE id = ? AND username = ?");
+        $stmt->execute([$memo_id, $this->user]); // $this->user はコンストラクタで設定済み
+
+        if (!$stmt->fetch()) {
+            die("不正なアクセスです。所有権が確認できません。 ID:" . htmlspecialchars($memo_id));
+        }
+
+        // 2. 24時間限定の共有トークンを生成
+        $shareToken = bin2hex(random_bytes(16)); // 32文字のランダム文字列
+        $expiresAt = (new DateTime('+24 hours'))->format('Y-m-d H:i:s');
+
+        // 3. DBを更新
+        $stmt = $db->prepare("UPDATE user_memos SET share_token = ?, share_expires_at = ? WHERE id = ?");
+        $stmt->execute([$shareToken, $expiresAt, $memo_id]);
+
+        // 4. 共有URLを組み立てて画面に表示（またはリダイレクト）
+        $shareUrl = "http://{$_SERVER['HTTP_HOST']}/index.php?page=view_share&token={$shareToken}";
+
+        // 完了メッセージとURLを表示するテンプレートへ
+        include TEMPLATE_PATH . 'memo/share_result.php';
+        exit;
+    }
+    public function view_share()
+    {
+        $token = $_GET['token'] ?? '';
+        $db = getDB();
+
+        $stmt = $db->prepare("
+            SELECT * FROM user_memos 
+            WHERE share_token = ? 
+              AND share_expires_at > NOW()
+        ");
+        $stmt->execute([$token]);
+        $memo = $stmt->fetch();
+
+        if (!$memo) {
+            die("このリンクは無効か、有効期限が切れています。");
+        }
+
+        // 【重要】暗号化されているコンテンツを表示用に復号する
+        $content = $this->decryptContent($memo['content']);
+
+        // 閲覧専用テンプレートを表示
+        // TEMPLATE_PATHが定義されていない場合は直書きのパスに修正してください
+        include __DIR__ . '/../templates/memo/view_only.php';
+        exit;
     }
 }
 ?>

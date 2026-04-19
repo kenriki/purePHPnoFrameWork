@@ -27,6 +27,38 @@ $page = $_GET['page'] ?? 'home';
 $action = $_GET['action'] ?? ''; // actionを追加取得
 
 /**
+ * 共有メモ閲覧（ログイン不要）
+ * セッションチェック（アクティブ時間更新）の前に置くことで、未ログインでも閲覧可能にする
+ */
+if ($page === 'view_share') {
+    require_once __DIR__ . '/../app/controllers/MemoController.php';
+    $controller = new MemoController();
+    $controller->view_share(); // この中で include & exit する
+    exit;
+}
+
+/**
+ * 共有URL生成処理
+ */
+if ($page === 'generate_share_url') {
+    require_once __DIR__ . '/../app/controllers/MemoController.php';
+    $controller = new MemoController();
+    $controller->generate_share_url(); // 実行
+    exit; // これで index.php の後半（既存の memo 判定）を無視させる
+}
+
+// ログイン中のアクティブ時間の更新処理（ここより下はログイン前提の処理が含まれる）
+if (isset($_SESSION['user_id'])) {
+    try {
+        $db = getDB();
+        $stmtActive = $db->prepare("UPDATE users SET last_active_at = NOW() WHERE id = ?");
+        $stmtActive->execute([$_SESSION['user_id']]);
+    } catch (Exception $e) {
+        error_log("Active time update failed: " . $e->getMessage());
+    }
+}
+
+/**
  * 3. 【追加】合言葉（guest_name）のセッション保存処理
  * フォームから 'set_guest_name' が送られてきたら、ここでセッションに焼く
  */
@@ -67,13 +99,13 @@ if ($page === 'memo_list') {
 
     $controller = new PageController();
     // メソッドを実行してデータを取得
-    $page = $controller->showMemoList(); 
+    $page = $controller->showMemoList();
 
     // ヘッダーが期待している変数をセットしてエラーを回避
     $pageId = 'memo_list';
 
     // ヘッダーを読み込む
-    include __DIR__ . '/../app/templates/layout/header.php'; 
+    include __DIR__ . '/../app/templates/layout/header.php';
     // コンテンツ本体を読み込む
     include __DIR__ . '/../app/templates/memo_list/page.php';
     // フッターが必要な場合はここに追加

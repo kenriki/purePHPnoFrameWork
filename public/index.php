@@ -10,6 +10,18 @@ mb_internal_encoding("UTF-8");
 require_once __DIR__ . '/../app/dbconfig.php';
 require_once __DIR__ . '/../app/router.php';
 
+// アクティブ時間の更新処理
+if (isset($_SESSION['user_id'])) {
+    try {
+        $db = getDB();
+        $stmtActive = $db->prepare("UPDATE users SET last_active_at = NOW() WHERE id = ?");
+        $stmtActive->execute([$_SESSION['user_id']]);
+    } catch (Exception $e) {
+        // 更新失敗で画面が止まらないよう、エラー時はログ出力などにとどめる
+        error_log("Active time update failed: " . $e->getMessage());
+    }
+}
+
 // 2. ページパラメータの取得
 $page = $_GET['page'] ?? 'home';
 $action = $_GET['action'] ?? ''; // actionを追加取得
@@ -32,6 +44,7 @@ if ($page === 'memo' && $action === 'set_guest_name') {
  * 4. 特定のページ（memo）に対するカスタムルーティング
  */
 if ($page === 'memo') {
+    $pageId = 'memo';
     require_once __DIR__ . '/../app/controllers/MemoController.php';
 
     $controller = new MemoController();
@@ -43,6 +56,28 @@ if ($page === 'memo') {
     // ビューの表示
     include __DIR__ . '/../app/templates/memo/page.php';
 
+    exit;
+}
+
+/**
+ * マイメモ一覧（memo_list）に対するカスタムルーティング
+ */
+if ($page === 'memo_list') {
+    require_once __DIR__ . '/../app/controllers/PageController.php';
+
+    $controller = new PageController();
+    // メソッドを実行してデータを取得
+    $page = $controller->showMemoList(); 
+
+    // ヘッダーが期待している変数をセットしてエラーを回避
+    $pageId = 'memo_list';
+
+    // ヘッダーを読み込む
+    include __DIR__ . '/../app/templates/layout/header.php'; 
+    // コンテンツ本体を読み込む
+    include __DIR__ . '/../app/templates/memo_list/page.php';
+    // フッターが必要な場合はここに追加
+    include __DIR__ . '/../app/templates/layout/footer.php';
     exit;
 }
 

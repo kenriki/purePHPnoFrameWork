@@ -24,11 +24,11 @@ class AuthController
 
             // username または email のどちらでもログイン可能
             $stmt = $db->prepare("
-            SELECT * FROM users 
-             WHERE username = ? 
-                OR email = ?
-            LIMIT 1
-        ");
+                SELECT * FROM users 
+                WHERE username = ? 
+                    OR email = ?
+                LIMIT 1
+            ");
             $stmt->execute([$login_id, $login_id]);
             $user = $stmt->fetch();
 
@@ -39,8 +39,19 @@ class AuthController
                 $_SESSION['username'] = $user['username'];
                 $_SESSION['email'] = $user['email'];
 
+                // 英数字のみ、かつ6文字以上、かつ「数字を1文字以上含む」場合
+                // if (!preg_match('/^(?=.*[0-9])[a-zA-Z0-9]{6,}$/', $user['username'])) {
+                //     $_SESSION['username_change_required'] = true; // フラグを立てる
+                //     header("Location: index.php?page=change_username"); // 変更画面へ
+                //     exit;
+                // }
+
                 // ★ 追加：DBから取得した権限（admin/user等）をセッションに格納
                 $_SESSION['role'] = $user['role'] ?? 'user';
+
+                // ★ 追加：ログイン日時の更新
+                $stmtUpdate = $db->prepare("UPDATE users SET last_login_at = NOW(), last_active_at = NOW() WHERE id = ?");
+                $stmtUpdate->execute([$user['id']]);
 
                 // ----------------------------------------------------
                 // ★ パスワード更新日チェック（3か月）
@@ -115,7 +126,7 @@ class AuthController
 
             try {
                 // ここで切り出したメソッドをコールします
-                $new_id = $this->getNextUserId($db);
+                $new_id = $this->getNextUserId();
 
                 // email 重複チェック
                 $stmt = $db->prepare("SELECT id FROM users WHERE email = ?");
@@ -130,7 +141,7 @@ class AuthController
 
                 $autoLoginUrl = "http://{$_SERVER['HTTP_HOST']}/index.php?page=autologin&token={$token}";
 
-                $subject = "【Sample Site】会員登録完了のお知らせ";
+                $subject = "【Memo APP】会員登録完了のお知らせ";
                 $body = "{$user} 様\n\n登録完了しました。\n\n"
                     . "■あなたのログイン情報\n"
                     . "ユーザー名: {$user}\n"
@@ -253,7 +264,7 @@ class AuthController
             $mail->Encoding = 'base64';
 
             // 送信元・宛先
-            $mail->setFrom(ADMIN_EMAIL, 'Sample Site 管理者');
+            $mail->setFrom(ADMIN_EMAIL, 'Memo APP 管理者');
             if (!empty($email)) {
                 $mail->addAddress($email);
             } else {
@@ -261,7 +272,7 @@ class AuthController
             }
 
             // 件名
-            $mail->Subject = '【Sample Site】パスワード更新完了のお知らせ';
+            $mail->Subject = '【Memo APP】パスワード更新完了のお知らせ';
 
             // 本文（自動ログインURLを追記）
             $mail->Body = "パスワードの更新が完了しました。\n\n"
@@ -336,7 +347,7 @@ class AuthController
         // メール送信
         MailUtil::sendMail(
             $email,
-            "【Sample Site】パスワード再設定コード",
+            "【Memo APP】パスワード再設定コード",
             "認証コード：{$code}\n有効期限：1時間"
         );
 
@@ -405,6 +416,100 @@ class AuthController
         }
 
         include TEMPLATE_PATH . 'auth/forgot_password_reset.php';
+    }
+
+    // ユーザー名変更画面の表示
+    public function show_change_username()
+    {
+        // 強制変更フラグがない場合はアクセス不可（ホームへ飛ばす）
+        if (!isset($_SESSION['username_change_required'])) {
+            header("Location: index.php?page=home");
+            exit;
+        }
+        include TEMPLATE_PATH . 'auth/change_username.php';
+    }
+
+    // ユーザー名更新処理（メールアドレス照合付き）
+    public function update_username()
+    {
+        // セッションが開始されていない場合は開始（念のため）
+        if (session_status() == PHP_SESSION_NONE) {
+            session_start();
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $db = getDB();
+            // PDOのエラーモードを例外(Exception)に設定（エラーがあれば即座に止める）
+            $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+            $input_email = trim($_POST['email'] ?? '');
+            $new_username = trim($_POST['new_username'] ?? '');
+
+            // セッションからログイン中のユーザーIDを取得
+            $user_id = $_SESSION['user_id'] ?? null;
+
+            // --- デバッグ用（もしうまくいかない場合はここをコメント解除して確認） ---
+            // var_dump($_SESSION); exit; 
+
+            // 1. バリデーション
+            if (!$user_id) {
+                echo "<script>alert('セッションがタイムアウトしました。再度ログインしてください。'); location.href='index.php?page=login';</script>";
+                exit;
+            }
+
+            if (empty($input_email) || empty($new_username)) {
+                echo "<script>alert('すべての項目を入力してください'); history.back();</script>";
+                return;
+            }
+
+            // 正規表現：数字を1文字以上含む、英数字6文字以上
+            if (!preg_match('/^(?=.*[0-9])[a-zA-Z0-9]{6,}$/', $new_username)) {
+                echo "<script>alert('新しいユーザー名は「数字を1文字以上含む」英数字6文字以上で入力してください'); history.back();</script>";
+                return;
+            }
+
+            try {
+                // 2. 現在のユーザー情報（メールアドレス）をDBから取得して照合
+                $stmt = $db->prepare("SELECT email FROM users WHERE id = ?");
+                $stmt->execute([$user_id]);
+                $user = $stmt->fetch();
+
+                if (!$user || $user['email'] !== $input_email) {
+                    echo "<script>alert('入力されたメールアドレスが登録情報と一致しません'); history.back();</script>";
+                    return;
+                }
+
+                // 3. 新しいユーザー名の重複チェック（自分以外の誰かが使っていないか）
+                $stmt = $db->prepare("SELECT id FROM users WHERE username = ? AND id != ?");
+                $stmt->execute([$new_username, $user_id]);
+                if ($stmt->fetch()) {
+                    echo "<script>alert('このユーザー名は既に他のユーザーに使用されています'); history.back();</script>";
+                    return;
+                }
+
+                // 4. DB更新実行
+                $stmt = $db->prepare("UPDATE users SET username = ? WHERE id = ?");
+                $stmt->execute([$new_username, $user_id]);
+
+                // 実際に更新されたか行数を確認
+                if ($stmt->rowCount() === 0) {
+                    // 同じ名前で更新しようとしたか、IDが見つからない場合
+                    echo "<script>alert('更新されませんでした（現在の名前と同じか、ユーザーが見つかりません）'); location.href='index.php?page=home';</script>";
+                    exit;
+                }
+
+                // 5. セッション情報の同期とフラグ解除
+                $_SESSION['username'] = $new_username;
+                unset($_SESSION['username_change_required']);
+
+                echo "<script>alert('ユーザー名を「" . htmlspecialchars($new_username) . "」に更新しました'); location.href='index.php?page=home';</script>";
+                exit;
+
+            } catch (PDOException $e) {
+                // SQLエラーが発生した場合は詳細を表示して停止
+                die("データベースエラーが発生しました: " . $e->getMessage());
+            }
+        }
     }
 
 

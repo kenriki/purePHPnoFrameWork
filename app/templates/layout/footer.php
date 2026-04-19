@@ -1,6 +1,6 @@
 </main>
 <footer>
-    <p>&copy; <?= date('Y') ?> Sample Site</p>
+    <p>&copy; <?= date('Y') ?> カレンダーメモアプリケーション</p>
 </footer>
 <script>
 document.addEventListener("DOMContentLoaded", () => {

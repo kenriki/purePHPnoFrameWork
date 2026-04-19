@@ -41,7 +41,7 @@ class MemoController
      * コンテンツの復号（暗号・平文を自動判別）
      * image_aa4e6b.png の復号エラー対策
      */
-    private function decryptContent($data)
+    public function decryptContent($data)
     {
         if (empty($data))
             return "";
@@ -114,14 +114,51 @@ class MemoController
         $content = "";
         $memo = null;
 
+        // if ($id) {
+        //     $db = getDB();
+        //     $stmt = $db->prepare("SELECT * FROM user_memos WHERE id = ? AND (username = ? OR username LIKE 'guest%')");
+        //     $stmt->execute([$id, $this->user]);
+        //     $memo = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        //     if ($memo) {
+        //         $content = $this->decryptContent($memo['content']);
+        //     }
+        // }
+
         if ($id) {
             $db = getDB();
-            $stmt = $db->prepare("SELECT * FROM user_memos WHERE id = ? AND (username = ? OR username LIKE 'guest%')");
-            $stmt->execute([$id, $this->user]);
+
+            // 1. 閲覧を許可するユーザー名のリストを動的に作成
+            // ログイン中の本人、または現在のセッションで名乗っているゲスト名、共通ゲストを許可
+            $allowedUsers = [$this->user];
+            if (!empty($_SESSION['guest_name'])) {
+                $allowedUsers[] = 'guest_' . $_SESSION['guest_name'];
+            }
+            $allowedUsers[] = 'guest';
+
+            // 重複を排除（念のため）
+            $allowedUsers = array_unique($allowedUsers);
+
+            // 2. IN句用のプレースホルダー (?) を作成
+            $placeholders = implode(',', array_fill(0, count($allowedUsers), '?'));
+
+            // 3. SQL実行：IDが一致し、かつ所有者が許可リストに含まれる場合のみ取得
+            // これにより、他人のID（例：はやとさんの 000060）をURLに直打ちしてもヒットしなくなります
+            $sql = "SELECT * FROM user_memos WHERE id = ? AND username IN ($placeholders)";
+
+            $params = array_merge([$id], $allowedUsers);
+            $stmt = $db->prepare($sql);
+            $stmt->execute($params);
             $memo = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if ($memo) {
+                // 復号処理（暗号化データと旧来の平文を自動判別）
                 $content = $this->decryptContent($memo['content']);
+            } else {
+                // IDが存在しても、自分に関連するデータでなければアクセス拒否
+                // 管理者であっても、この個別画面では「自分のもの」以外は見せない設計に
+                $this->redirect("list", "error_permission_denied");
+                return;
             }
         }
 
@@ -223,13 +260,40 @@ class MemoController
     /**
      * メモの物理・論理削除
      */
+    // private function deleteMemo($id)
+    // {
+    //     if (!$id)
+    //         return;
+    //     $db = getDB();
+    //     $stmt = $db->prepare("DELETE FROM user_memos WHERE id = ? AND (username = ? OR username LIKE 'guest%')");
+    //     $stmt->execute([$id, $this->user]);
+
+    //     if ($stmt->rowCount() > 0) {
+    //         $path = $this->baseDir . $id . ".txt";
+    //         if (file_exists($path))
+    //             unlink($path);
+    //     }
+    // }
     private function deleteMemo($id)
     {
         if (!$id)
             return;
         $db = getDB();
-        $stmt = $db->prepare("DELETE FROM user_memos WHERE id = ? AND (username = ? OR username LIKE 'guest%')");
-        $stmt->execute([$id, $this->user]);
+
+        // handleRequest と同じ「許可リスト」を作成
+        $allowedUsers = [$this->user];
+        if (!empty($_SESSION['guest_name'])) {
+            $allowedUsers[] = 'guest_' . $_SESSION['guest_name'];
+        }
+        $allowedUsers[] = 'guest';
+
+        $placeholders = implode(',', array_fill(0, count($allowedUsers), '?'));
+
+        // 自分のメモ、または自分が名乗っているゲスト名のメモだけを消せるようにする
+        $sql = "DELETE FROM user_memos WHERE id = ? AND username IN ($placeholders)";
+
+        $stmt = $db->prepare($sql);
+        $stmt->execute(array_merge([$id], $allowedUsers));
 
         if ($stmt->rowCount() > 0) {
             $path = $this->baseDir . $id . ".txt";
@@ -299,12 +363,22 @@ class MemoController
     /**
      * 6桁IDの採番（隙間を埋めるロジック）
      */
+    // private function generateNextId()
+    // {
+    //     $db = getDB();
+    //     $sql = "SELECT min_id + 1 AS next_id FROM (SELECT 0 AS min_id UNION ALL SELECT CAST(id AS UNSIGNED) FROM user_memos) AS t WHERE NOT EXISTS (SELECT 1 FROM user_memos WHERE CAST(id AS UNSIGNED) = t.min_id + 1) ORDER BY next_id ASC LIMIT 1";
+    //     $res = $db->query($sql)->fetch();
+    //     return sprintf('%06d', $res['next_id'] ?? 1);
+    // }
+
+    /**
+     * 新しいIDを生成（既存の数値IDと衝突しないランダム英数字）
+     */
     private function generateNextId()
     {
-        $db = getDB();
-        $sql = "SELECT min_id + 1 AS next_id FROM (SELECT 0 AS min_id UNION ALL SELECT CAST(id AS UNSIGNED) FROM user_memos) AS t WHERE NOT EXISTS (SELECT 1 FROM user_memos WHERE CAST(id AS UNSIGNED) = t.min_id + 1) ORDER BY next_id ASC LIMIT 1";
-        $res = $db->query($sql)->fetch();
-        return sprintf('%06d', $res['next_id'] ?? 1);
+        // 8文字のランダムな英数字を生成（例: 5f3a2b1c）
+        // 32ビット分（約42億通り）のランダム性があるので、100人規模でも衝突はまず起きません
+        return bin2hex(random_bytes(4));
     }
 
     /**

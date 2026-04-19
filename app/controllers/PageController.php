@@ -62,6 +62,13 @@ class PageController
                 $memoCtrl = new MemoController();
                 $page['allMemos'] = $memoCtrl->getAllMemosForAdmin();
             }
+            if ($pageId === 'memo_list') {
+                // 自身の showMemoList メソッドを呼び出してデータを取得
+                $memoData = $this->showMemoList();
+                // 取得した myMemos を $page 配列に注入
+                $myMemos = $memoData['myMemos'];
+                $page['title'] = $memoData['title'];
+            }
 
             // --- ここまで ---
 
@@ -76,6 +83,42 @@ class PageController
         include TEMPLATE_PATH . 'layout/header.php';
         include $templateDir . 'page.php';
         include TEMPLATE_PATH . 'layout/footer.php';
+    }
+
+    public function showMemoList()
+    {
+        $db = getDB();
+
+        // セッションキーを確認（お使いの環境に合わせて username か user を指定）
+        $username = $_SESSION['username'] ?? $_SESSION['user'] ?? null;
+
+        if (!$username) {
+            $myMemos = [];
+        } else {
+            // SQL実行
+            $stmt = $db->prepare("SELECT content, create_date, update_date FROM user_memos WHERE username = ? ORDER BY create_date DESC");
+            $stmt->execute([$username]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // 復号化と配列整形
+            $memoCtrl = new MemoController();
+            $myMemos = [];
+            foreach ($rows as $row) {
+                $myMemos[] = [
+                    // decryptContent が public であることを前提としています
+                    'content_plain' => $memoCtrl->decryptContent($row['content']),
+                    'create_date' => $row['create_date'],
+                    'update_date' => $row['update_date']
+                ];
+            }
+        }
+
+        // テンプレートに $myMemos として渡す
+        return [
+            'title' => 'マイメモ一覧',
+            'pageId' => 'memo_list',
+            'myMemos' => $myMemos,
+        ];
     }
 }
 ?>

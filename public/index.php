@@ -10,6 +10,18 @@ mb_internal_encoding("UTF-8");
 require_once __DIR__ . '/../app/dbconfig.php';
 require_once __DIR__ . '/../app/router.php';
 
+// アクティブ時間の更新処理
+if (isset($_SESSION['user_id'])) {
+    try {
+        $db = getDB();
+        $stmtActive = $db->prepare("UPDATE users SET last_active_at = NOW() WHERE id = ?");
+        $stmtActive->execute([$_SESSION['user_id']]);
+    } catch (Exception $e) {
+        // 更新失敗で画面が止まらないよう、エラー時はログ出力などにとどめる
+        error_log("Active time update failed: " . $e->getMessage());
+    }
+}
+
 // 2. ページパラメータの取得
 $page = $_GET['page'] ?? 'home';
 $action = $_GET['action'] ?? ''; // actionを追加取得

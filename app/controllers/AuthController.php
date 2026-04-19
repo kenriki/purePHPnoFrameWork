@@ -49,6 +49,10 @@ class AuthController
                 // ★ 追加：DBから取得した権限（admin/user等）をセッションに格納
                 $_SESSION['role'] = $user['role'] ?? 'user';
 
+                // ★ 追加：ログイン日時の更新
+                $stmtUpdate = $db->prepare("UPDATE users SET last_login_at = NOW(), last_active_at = NOW() WHERE id = ?");
+                $stmtUpdate->execute([$user['id']]);
+
                 // ----------------------------------------------------
                 // ★ パスワード更新日チェック（3か月）
                 // ----------------------------------------------------
@@ -137,7 +141,7 @@ class AuthController
 
                 $autoLoginUrl = "http://{$_SERVER['HTTP_HOST']}/index.php?page=autologin&token={$token}";
 
-                $subject = "【カレンダーメモアプリケーション】会員登録完了のお知らせ";
+                $subject = "【Memo APP】会員登録完了のお知らせ";
                 $body = "{$user} 様\n\n登録完了しました。\n\n"
                     . "■あなたのログイン情報\n"
                     . "ユーザー名: {$user}\n"
@@ -260,7 +264,7 @@ class AuthController
             $mail->Encoding = 'base64';
 
             // 送信元・宛先
-            $mail->setFrom(ADMIN_EMAIL, 'カレンダーメモアプリケーション 管理者');
+            $mail->setFrom(ADMIN_EMAIL, 'Memo APP 管理者');
             if (!empty($email)) {
                 $mail->addAddress($email);
             } else {
@@ -268,7 +272,7 @@ class AuthController
             }
 
             // 件名
-            $mail->Subject = '【カレンダーメモアプリケーション】パスワード更新完了のお知らせ';
+            $mail->Subject = '【Memo APP】パスワード更新完了のお知らせ';
 
             // 本文（自動ログインURLを追記）
             $mail->Body = "パスワードの更新が完了しました。\n\n"
@@ -343,7 +347,7 @@ class AuthController
         // メール送信
         MailUtil::sendMail(
             $email,
-            "【カレンダーメモアプリケーション】パスワード再設定コード",
+            "【Memo APP】パスワード再設定コード",
             "認証コード：{$code}\n有効期限：1時間"
         );
 

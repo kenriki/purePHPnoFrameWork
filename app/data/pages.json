@@ -143,6 +143,16 @@
             }
         ]
     },
+    "diga_list": {
+        "title": "diga_listサンプル",
+        "sections": [
+            {
+                "type": "text",
+                "content": "APIについて学ぼう",
+                "file": "diga_list/page.php"
+            }
+        ]
+    },
     "login": {
         "title": "ログイン",
         "sections": [
@@ -253,5 +263,23 @@
                 "content": "インターネットを安全に利用するためには、日頃からの意識と基本的な対策が欠かせません。正しい知識を身につけ、安心してデジタル社会を活用しましょう。"
             }
         ]
+    },
+    "view_share": {
+        "title": "共有メモの閲覧",
+        "template": "memo/view_only.php",
+        "controller": "MemoController"
+    },
+    "resend_autologin": {
+        "title": "自動ログインURL再発行",
+        "sections": [
+            {
+                "type": "php",
+                "file": "auth/resend_autologin.php"
+            }
+        ]
+    },
+    "generate_share_url": {
+        "title": "共有URL発行中...",
+        "controller": "MemoController"
     }
 }

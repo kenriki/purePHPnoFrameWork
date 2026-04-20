@@ -46,25 +46,122 @@
 </div>
 
 <script>
-    /**
-     * パスワード表示切り替え
-     * @param {string} buttonId - 切り替えボタンのID
-     * @param {string} inputId  - 入力フィールドのID
-     */
-    function setupToggle(buttonId, inputId) {
-        const toggle = document.getElementById(buttonId);
-        const input = document.getElementById(inputId);
+    document.addEventListener('DOMContentLoaded', () => {
+        const form = document.querySelector('form');
+        const submitBtn = form.querySelector('button[type="submit"]');
 
-        if (toggle && input) {
-            toggle.addEventListener('click', function () {
-                const type = input.getAttribute('type') === 'password' ? 'text' : 'password';
-                input.setAttribute('type', type);
-                this.textContent = type === 'password' ? '👁️' : '🔒';
+        // 1. バリデーションルールと対象要素の定義
+        const fields = {
+            username: {
+                el: form.querySelector('[name="username"]'),
+                pattern: /^[a-zA-Z0-9]{4,}$/,
+                msg: "英数字4文字以上で入力してください"
+            },
+            // 末尾が2〜4文字の英字であることを条件に加える
+            email: {
+                el: form.querySelector('[name="email"]'),
+                // 正規表現を強化: ドメイン末尾（TLD）が2〜6文字の英字であることを必須に
+                pattern: /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/,
+                msg: "有効なメールアドレスを入力してください"
+            },
+            password: {
+                el: document.getElementById('password'),
+                pattern: /^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{8,}$/,
+                msg: "8文字以上かつ、英大文字・小文字・数字を含めてください"
+            },
+            confirm: {
+                el: document.getElementById('password_conf'),
+                msg: "パスワードが一致しません"
+            }
+        };
+
+        // 2. エラーメッセージ表示用の要素を動的に生成
+        Object.keys(fields).forEach(key => {
+            const field = fields[key];
+            const errorEl = document.createElement('div');
+            errorEl.id = `err-${key}`;
+            // デザインに合わせたスタイル設定
+            errorEl.style.cssText = "color: red; font-size: 0.75em; margin-top: 2px; min-height: 1.2em; display: block;";
+            field.el.parentNode.appendChild(errorEl);
+        });
+
+        /**
+         * バリデーションのメインロジック
+         */
+        function validate() {
+            let isAllValid = true;
+            let isAllFilled = true;
+
+            Object.keys(fields).forEach(key => {
+                const field = fields[key];
+                const val = field.el.value;
+                const errorEl = document.getElementById(`err-${key}`);
+                let isValid = true;
+
+                if (val === "") {
+                    // 未入力時はエラーを出さず、枠線をグレーに戻す
+                    isValid = true;
+                    isAllFilled = false;
+                    errorEl.textContent = "";
+                    field.el.style.borderColor = "#ccc";
+                } else {
+                    // 入力がある場合のチェック
+                    if (key === 'confirm') {
+                        // パスワード一致チェック
+                        isValid = (val === fields.password.el.value);
+                    } else {
+                        // 正規表現チェック
+                        isValid = field.pattern.test(val);
+                    }
+
+                    // UI更新
+                    if (isValid) {
+                        errorEl.textContent = "";
+                        field.el.style.borderColor = "#28a745"; // 成功時は緑
+                    } else {
+                        errorEl.textContent = field.msg;
+                        field.el.style.borderColor = "red"; // 失敗時は赤
+                        isAllValid = false;
+                    }
+                }
             });
-        }
-    }
 
-    // 実行
-    setupToggle('togglePassword', 'password');
-    setupToggle('togglePasswordConf', 'password_conf');
+            // 3. ボタンの活性・非活性切り替え
+            const canSubmit = isAllValid && isAllFilled;
+            submitBtn.disabled = !canSubmit;
+            submitBtn.style.opacity = canSubmit ? "1" : "0.5";
+            submitBtn.style.cursor = canSubmit ? "pointer" : "not-allowed";
+            submitBtn.style.background = canSubmit ? "#28a745" : "#6c757d"; // 色の変化で直感的に
+        }
+
+        /**
+         * パスワード表示切り替え
+         * @param {string} buttonId - 切り替えボタンのID
+         * @param {string} inputId  - 入力フィールドのID
+         */
+        function setupToggle(buttonId, inputId) {
+            const toggle = document.getElementById(buttonId);
+            const input = document.getElementById(inputId);
+            if (toggle && input) {
+                toggle.addEventListener('click', function () {
+                    const type = input.getAttribute('type') === 'password' ? 'text' : 'password';
+                    input.setAttribute('type', type);
+                    this.textContent = type === 'password' ? '👁️' : '🔒';
+                });
+            }
+        }
+
+        // イベントリスナー登録
+        Object.values(fields).forEach(field => {
+            field.el.addEventListener('input', validate);
+        });
+
+        // パスワードトグル実行
+        setupToggle('togglePassword', 'password');
+        setupToggle('togglePasswordConf', 'password_conf');
+
+        // 初期状態のチェックを実行
+        validate();
+    });
+
 </script>

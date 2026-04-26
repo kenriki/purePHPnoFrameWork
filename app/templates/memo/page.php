@@ -330,6 +330,18 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
         </div>
     <?php endif; ?>
 
+    <?php if (!empty($memo['id'])): ?>
+        <input type="hidden" name="memo_id" value="<?= htmlspecialchars((string) $memo['id']) ?>">
+
+        <div class="alert alert-info">
+            <p>このメモを誰かに共有しますか？</p>
+            <form action="index.php?page=generate_share_url" method="POST">
+                <input type="hidden" name="memo_id" value="<?= htmlspecialchars((string) $memo['id']) ?>">
+                <button type="submit" class="btn btn-sm btn-info">24H限定の共有URLを発行</button>
+            </form>
+        </div>
+    <?php endif; ?>
+
     <div style="margin-top: 30px; padding-top: 15px; border-top: 1px solid #eee;">
         <a href="index.php?page=home" style="text-decoration: none; color: #007bff; font-weight: bold;">🏠 ホーム画面へ戻る</a>
     </div>

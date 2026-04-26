@@ -678,7 +678,7 @@ class MemoController
         // 4. URLを生成してJSONで返す
         $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https" : "http";
         $host = $_SERVER['HTTP_HOST'];
-        $shareUrl = "{$protocol}://{$host}/test/index.php?page=memo&action=view_share&token={$shareToken}";
+        $shareUrl = "{$protocol}://{$host}/sample/index.php?page=memo&action=view_share&token={$shareToken}";
 
         // 完了メッセージとURLを表示するテンプレートへ
         include TEMPLATE_PATH . 'memo/share_result.php';

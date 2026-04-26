@@ -3,11 +3,11 @@
 /**
  * MemoController - 高機能メモ管理コントローラ
  * * 主な機能:
- * 1. AES-256-CBC によるコンテンツの暗号化・復号
- * 2. 既存の平文データとの互換性維持（自動判別）
- * 3. 作成日(create_date)と更新日(update_date)の完全分離
- * 4. ユーザー別ディレクトリ管理と物理ファイル同期
- * 5. 6桁IDの自動採番（欠番利用型）
+ * 1. AES-256-CBC によるコンテンツの暗号化・復号（平文互換）
+ * 2. ユーザー別ディレクトリ管理と物理ファイル同期
+ * 3. 画像アップロード・WebP変換・ストレージ使用量管理
+ * 4. ランダム英数字IDによる競合防止
+ * 5. 24時間限定共有URL発行
  * 6. tFPDFによる日本語PDFエクスポート
  * 7. ダッシュボード（カレンダー・ピン留め・グラフ）連携
  */
@@ -17,6 +17,11 @@ class MemoController
     private $user;
     private $cipher_method = 'aes-256-cbc';
     private $cipher_key = 'your-secret-key-here'; // 運用時は .env 等へ
+    private $max_storage = 536870912; // 512MB
+    private $safeDirName;
+
+    // ブラウザから画像にアクセスするためのベースURL（環境に合わせて調整してください）
+    private $publicImageBaseUrl = "sample/app/data/user_memos";
 
     /**
      * コンストラクタ
@@ -32,6 +37,7 @@ class MemoController
 
         // 物理保存ディレクトリの決定と作成
         $this->baseDir = "C:/Apache24/htdocs/sample/app/data/user_memos/" . $this->user . "/";
+
         if (!is_dir($this->baseDir)) {
             mkdir($this->baseDir, 0777, true);
         }
@@ -100,9 +106,21 @@ class MemoController
             $this->syncGuestMemos();
         }
 
+        // 画像削除
+        if ($action === 'delete_image') {
+            $this->deleteImageOnly();
+            return;
+        }
+
         // PDF出力 (POST)
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pdf_export'])) {
-            $this->generatePdf($_POST['content'] ?? '', $_POST['guest_name'] ?? '');
+            // フォームから画像パスとユーザー名も受け取るようにします
+            $this->generatePdf(
+                $_POST['content'] ?? '', 
+                $_POST['guest_name'] ?? '', 
+                $_POST['image_path'] ?? '', // 追加
+                $this->user                 // 追加（現在のログインユーザー）
+            );
             return;
         }
 
@@ -124,17 +142,6 @@ class MemoController
         $memos = ($action === 'list') ? $this->getMemoList($target_date) : [];
         $content = "";
         $memo = null;
-
-        // if ($id) {
-        //     $db = getDB();
-        //     $stmt = $db->prepare("SELECT * FROM user_memos WHERE id = ? AND (username = ? OR username LIKE 'guest%')");
-        //     $stmt->execute([$id, $this->user]);
-        //     $memo = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        //     if ($memo) {
-        //         $content = $this->decryptContent($memo['content']);
-        //     }
-        // }
 
         if ($id) {
             $db = getDB();
@@ -172,14 +179,17 @@ class MemoController
                 return;
             }
         }
+        //var_dump($memos);
 
         return [
             'action' => $action,
             'id' => $id,
+            'memoList' => $memos,
             'memos' => $memos,
             'memo' => $memo,
             'content' => $content,
             'user' => $this->user,
+            'currentUserUsage' => $this->getUserStorageUsage($this->user),
             'target_date' => $target_date,
             'message' => $_GET['message'] ?? ""
         ];
@@ -236,38 +246,6 @@ class MemoController
     /**
      * メモの新規保存・更新
      */
-    // private function saveMemo($id, $content)
-    // {
-    //     $db = getDB();
-    //     $isNew = empty($id);
-    //     if ($isNew)
-    //         $id = $this->generateNextId();
-
-    //     $saveUser = $this->user;
-    //     if ($saveUser === 'guest' && !empty($_POST['guest_name'])) {
-    //         $_SESSION['guest_name'] = $_POST['guest_name'];
-    //         $saveUser = 'guest_' . $_POST['guest_name'];
-    //     }
-
-    //     // --- 暗号化 ---
-    //     $ivLength = openssl_cipher_iv_length($this->cipher_method);
-    //     $iv = openssl_random_pseudo_bytes($ivLength);
-    //     $encrypted = openssl_encrypt($content, $this->cipher_method, $this->cipher_key, 0, $iv);
-    //     $saveData = base64_encode($iv . $encrypted);
-
-    //     // 物理ファイル同期
-    //     file_put_contents($this->baseDir . $id . ".txt", $saveData);
-
-    //     // DB更新
-    //     if ($isNew) {
-    //         $stmt = $db->prepare("INSERT INTO user_memos (id, username, content, create_date, update_date) VALUES (?, ?, ?, NOW(), NOW())");
-    //         $stmt->execute([$id, $saveUser, $saveData]);
-    //     } else {
-    //         $stmt = $db->prepare("UPDATE user_memos SET content = ?, update_date = NOW() WHERE id = ?");
-    //         $stmt->execute([$saveData, $id]);
-    //     }
-    // }
-
     private function saveMemo($id, $content)
     {
         $db = getDB();
@@ -299,38 +277,26 @@ class MemoController
 
         // DB更新
         if ($isNew) {
-            // image_path カラムを追加したSQL
-            $stmt = $db->prepare("INSERT INTO user_memos (id, username, content, create_date, update_date) VALUES (?, ?, ?, NOW(), NOW())");
-            $stmt->execute([$id, $saveUser, $saveData]);
+        	// image_path カラムを追加したSQL
+            $stmt = $db->prepare("INSERT INTO user_memos (id, username, content, image_path, create_date, update_date) VALUES (?, ?, ?, ?, NOW(), NOW())");
+            $stmt->execute([$id, $saveUser, $saveData, $imagePath]);
         } else {
+            $sql = "UPDATE user_memos SET content = ?, update_date = NOW()";
+            $params = [$saveData];
             // 更新時は画像がある場合のみ image_path を更新する
             if ($imagePath) {
-                $stmt = $db->prepare("UPDATE user_memos SET content = ?, update_date = NOW() WHERE id = ?");
-                $stmt->execute([$saveData, $id]);
-            } else {
-                $stmt = $db->prepare("UPDATE user_memos SET content = ?, update_date = NOW() WHERE id = ?");
-                $stmt->execute([$saveData, $id]);
+                $sql .= ", image_path = ?";
+                $params[] = $imagePath;
             }
+            $sql .= " WHERE id = ?";
+            $params[] = $id;
+            $db->prepare($sql)->execute($params);
         }
     }
 
     /**
      * メモの物理・論理削除
      */
-    // private function deleteMemo($id)
-    // {
-    //     if (!$id)
-    //         return;
-    //     $db = getDB();
-    //     $stmt = $db->prepare("DELETE FROM user_memos WHERE id = ? AND (username = ? OR username LIKE 'guest%')");
-    //     $stmt->execute([$id, $this->user]);
-
-    //     if ($stmt->rowCount() > 0) {
-    //         $path = $this->baseDir . $id . ".txt";
-    //         if (file_exists($path))
-    //             unlink($path);
-    //     }
-    // }
     private function deleteMemo($id)
     {
         if (!$id)
@@ -359,9 +325,6 @@ class MemoController
         }
     }
 
-    /**
-     * ダッシュボード用データ取得
-     */
     /**
      * ダッシュボード用データ取得
      * 活動ログを毎週月曜日0時にリセットする仕様に変更
@@ -418,17 +381,6 @@ class MemoController
     }
 
     /**
-     * 6桁IDの採番（隙間を埋めるロジック）
-     */
-    // private function generateNextId()
-    // {
-    //     $db = getDB();
-    //     $sql = "SELECT min_id + 1 AS next_id FROM (SELECT 0 AS min_id UNION ALL SELECT CAST(id AS UNSIGNED) FROM user_memos) AS t WHERE NOT EXISTS (SELECT 1 FROM user_memos WHERE CAST(id AS UNSIGNED) = t.min_id + 1) ORDER BY next_id ASC LIMIT 1";
-    //     $res = $db->query($sql)->fetch();
-    //     return sprintf('%06d', $res['next_id'] ?? 1);
-    // }
-
-    /**
      * 新しいIDを生成（既存の数値IDと衝突しないランダム英数字）
      */
     private function generateNextId()
@@ -471,10 +423,11 @@ class MemoController
     /**
      * tFPDFによるPDF生成
      */
-    private function generatePdf($content, $guestName = '')
+    private function generatePdf($content, $guestName = '', $imagePath = '', $username = '')
     {
         while (ob_get_level())
             ob_end_clean();
+            
         require_once 'C:\\Apache24\\htdocs\\sample\\public\\tfpdf.php';
 
         $pdf = new tFPDF();
@@ -482,14 +435,141 @@ class MemoController
         $pdf->AddFont('NotoSansJP', '', 'NotoSansJP-VariableFont_wght.ttf', true);
         $pdf->SetFont('NotoSansJP', '', 10);
 
+        // ヘッダー
         $header = "メモ エクスポート (" . date('Y-m-d H:i') . ")";
         $pdf->Cell(0, 10, $header, 'B', 1);
         $pdf->Ln(5);
+
+        // 本文出力
         $pdf->MultiCell(0, 6, $content . ($guestName ? "\n\n---\n署名: $guestName" : ""));
+
+        if (!empty($imagePath)) {
+            $owner = $username ?: 'guest';
+            $safeFolder = preg_match('/^[a-zA-Z0-9\._-]+$/', $owner) ? $owner : 'u_' . substr(md5($owner), 0, 12);
+            
+            // パスの組み立て（\ と / が混在しないよう調整）
+            $baseDir = "C:/Apache24/htdocs/sample/app/data/user_memos/{$safeFolder}/images/";
+            //$originalPath = $baseDir . $imagePath;
+            $originalPath = $this->baseDir . "images/" . $imagePath;
+
+            if (file_exists($originalPath)) {
+                $tempPng = $baseDir . "temp_" . time() . ".png";
+                $imgInfo = getimagesize($originalPath);
+                $img = null;
+                
+                // GDライブラリによる変換
+                switch ($imgInfo[2]) {
+                    case IMAGETYPE_WEBP: $img = @imagecreatefromwebp($originalPath); break;
+                    case IMAGETYPE_JPEG: $img = @imagecreatefromjpeg($originalPath); break;
+                    case IMAGETYPE_PNG:  $img = @imagecreatefrompng($originalPath);  break;
+                }
+
+                if ($img) {
+                    imagepng($img, $tempPng);
+                    // imagedestroy($img); // PHP 8.5では非推奨のため削除またはコメントアウト
+
+                    $pdf->Ln(10);
+                    // 画像の埋め込み。第5引数に 'PNG' を明示
+                    $pdf->Image($tempPng, $pdf->GetX() + 5, $pdf->GetY(), 100, 0, 'PNG');
+                    
+                    // 削除フラグ（出力後に削除するため）
+                    $tempFileToDelete = $tempPng;
+                } else {
+                    $pdf->Ln(5);
+                    $pdf->SetTextColor(255, 0, 0);
+                    $pdf->Cell(0, 10, "Error: Failed to process image content.");
+                    $pdf->SetTextColor(0, 0, 0);
+                }
+            } else {
+                // デバッグ用：ファイルが見つからない場合にパスを表示
+                $pdf->Ln(5);
+                $pdf->SetTextColor(200, 0, 0);
+                $pdf->Cell(0, 10, "Debug: File not found at " . $originalPath);
+                $pdf->SetTextColor(0, 0, 0);
+            }
+        }
 
         header('Content-Type: application/pdf');
         header("Content-Disposition: attachment; filename=memo_" . date('YmdHis') . ".pdf");
-        echo $pdf->Output('S');
+        
+        // PDFデータの生成
+        $pdfData = $pdf->Output('S');
+
+        // 出力前に、もし何か（警告など）が出てしまっていたらクリアする
+        if (ob_get_length()) ob_clean();
+
+        header('Content-Type: application/pdf');
+        header("Content-Disposition: attachment; filename=memo_" . date('YmdHis') . ".pdf");
+        header('Content-Length: ' . strlen($pdfData)); // ファイルサイズを指定するとより確実です
+
+        echo $pdfData;
+
+        // 出力後に一時ファイルを削除
+        if (isset($tempFileToDelete) && file_exists($tempFileToDelete)) {
+            unlink($tempFileToDelete);
+        }
+        exit;
+    }
+
+    /**
+     * 画像のみを削除する処理（DB更新と物理削除を完結させる）
+     */
+    public function deleteImageOnly()
+    {
+        // JSONでレスポンスを返す準備
+        header('Content-Type: application/json');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            echo json_encode(['status' => 'error', 'message' => 'Invalid request method']);
+            exit;
+        }
+
+        $memoId = $_POST['id'] ?? null;
+        if (!$memoId) {
+            echo json_encode(['status' => 'error', 'message' => 'ID is required']);
+            exit;
+        }
+
+        try {
+            $db = getDB();
+            
+            // 1. DBから現在の画像名とユーザー名を取得
+            $stmt = $db->prepare("SELECT image_path, username FROM user_memos WHERE id = ?");
+            $stmt->execute([$memoId]);
+            $memo = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($memo && !empty($memo['image_path'])) {
+                // 2. パスの生成（View側とロジックを統一）
+                $owner = $memo['username'] ?: 'guest';
+                $safeFolder = preg_match('/^[a-zA-Z0-9\._-]+$/', $owner) ? $owner : 'u_' . substr(md5($owner), 0, 12);
+                
+                // 物理ファイルの絶対パス
+                $baseDir = "C:/Apache24/htdocs/test/app/data/user_memos/{$safeFolder}/images/";
+                $filePath = $baseDir . $memo['image_path'];
+                
+                // 3. 物理ファイルの削除
+                if (file_exists($filePath)) {
+                    if (!unlink($filePath)) {
+                        // 削除失敗時はログ等に残す（権限エラーなど）
+                    }
+                }
+
+                // 4. DBの image_path カラムを NULL に更新
+                // ここで確実に更新を行う
+                $updateStmt = $db->prepare("UPDATE user_memos SET image_path = NULL WHERE id = ?");
+                $success = $updateStmt->execute([$memoId]);
+
+                if ($success) {
+                    echo json_encode(['status' => 'success']);
+                } else {
+                    echo json_encode(['status' => 'error', 'message' => 'Failed to update database']);
+                }
+            } else {
+                echo json_encode(['status' => 'error', 'message' => 'No image found in database for this ID']);
+            }
+        } catch (Exception $e) {
+            echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+        }
         exit;
     }
 
@@ -499,6 +579,7 @@ class MemoController
     private function redirect($action, $msg)
     {
         header("Location: index.php?page=memo&action=$action&message=$msg");
+        //header("Location: index.php?page=home");
         exit;
     }
 
@@ -554,24 +635,39 @@ class MemoController
         $memo_id = $_POST['memo_id'] ?? '';
         $db = getDB();
 
-        // セキュリティチェック：所有者を確認（user_id ではなく username を使用）
-        $stmt = $db->prepare("SELECT id FROM user_memos WHERE id = ? AND username = ?");
-        $stmt->execute([$memo_id, $this->user]); // $this->user はコンストラクタで設定済み
+        // 1. 所有権チェック
+        // guest_〇〇 形式と単体 guest の両方に対応
+        $allowedUsers = [$this->user];
+        if (!empty($_SESSION['guest_name'])) {
+            $allowedUsers[] = 'guest_' . $_SESSION['guest_name'];
+        }
+        $allowedUsers[] = 'guest';
+        $allowedUsers = array_unique($allowedUsers);
+
+        $placeholders = implode(',', array_fill(0, count($allowedUsers), '?'));
+        $sql = "SELECT id FROM user_memos WHERE id = ? AND username IN ($placeholders)";
+        $stmt = $db->prepare($sql);
+        $stmt->execute(array_merge([$memo_id], $allowedUsers));
 
         if (!$stmt->fetch()) {
-            die("不正なアクセスです。所有権が確認できません。 ID:" . htmlspecialchars($memo_id));
+            header('Content-Type: application/json');
+            echo json_encode(['status' => 'error', 'message' => '所有権が確認できません。']);
+            exit;
         }
 
-        // 2. 24時間限定の共有トークンを生成
-        $shareToken = bin2hex(random_bytes(16)); // 32文字のランダム文字列
-        $expiresAt = (new DateTime('+24 hours'))->format('Y-m-d H:i:s');
+        // 2. 共有トークンと期限（24時間後）を生成
+        $shareToken = bin2hex(random_bytes(16));
+        // MySQLのNOW()とズレないよう、DB形式の文字列で保持
+        $expiresAt = date('Y-m-d H:i:s', strtotime('+24 hours'));
 
-        // 3. DBを更新
+        // 3. DB更新
         $stmt = $db->prepare("UPDATE user_memos SET share_token = ?, share_expires_at = ? WHERE id = ?");
         $stmt->execute([$shareToken, $expiresAt, $memo_id]);
 
-        // 4. 共有URLを組み立てて画面に表示（またはリダイレクト）
-        $shareUrl = "http://{$_SERVER['HTTP_HOST']}/index.php?page=view_share&token={$shareToken}";
+        // 4. URLを生成してJSONで返す
+        $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https" : "http";
+        $host = $_SERVER['HTTP_HOST'];
+        $shareUrl = "{$protocol}://{$host}/test/index.php?page=memo&action=view_share&token={$shareToken}";
 
         // 完了メッセージとURLを表示するテンプレートへ
         include TEMPLATE_PATH . 'memo/share_result.php';
@@ -594,14 +690,10 @@ class MemoController
 
         $db = getDB();
 
-        // 1. トークン照合（期限内かつ削除されていないもの）
-        // ※ is_deleted カラムがない場合は、この行を削除してください
-        $stmt = $db->prepare("
-            SELECT * FROM user_memos 
-            WHERE share_token = ? 
-              AND share_expires_at > NOW()
-              AND is_deleted = 0
-        ");
+        // 期限チェックを含めて検索 (share_expires_at > 現在時刻)
+        // サーバー時刻のズレに強いよう、DBの現在時刻と比較
+        $sql = "SELECT * FROM user_memos WHERE share_token = ? AND share_expires_at > NOW()";
+        $stmt = $db->prepare($sql);
         $stmt->execute([$token]);
         $memo = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -650,46 +742,57 @@ class MemoController
         }
         exit;
     }
-    // プロパティ定義（クラスの先頭付近に配置）
-    private $max_storage = 536870912; // 512 * 1024 * 1024
 
     /**
-     * 画像アップロードと最適化
+     * 画像アップロード・ストレージ管理
      */
     public function uploadImage($file)
     {
-        if (empty($file['tmp_name']))
-            return;
+        if (empty($file['tmp_name'])) return null;
+
+        // --- PDF出力時に残ったゴミ(temp_...)を自動削除 ---
+        $imageDir = $this->baseDir . "images/";
+        if (is_dir($imageDir)) {
+            foreach (scandir($imageDir) as $f) {
+                if (strpos($f, 'temp_') === 0 && (time() - filemtime($imageDir . $f) > 300)) {
+                    @unlink($imageDir . $f);
+                }
+            }
+        }
 
         // 1. 容量チェック
-        $currentUserUsage = $this->getUserStorageUsage($this->user);
-        if ($currentUserUsage + $file['size'] > $this->max_storage) {
+        $usage = $this->getUserStorageUsage($this->user);
+        if ($usage + $file['size'] > $this->max_storage) {
             die("容量オーバーです。不要な画像を削除してください。");
         }
 
-        // 2. 画像の最適化（リサイズ & WebP変換）
+        // 2. 画像の生成 (JPG/PNG/WEBP/GIF対応)
         $image = $this->imagecreatefromany($file['tmp_name']);
-        if (!$image)
-            return;
+        
+        if (!$image) {
+            // ここで return してしまうと DB に image_path が入らないため、
+            // ログを確認するか、エラーを出して止める必要があります。
+            error_log("画像生成に失敗しました: " . $file['name']);
+            return null;
+        }
 
         // 保存先ディレクトリの確保
-        $imageDir = $this->baseDir . "images/";
         if (!is_dir($imageDir)) {
             mkdir($imageDir, 0777, true);
         }
 
+        // ファイル名をランダム生成（常にWebPに変換して保存）
         $filename = bin2hex(random_bytes(8)) . ".webp";
-        $path = $imageDir . $filename;
+        $fullPath = $imageDir . $filename;
+        
+        // WebPとして保存を実行
+        if (imagewebp($image, $fullPath, 80)) {
+            // 3. 使用量をDBに反映
+            $this->updateUserUsage($this->user, filesize($fullPath));
+            return $filename; 
+        }
 
-        // WebP形式、クオリティ80で保存
-        imagewebp($image, $path, 80);
-
-        // PHP 8.5以降、imagedestroy() は不要（自動解放されるため削除）
-
-        // 3. 使用量をDBに反映
-        $this->updateUserUsage($this->user, filesize($path));
-
-        return $filename; // 保存したファイル名を返す
+        return null;
     }
 
     /**
@@ -700,8 +803,7 @@ class MemoController
         $db = getDB();
         $stmt = $db->prepare("SELECT storage_usage FROM users WHERE username = ?");
         $stmt->execute([$username]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        return $row ? (int) $row['storage_usage'] : 0;
+        return (int)($stmt->fetchColumn() ?: 0);
     }
 
     /**
@@ -719,24 +821,38 @@ class MemoController
      */
     private function imagecreatefromany($filepath)
     {
-        if (!file_exists($filepath))
-            return false;
+        if (!file_exists($filepath)) return false;
 
-        $type = @exif_imagetype($filepath);
-        switch ($type) {
-            case IMAGETYPE_GIF:
-                return imagecreatefromgif($filepath);
+        // getimagesize でファイルタイプを判定 (IMAGETYPE_常数を利用)
+        $info = @getimagesize($filepath);
+        if (!$info) return false;
+
+        switch ($info[2]) {
             case IMAGETYPE_JPEG:
-                return imagecreatefromjpeg($filepath);
+                return @imagecreatefromjpeg($filepath);
             case IMAGETYPE_PNG:
-                return imagecreatefrompng($filepath);
+                return @imagecreatefrompng($filepath);
+            case IMAGETYPE_GIF:
+                return @imagecreatefromgif($filepath);
             case IMAGETYPE_WEBP:
-                return imagecreatefromwebp($filepath);
+                return @imagecreatefromwebp($filepath);
             default:
                 return false;
         }
     }
 
-
+    /**
+     * ユーザー名から安全なフォルダ名を生成する（共通ロジック）
+     */
+    private function getSafeDirName($username) {
+        if (empty($username) || $username === 'guest') {
+            return 'guest';
+        }
+        // 英数字のみならそのまま、日本語等があればハッシュ化
+        if (preg_match('/^[a-zA-Z0-9\._-]+$/', $username)) {
+            return $username;
+        }
+        return 'u_' . substr(md5($username), 0, 12);
+    }
 }
 ?>

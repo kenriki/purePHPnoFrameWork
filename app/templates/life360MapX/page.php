@@ -1,20 +1,21 @@
 <?php
 /**
- * 簡易位置情報共有ツール (自分中心表示・ドラッグ移動窓・SNS共有対応版)
+ * 簡易位置情報共有ツール (複数ユーザー表示・スマホ対応版)
  */
 
-// パス設定
+ob_start();
 require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/../../dbconfig.php';
+ob_end_clean();
 
-// --- 【修正】ヘッダーを強制的に読み込む (ログインなし対策) ---
-$header_path = __DIR__ . '/../../header.php'; 
+$header_path = __DIR__ . '/../../header.php';
 if (file_exists($header_path)) {
     include_once $header_path;
 }
 
 try {
     $pdo = getDB();
+    // user_idを50文字まで対応させ、各ユーザーを識別
     $pdo->exec("CREATE TABLE IF NOT EXISTS user_locations (
         user_id VARCHAR(50) PRIMARY KEY,
         latitude DECIMAL(10, 8),
@@ -25,194 +26,213 @@ try {
     die("接続失敗: " . $e->getMessage());
 }
 
+// 位置情報の更新（POST）
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['lat'])) {
     $stmt = $pdo->prepare("INSERT INTO user_locations (user_id, latitude, longitude) VALUES (?, ?, ?) 
                            ON DUPLICATE KEY UPDATE latitude=VALUES(latitude), longitude=VALUES(longitude)");
     $stmt->execute([$_POST['uid'], $_POST['lat'], $_POST['lng']]);
+    header('Content-Type: application/json');
     exit(json_encode(['status' => 'ok']));
 }
 
+// 全ユーザーの位置を取得して初期表示用にする
 $stmt = $pdo->query("SELECT * FROM user_locations");
 $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <div id="draggable_panel" class="controls"
-    style="position: absolute; top: 100px; left: 20px; z-index: 1000; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); min-width: 220px; max-width: 280px; box-sizing: border-box; cursor: default;">
+    style="position: absolute; top: 100px; left: 20px; z-index: 1000; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: 280px; box-sizing: border-box; touch-action: none;">
 
     <div id="drag_handle"
-        style="width: 100%; height: 20px; background: #f0f0f0; margin: -15px -15px 10px -15px; border-radius: 8px 8px 0 0; cursor: move; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #999;">
-        ⋮⋮ ドラッグして移動 ⋮⋮
+        style="width: 100%; height: 34px; background: #f8f9fa; margin: -15px -15px 10px -15px; border-radius: 12px 12px 0 0; cursor: move; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; font-size: 11px; color: #999; box-sizing: content-box; user-select: none; border-bottom: 1px solid #eee;">
+        <span>⠿ ドラッグ移動</span>
+        <span id="min_btn"
+            style="cursor: pointer; font-weight: bold; padding: 8px 12px; color: #333; background: #eee; border-radius: 6px;">[
+            ＿ ]</span>
     </div>
 
-    <div style="margin-bottom: 8px;">
-        <strong>自分: <span id="display_uid">設定中...</span></strong>
-    </div>
-    <div id="gps_status" style="font-size: 11px; color: #666; margin-bottom: 10px;">GPS取得中...</div>
+    <div id="panel_content">
+        <div id="setup_section" style="margin-bottom: 15px;">
+            <label style="font-size: 12px; font-weight: bold; display: block; margin-bottom: 5px;">自分の電話番号を設定:</label>
+            <input type="tel" id="tel_input" placeholder="08012345678"
+                style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-bottom: 8px; box-sizing: border-box; font-size: 14px;">
+            <button onclick="startSharing()"
+                style="width: 100%; background: #28a745; color: white; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: bold;">共有を開始</button>
+        </div>
 
-    <div style="display: flex; flex-direction: column; gap: 8px;">
-        <button onclick="shareLocation('line')"
-            style="background: #06C755; color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer; font-weight: bold;">LINEで送る</button>
-        <button onclick="shareLocation('teams')"
-            style="background: #4B53BC; color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer; font-weight: bold;">Teamsで送る</button>
-        <button onclick="shareLocation('x')"
-            style="background: #000000; color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer; font-weight: bold;">Xで送る</button>
-        <button onclick="shareLocation('fb')"
-            style="background: #1877F2; color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer; font-weight: bold;">Facebookで送る</button>
-    </div>
+        <div id="active_section" style="display: none;">
+            <div style="margin-bottom: 8px;">
+                <strong>共有中: <span id="display_uid" style="color: #007bff;">---</span></strong>
+            </div>
+            <div id="gps_status" style="font-size: 11px; color: #666; margin-bottom: 10px;">GPS準備中...</div>
 
-    <hr style="margin: 10px 0; border: 0; border-top: 1px solid #eee;">
-    <button onclick="resetName()"
-        style="width: 100%; background: #f0f0f0; color: #666; border: none; padding: 4px; border-radius: 4px; cursor: pointer; font-size: 10px;">表示名を変更</button>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+                <button onclick="shareLocation('line')"
+                    style="background: #06C755; color: white; border: none; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 14px;"><i
+                        class="fab fa-line"></i> LINEで送る</button>
+                <button onclick="shareLocation('teams')"
+                    style="background: #4B53BC; color: white; border: none; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 14px;"><i
+                        class="fab fa-microsoft-teams"></i> Teamsで送る</button>
+                <button onclick="shareLocation('x')"
+                    style="background: #000; color: white; border: none; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 14px;"><i
+                        class="fa-brands fa-x-twitter"></i> Xで送る</button>
+                <button onclick="shareLocation('fb')"
+                    style="background: #1877F2; color: white; border: none; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 14px;"><i
+                        class="fab fa-facebook-f"></i> Facebook</button>
+            </div>
+
+            <hr style="margin: 12px 0; border: 0; border-top: 1px solid #eee;">
+            <button onclick="resetId()"
+                style="width: 100%; background: #f0f0f0; color: #666; border: none; padding: 6px; border-radius: 4px; cursor: pointer; font-size: 11px;">電話番号を変更</button>
+        </div>
+    </div>
 </div>
 
 <div id="map" style="height: calc(100vh - 60px); width: 100%;"></div>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
-    // 1. 名前（UID）の決定
-    const urlParams = new URLSearchParams(window.location.search);
-    let myUid = urlParams.get('uid') || localStorage.getItem('my_map_name');
+    // 1. ID管理
+    let myId = localStorage.getItem('my_map_id');
+    const setupDiv = document.getElementById('setup_section');
+    const activeDiv = document.getElementById('active_section');
 
-    if (!myUid) {
-        myUid = prompt("地図に表示する名前を入力してください", "");
-        if (!myUid || myUid.trim() === "") {
-            myUid = 'Guest_' + Math.floor(Math.random() * 1000);
-        }
-        localStorage.setItem('my_map_name', myUid);
-    }
-    document.getElementById('display_uid').innerText = myUid;
-
-    function resetName() {
-        const newName = prompt("新しい名前を入力してください", myUid);
-        if (newName && newName.trim() !== "") {
-            localStorage.setItem('my_map_name', newName);
-            window.location.href = `?page=life360MapX&uid=${encodeURIComponent(newName)}`;
-        }
+    if (myId) {
+        showActiveMode(myId);
     }
 
-    // 2. 地図初期化
-    const map = L.map('map').setView([35.6812, 139.7671], 13);
-    L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
-        attribution: '© Google Maps'
-    }).addTo(map);
+    function startSharing() {
+        const input = document.getElementById('tel_input').value.trim();
+        if (input.length < 8) {
+            alert("正しい電話番号を入力してください");
+            return;
+        }
+        localStorage.setItem('my_map_id', input);
+        location.reload();
+    }
+
+    function showActiveMode(id) {
+        setupDiv.style.display = 'none';
+        activeDiv.style.display = 'block';
+        document.getElementById('display_uid').innerText = id;
+    }
+
+    function resetId() {
+        if (confirm("番号を変更して共有を停止しますか？")) {
+            localStorage.removeItem('my_map_id');
+            location.reload();
+        }
+    }
+
+    // 2. 最小化機能
+    function togglePanel() {
+        const content = document.getElementById("panel_content");
+        content.style.display = (content.style.display === "none") ? "block" : "none";
+    }
+
+    // 3. 地図初期化
+    const map = L.map('map', { zoomControl: false }).setView([35.6812, 139.7671], 13);
+    L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { attribution: '© Google Maps' }).addTo(map);
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
 
     const markers = {};
-    const initialUsers = <?php echo json_encode($users); ?>;
-    const redIcon = new L.Icon({
-        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-        iconSize: [25, 41],
-        iconAnchor: [12, 41],
-        popupAnchor: [1, -34],
-        shadowSize: [41, 41]
-    });
-
-    let hasMovedToMe = false;
-    initialUsers.forEach(u => {
-        addOrUpdateMarker(u.user_id, u.latitude, u.longitude);
-        if (u.user_id === myUid && !hasMovedToMe) {
-            map.setView([u.latitude, u.longitude], 15);
-            hasMovedToMe = true;
-        }
-    });
+    const redIcon = new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
+    const blueIcon = new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
 
     function addOrUpdateMarker(uid, lat, lng) {
+        const isMe = (uid === myId);
         if (markers[uid]) {
             markers[uid].setLatLng([lat, lng]);
         } else {
-            const isMe = (uid === myUid);
-            markers[uid] = L.marker([lat, lng], { icon: redIcon })
-                .addTo(map)
-                .bindPopup(isMe ? "<b>自分</b><br>" + uid : "ユーザー: " + uid);
+            markers[uid] = L.marker([lat, lng], { icon: isMe ? blueIcon : redIcon }).addTo(map).bindPopup("<b>" + uid + (isMe ? " (自分)" : "") + "</b>");
             if (isMe) markers[uid].openPopup();
         }
     }
 
-    // 3. 位置更新 & 住所取得ロジック
-    async function getCurrentLocationName(lat, lng) {
-        try {
-            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lng=${lng}&zoom=18&addressdetails=1`, {
-                headers: { 'Accept-Language': 'ja' }
-            });
-            const data = await response.json();
-            const addr = data.address;
-            const pref = addr.province || addr.prefecture || "";
-            const city = addr.city || addr.town || addr.village || "";
-            const sub = addr.suburb || addr.neighbourhood || "";
-            return `${pref}${city}${sub}`;
-        } catch (e) {
-            return "現在の場所";
-        }
-    }
+    // 4. ドラッグ＆クリック両立
+    const panel = document.getElementById("draggable_panel");
+    const handle = document.getElementById("drag_handle");
+    const minBtn = document.getElementById("min_btn");
+    let isDragging = false, offset = { x: 0, y: 0 };
 
-    let isFirstUpdate = true;
+    const start = (e) => {
+        if (e.target === minBtn) return;
+        const touch = e.type === 'touchstart' ? e.touches[0] : e;
+        if (e.target.closest('#drag_handle')) {
+            isDragging = true;
+            offset.x = touch.clientX - panel.offsetLeft;
+            offset.y = touch.clientY - panel.offsetTop;
+            if (e.type === 'touchstart') e.stopPropagation();
+        }
+    };
+
+    const move = (e) => {
+        if (!isDragging) return;
+        const touch = e.type === 'touchmove' ? e.touches[0] : e;
+        panel.style.left = (touch.clientX - offset.x) + "px";
+        panel.style.top = (touch.clientY - offset.y) + "px";
+        e.preventDefault();
+    };
+
+    const end = () => { isDragging = false; };
+
+    handle.addEventListener('mousedown', start);
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', end);
+    handle.addEventListener('touchstart', start, { passive: false });
+    document.addEventListener('touchmove', move, { passive: false });
+    document.addEventListener('touchend', end);
+
+    minBtn.addEventListener('click', (e) => { e.stopPropagation(); togglePanel(); });
+    minBtn.addEventListener('touchstart', (e) => { e.stopPropagation(); togglePanel(); }, { passive: false });
+
+    // 5. 位置更新ロジック
     function updateMyLocation() {
-        if (!navigator.geolocation) return;
+        if (!navigator.geolocation || !myId) return;
         navigator.geolocation.getCurrentPosition(pos => {
             const lat = pos.coords.latitude;
             const lng = pos.coords.longitude;
 
-            addOrUpdateMarker(myUid, lat, lng);
+            addOrUpdateMarker(myId, lat, lng);
             document.getElementById('gps_status').innerText = "最終更新: " + new Date().toLocaleTimeString();
 
-            if (isFirstUpdate && !hasMovedToMe) {
-                map.setView([lat, lng], 15);
-                isFirstUpdate = false;
-                hasMovedToMe = true;
-            }
-
             const fd = new FormData();
-            fd.append('uid', myUid);
+            fd.append('uid', myId); // 保存された電話番号を送信
             fd.append('lat', lat);
             fd.append('lng', lng);
             fetch(window.location.href, { method: 'POST', body: fd });
-        }, err => {
-            document.getElementById('gps_status').innerText = "GPSエラー: " + err.message;
-        }, { enableHighAccuracy: true });
+        }, null, { enableHighAccuracy: true });
     }
 
-    // 4. ドラッグ機能
-    const panel = document.getElementById("draggable_panel");
-    const handle = document.getElementById("drag_handle");
-    let isDragging = false;
-    let offset = { x: 0, y: 0 };
+    // 初期ロード時にDBから全員分を表示
+    const initialUsers = <?php echo json_encode($users); ?>;
+    initialUsers.forEach(u => addOrUpdateMarker(u.user_id, u.latitude, u.longitude));
 
-    const startDrag = (x, y) => { isDragging = true; offset.x = x - panel.offsetLeft; offset.y = y - panel.offsetTop; };
-    const doDrag = (x, y) => { if (isDragging) { panel.style.left = (x - offset.x) + "px"; panel.style.top = (y - offset.y) + "px"; } };
-    const stopDrag = () => { isDragging = false; };
+    // 定期更新
+    if (myId) {
+        updateMyLocation();
+        setInterval(updateMyLocation, 30000);
+    }
 
-    handle.onmousedown = (e) => startDrag(e.clientX, e.clientY);
-    document.onmousemove = (e) => doDrag(e.clientX, e.clientY);
-    document.onmouseup = stopDrag;
-    handle.ontouchstart = (e) => startDrag(e.touches[0].clientX, e.touches[0].clientY);
-    document.ontouchmove = (e) => doDrag(e.touches[0].clientX, e.touches[0].clientY);
-    document.ontouchend = stopDrag;
+    // 他人の更新を反映させるためにページを定期的にリロードするか、APIで取得する処理を別途追加可能
+    setInterval(() => {
+        fetch(window.location.href.split('?')[0] + '?action=get_all_users') // 簡易的に位置取得のみ行う場合は別途API化推奨
+            .then(() => { /* ここで最新の $users データを取得して markers を更新するロジックを組むとリアルタイム化します */ });
+    }, 60000);
 
-    // 5. 住所テキスト付き共有機能
+    // 6. 共有機能
     async function shareLocation(type) {
-        const myMarker = markers[myUid];
-        let text = "現在の位置情報を共有します";
-        
-        if (myMarker) {
-            const pos = myMarker.getLatLng();
-            const placeName = await getCurrentLocationName(pos.lat, pos.lng);
-            text = `【${myUid}】は今、${placeName}付近にいます。`;
-        }
-
-        const url = encodeURIComponent(`${window.location.origin}${window.location.pathname}?page=life360MapX&uid=${encodeURIComponent(myUid)}`);
-        const encodedText = encodeURIComponent(text);
-
-        const shareUrls = {
-            line: `https://social-plugins.line.me/lineit/share?url=${url}&text=${encodedText}`,
-            teams: `https://teams.microsoft.com/share?href=${url}&msgText=${encodedText}`,
-            x: `https://x.com/intent/tweet?text=${encodedText}&url=${url}`,
-            fb: `https://www.facebook.com/sharer/sharer.php?u=${url}`
+        const cleanUrl = encodeURIComponent(`${window.location.origin}${window.location.pathname}?page=life360MapX`);
+        const text = encodeURIComponent(`【${myId}】の位置情報を地図で確認！`);
+        const urls = {
+            line: `https://social-plugins.line.me/lineit/share?url=${cleanUrl}&text=${text}`,
+            teams: `https://teams.microsoft.com/share?href=${cleanUrl}&msgText=${text}`,
+            x: `https://x.com/intent/tweet?text=${text}&url=${cleanUrl}`,
+            fb: `https://www.facebook.com/sharer/sharer.php?u=${cleanUrl}`
         };
-        window.open(shareUrls[type], '_blank', type === 'fb' || type === 'teams' ? 'width=600,height=500' : '');
+        window.open(urls[type], '_blank');
     }
-
-    updateMyLocation();
-    setInterval(updateMyLocation, 30000);
 </script>

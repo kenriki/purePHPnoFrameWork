@@ -1,6 +1,6 @@
 <?php
 /**
- * 簡易位置情報共有ツール (複数ユーザー表示・スマホ対応版)
+ * 簡易位置情報共有ツール (完全版：個別マスタ登録・複数表示・スマホ対応)
  */
 
 ob_start();
@@ -15,7 +15,7 @@ if (file_exists($header_path)) {
 
 try {
     $pdo = getDB();
-    // user_idを50文字まで対応させ、各ユーザーを識別
+    // user_idを主キーにして、番号ごとに独立したデータを持つようにする
     $pdo->exec("CREATE TABLE IF NOT EXISTS user_locations (
         user_id VARCHAR(50) PRIMARY KEY,
         latitude DECIMAL(10, 8),
@@ -26,7 +26,7 @@ try {
     die("接続失敗: " . $e->getMessage());
 }
 
-// 位置情報の更新（POST）
+// 位置情報の受信とマスタ更新
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['lat'])) {
     $stmt = $pdo->prepare("INSERT INTO user_locations (user_id, latitude, longitude) VALUES (?, ?, ?) 
                            ON DUPLICATE KEY UPDATE latitude=VALUES(latitude), longitude=VALUES(longitude)");
@@ -35,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['lat'])) {
     exit(json_encode(['status' => 'ok']));
 }
 
-// 全ユーザーの位置を取得して初期表示用にする
+// 地図表示時にDB内の全ユーザーを取得する
 $stmt = $pdo->query("SELECT * FROM user_locations");
 $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
@@ -53,11 +53,11 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     <div id="panel_content">
         <div id="setup_section" style="margin-bottom: 15px;">
-            <label style="font-size: 12px; font-weight: bold; display: block; margin-bottom: 5px;">自分の電話番号を設定:</label>
-            <input type="tel" id="tel_input" placeholder="08012345678"
-                style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-bottom: 8px; box-sizing: border-box; font-size: 14px;">
+            <label style="font-size: 12px; font-weight: bold; display: block; margin-bottom: 5px;">自分の電話番号で登録:</label>
+            <input type="tel" id="tel_input" placeholder="080XXXXXXXX"
+                style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; margin-bottom: 8px; box-sizing: border-box; font-size: 16px;">
             <button onclick="startSharing()"
-                style="width: 100%; background: #28a745; color: white; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: bold;">共有を開始</button>
+                style="width: 100%; background: #28a745; color: white; border: none; padding: 12px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px;">位置共有を開始</button>
         </div>
 
         <div id="active_section" style="display: none;">
@@ -83,7 +83,7 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             <hr style="margin: 12px 0; border: 0; border-top: 1px solid #eee;">
             <button onclick="resetId()"
-                style="width: 100%; background: #f0f0f0; color: #666; border: none; padding: 6px; border-radius: 4px; cursor: pointer; font-size: 11px;">電話番号を変更</button>
+                style="width: 100%; background: #f0f0f0; color: #666; border: none; padding: 6px; border-radius: 4px; cursor: pointer; font-size: 11px;">登録番号を変更</button>
         </div>
     </div>
 </div>
@@ -95,7 +95,7 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
-    // 1. ID管理
+    // 1. 登録・識別管理
     let myId = localStorage.getItem('my_map_id');
     const setupDiv = document.getElementById('setup_section');
     const activeDiv = document.getElementById('active_section');
@@ -107,7 +107,7 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
     function startSharing() {
         const input = document.getElementById('tel_input').value.trim();
         if (input.length < 8) {
-            alert("正しい電話番号を入力してください");
+            alert("正しい番号を入力してください");
             return;
         }
         localStorage.setItem('my_map_id', input);
@@ -121,7 +121,7 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     function resetId() {
-        if (confirm("番号を変更して共有を停止しますか？")) {
+        if (confirm("登録を解除しますか？")) {
             localStorage.removeItem('my_map_id');
             location.reload();
         }
@@ -134,7 +134,7 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     // 3. 地図初期化
-    const map = L.map('map', { zoomControl: false }).setView([35.6812, 139.7671], 13);
+    const map = L.map('map', { zoomControl: false }).setView([35.522, 139.473], 14); // 町田・すずかけ台付近を初期値に
     L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { attribution: '© Google Maps' }).addTo(map);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
@@ -147,12 +147,14 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
         if (markers[uid]) {
             markers[uid].setLatLng([lat, lng]);
         } else {
-            markers[uid] = L.marker([lat, lng], { icon: isMe ? blueIcon : redIcon }).addTo(map).bindPopup("<b>" + uid + (isMe ? " (自分)" : "") + "</b>");
+            // 自分は青、他人は赤で区別
+            markers[uid] = L.marker([lat, lng], { icon: isMe ? blueIcon : redIcon }).addTo(map)
+                .bindPopup("<b>" + uid + (isMe ? " (自分)" : "") + "</b>");
             if (isMe) markers[uid].openPopup();
         }
     }
 
-    // 4. ドラッグ＆クリック両立
+    // 4. ドラッグ＆クリック両立 (スマホ対応)
     const panel = document.getElementById("draggable_panel");
     const handle = document.getElementById("drag_handle");
     const minBtn = document.getElementById("min_btn");
@@ -189,7 +191,7 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
     minBtn.addEventListener('click', (e) => { e.stopPropagation(); togglePanel(); });
     minBtn.addEventListener('touchstart', (e) => { e.stopPropagation(); togglePanel(); }, { passive: false });
 
-    // 5. 位置更新ロジック
+    // 5. 位置更新ロジック (マスタ登録・送信)
     function updateMyLocation() {
         if (!navigator.geolocation || !myId) return;
         navigator.geolocation.getCurrentPosition(pos => {
@@ -200,33 +202,27 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
             document.getElementById('gps_status').innerText = "最終更新: " + new Date().toLocaleTimeString();
 
             const fd = new FormData();
-            fd.append('uid', myId); // 保存された電話番号を送信
+            fd.append('uid', myId); // localStorageに保存した自分の番号を送信
             fd.append('lat', lat);
             fd.append('lng', lng);
             fetch(window.location.href, { method: 'POST', body: fd });
         }, null, { enableHighAccuracy: true });
     }
 
-    // 初期ロード時にDBから全員分を表示
+    // 初期ロード時にDB内の全マスタデータを表示
     const initialUsers = <?php echo json_encode($users); ?>;
     initialUsers.forEach(u => addOrUpdateMarker(u.user_id, u.latitude, u.longitude));
 
-    // 定期更新
+    // 30秒ごとに自分の位置をマスタに反映
     if (myId) {
         updateMyLocation();
         setInterval(updateMyLocation, 30000);
     }
 
-    // 他人の更新を反映させるためにページを定期的にリロードするか、APIで取得する処理を別途追加可能
-    setInterval(() => {
-        fetch(window.location.href.split('?')[0] + '?action=get_all_users') // 簡易的に位置取得のみ行う場合は別途API化推奨
-            .then(() => { /* ここで最新の $users データを取得して markers を更新するロジックを組むとリアルタイム化します */ });
-    }, 60000);
-
-    // 6. 共有機能
+    // 6. 共有リンク機能
     async function shareLocation(type) {
         const cleanUrl = encodeURIComponent(`${window.location.origin}${window.location.pathname}?page=life360MapX`);
-        const text = encodeURIComponent(`【${myId}】の位置情報を地図で確認！`);
+        const text = encodeURIComponent(`【${myId}】の位置を確認してね！`);
         const urls = {
             line: `https://social-plugins.line.me/lineit/share?url=${cleanUrl}&text=${text}`,
             teams: `https://teams.microsoft.com/share?href=${cleanUrl}&msgText=${text}`,

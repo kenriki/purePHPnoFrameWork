@@ -218,6 +218,19 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
             <input type="hidden" name="id" id="memo-id-input" value="<?= htmlspecialchars($current_id ?? '') ?>">
             <input type="hidden" name="image_path" value="<?= htmlspecialchars($memo['image_path'] ?? ''); ?>">
 
+            <div class="pin-status-area">
+                <?php 
+                $isPinned = (isset($memo['is_pinned']) && $memo['is_pinned'] == 1);
+                ?>
+                <a href="index.php?page=memo&action=toggle_pin_from_edit&id=<?= htmlspecialchars($memo['id']) ?>" 
+                class="pin-toggle-btn" 
+                style="text-decoration: none; display: flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 4px; background-color: <?= $isPinned ? '#ffeeba' : '#e2e3e5' ?>; border: 1px solid <?= $isPinned ? '#ffe8a1' : '#d6d8db' ?>; color: #212529;"
+                title="<?= $isPinned ? 'ピン留めを外す' : 'ピン留めする' ?>">
+                    <span style="font-size: 1.2rem;"><?= $isPinned ? '📌' : '📍' ?></span>
+                    <span style="font-size: 0.9rem;"><?= $isPinned ? 'ピン留め中' : 'ピン留めしていません' ?></span>
+                </a>
+            </div>
+
             <?php if ($isGuestMode): ?>
                 <div
                     style="background: #fff5f5; padding: 12px; border: 1px solid #d9534f; border-radius: 5px; margin-bottom: 15px;">

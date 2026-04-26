@@ -101,6 +101,17 @@ class MemoController
             return;
         }
 
+        if ($action === 'toggle_pin_from_edit') {
+            if (!empty($id)) {
+                // DBの状態を反転させる
+                $this->executeTogglePin($id);
+                
+                // 元の編集画面へリダイレクトして、URLを書き換える
+                header("Location: index.php?page=memo&action=edit&id=" . urlencode($id));
+                exit; // リダイレクト後は即座に終了
+            }
+        }
+
         // ゲストユーザーの同期
         if ($action === 'list') {
             $this->syncGuestMemos();
@@ -853,6 +864,31 @@ class MemoController
             return $username;
         }
         return 'u_' . substr(md5($username), 0, 12);
+    }
+
+    /**
+     * 指定したIDのピン状態を反転させる
+     */
+    private function executeTogglePin($id) {
+        $db = getDB();
+        
+        // 1. 現在のピン状態を取得
+        $stmt = $db->prepare("SELECT is_pinned FROM user_memos WHERE id = :id AND username = :user");
+        $stmt->execute([':id' => $id, ':user' => $this->user]);
+        $memo = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($memo) {
+            // 2. 状態を反転（1なら0、0なら1）
+            $newStatus = $memo['is_pinned'] ? 0 : 1;
+            
+            // 3. DBを更新
+            $update = $db->prepare("UPDATE user_memos SET is_pinned = :status, update_date = NOW() WHERE id = :id AND username = :user");
+            $update->execute([
+                ':status' => $newStatus,
+                ':id'     => $id,
+                ':user'   => $this->user
+            ]);
+        }
     }
 }
 ?>

@@ -79,6 +79,16 @@
                                 </span>
                             </div>
                         </div>
+                        <div class="memo-body">
+                            <?php if (!empty($imagePath)): ?>
+                                <div class="memo-image" style="margin-bottom: 20px;">
+                                    <img src="<?php echo htmlspecialchars($imagePath); ?>" 
+                                        alt="添付画像" 
+                                        style="max-width: 100%; height: auto; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                                </div>
+                            <?php endif; ?>
+
+                        </div>
                     </div>
                 </div>
 

@@ -678,7 +678,9 @@ class MemoController
         // 4. URLを生成してJSONで返す
         $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https" : "http";
         $host = $_SERVER['HTTP_HOST'];
-        $shareUrl = "{$protocol}://{$host}/sample/index.php?page=memo&action=view_share&token={$shareToken}";
+        $currentScript = $_SERVER['SCRIPT_NAME']; // これで /sample/index.php などを自動取得
+
+        $shareUrl = "{$protocol}://{$host}{$currentScript}?page=memo&action=view_share&token={$shareToken}";
 
         // 完了メッセージとURLを表示するテンプレートへ
         include TEMPLATE_PATH . 'memo/share_result.php';
@@ -692,6 +694,9 @@ class MemoController
      * 2. DBのusernameに基づく作成者表示
      * 3. ゲストユーザー名の整形
      */
+    /**
+     * 共有用URLからの閲覧処理
+     */
     public function view_share()
     {
         $token = $_GET['token'] ?? '';
@@ -701,53 +706,60 @@ class MemoController
 
         $db = getDB();
 
-        // 期限チェックを含めて検索 (share_expires_at > 現在時刻)
-        // サーバー時刻のズレに強いよう、DBの現在時刻と比較
+        // 1. 検索（share_expires_at > 現在時刻）
         $sql = "SELECT * FROM user_memos WHERE share_token = ? AND share_expires_at > NOW()";
         $stmt = $db->prepare($sql);
         $stmt->execute([$token]);
         $memo = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$memo) {
-            // ここで die してしまうと「リンク切れ」に見えます
             die("このリンクは無効か、有効期限が切れています。");
         }
 
         // 2. 復号化処理
-        // saveMemoと同じ鍵・ロジックを使用するため、自クラスのメソッドを呼び出す
         $decryptedContent = $this->decryptContent($memo['content']);
 
         // 3. 表示用データの整理
-        // タイトル：復号した内容の1行目から抽出（getMemoListと同様のロジック）
         $lines = explode("\n", str_replace(["\r\n", "\r"], "\n", $decryptedContent));
         $firstLine = trim($lines[0] ?? "");
         $title = !empty($firstLine) ? mb_strimwidth($firstLine, 0, 60, "...") : "共有されたメモ";
 
-        // 作成者：管理ユーザー固定ではなく、DBのusernameを使用
         $creator = $memo['username'];
         if (strpos($creator, 'guest_') === 0) {
-            // ゲストの場合はプレフィックスを除去して表示
             $creator = htmlspecialchars(substr($creator, 6)) . " (ゲスト)";
         } else {
             $creator = htmlspecialchars($creator);
         }
 
-        // 有効期限
         $expires_at = $memo['share_expires_at'];
-
-        // テンプレートへ渡す変数
         $content = $decryptedContent;
+
+        // --- 【修正確定版：画像パスの動的生成】 ---
+        $imagePath = null;
+        if (!empty($memo['image_path'])) {
+            // 1. ベースURL（例: /sample）を動的に取得
+            $baseUrl = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
+            
+            // 2. DBのパスからファイル名のみを抽出
+            $fileName = basename($memo['image_path']);
+            
+            // 3. 画像の保存ディレクトリを組み立て
+            // 閲覧者が誰であれ、画像の場所は「作成者（$memo['username']）」のフォルダを指す必要があります。
+            $imagePath = $baseUrl . '/app/data/user_memos/' . $memo['username'] . '/images/' . $fileName;
+        }
+        // ------------------------------------------
 
         // 4. 表示
         $templateFile = defined('TEMPLATE_PATH') ? TEMPLATE_PATH . 'memo/view_only.php' : null;
         if ($templateFile && file_exists($templateFile)) {
-            // view_only.php 内では $title, $content, $creator, $expires_at を使用
             include $templateFile;
         } else {
-            // テンプレートがない場合のフォールバック表示
+            // フォールバック表示
             echo "<!DOCTYPE html><html lang='ja'><head><meta charset='UTF-8'><title>共有メモ</title></head><body>";
             echo "<h1>" . htmlspecialchars($title) . "</h1>";
-            echo "<p style='color:#666;'>作成者: {$creator} / 有効期限: {$expires_at}</p><hr>";
+            if ($imagePath) {
+                echo "<div style='margin-bottom:20px;'><img src='" . htmlspecialchars($imagePath) . "' style='max-width:100%;'></div>";
+            }
             echo "<div>" . nl2br(htmlspecialchars($content)) . "</div>";
             echo "</body></html>";
         }

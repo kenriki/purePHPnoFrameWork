@@ -280,7 +280,7 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
                         $safeFolder = (!preg_match('/^[a-zA-Z0-9\._-]+$/', $owner)) ? 'u_' . substr(md5($owner), 0, 12) : $owner;
                         
                         // パス混入を防ぐため、現在のディレクトリ構造に合わせて調整してください
-                        $projectRoot = "/test"; // 本番環境に合わせて空文字 "" または "/test" に変更
+                        $projectRoot = "/sample"; // 本番環境に合わせて空文字 "" または "/test" に変更
                         $imgUrl = $projectRoot . "/app/data/user_memos/" . htmlspecialchars($safeFolder) . "/images/" . htmlspecialchars($memo['image_path']);
                     ?>
                     <button type="button" class="delete-image-btn" title="サーバーから物理削除" onclick="deleteImageFromServer('<?= htmlspecialchars($current_id) ?>')">×</button>

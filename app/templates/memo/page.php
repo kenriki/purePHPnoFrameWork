@@ -218,22 +218,27 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
             <input type="hidden" name="id" id="memo-id-input" value="<?= htmlspecialchars($current_id ?? '') ?>">
             <input type="hidden" name="image_path" value="<?= htmlspecialchars($memo['image_path'] ?? ''); ?>">
 
-            <div class="pin-status-area">
+            <div class="pin-status-area" style="margin-bottom: 15px;">
                 <?php 
+                // 新規作成時は $memo 自体が null なので isset で判定
                 $isPinned = (isset($memo['is_pinned']) && $memo['is_pinned'] == 1);
+                $m_id = $memo['id'] ?? null;
                 ?>
-                <a href="index.php?page=memo&action=toggle_pin_from_edit&id=<?= htmlspecialchars($memo['id']) ?>" 
-                class="pin-toggle-btn" 
-                style="text-decoration: none; display: flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 4px; background-color: <?= $isPinned ? '#ffeeba' : '#e2e3e5' ?>; border: 1px solid <?= $isPinned ? '#ffe8a1' : '#d6d8db' ?>; color: #212529;"
-                title="<?= $isPinned ? 'ピン留めを外す' : 'ピン留めする' ?>">
-                    <span style="font-size: 1.2rem;"><?= $isPinned ? '📌' : '📍' ?></span>
-                    <span style="font-size: 0.9rem;"><?= $isPinned ? 'ピン留め中' : 'ピン留めしていません' ?></span>
-                </a>
+                <?php if ($m_id): ?>
+                    <a href="index.php?page=memo&action=toggle_pin_from_edit&id=<?= htmlspecialchars($m_id) ?>" 
+                    class="pin-toggle-btn" 
+                    style="text-decoration: none; display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px; border-radius: 4px; background-color: <?= $isPinned ? '#ffeeba' : '#f8f9fa' ?>; border: 1px solid <?= $isPinned ? '#ffe8a1' : '#ddd' ?>; color: #212529;"
+                    title="<?= $isPinned ? 'ピン留めを外す' : 'ピン留めする' ?>">
+                        <span style="font-size: 1.2rem;"><?= $isPinned ? '📌' : '📍' ?></span>
+                        <span style="font-size: 0.9rem; font-weight: bold;"><?= $isPinned ? 'ピン留め中' : 'ピン留めする' ?></span>
+                    </a>
+                <?php else: ?>
+                    <small style="color: #888;">※ピン留めは保存後に設定できます</small>
+                <?php endif; ?>
             </div>
 
             <?php if ($isGuestMode): ?>
-                <div
-                    style="background: #fff5f5; padding: 12px; border: 1px solid #d9534f; border-radius: 5px; margin-bottom: 15px;">
+                <div style="background: #fff5f5; padding: 12px; border: 1px solid #d9534f; border-radius: 5px; margin-bottom: 15px;">
                     <label style="color: #d9534f; font-weight: bold; font-size: 0.9rem;">⚠️ ゲストモード：保存時に署名が必要です</label>
                     <input type="text" name="guest_name" placeholder="お名前"
                         style="width: 100%; margin-top: 5px; padding: 8px; border: 1px solid #ccc;">
@@ -241,7 +246,7 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
             <?php endif; ?>
 
             <div style="background: #f9f9f9; padding: 15px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #eee;">
-                <textarea name="content" id="memo-content" style="height: 400px; padding: 15px; border: 1px solid #ccc; border-radius: 5px; line-height: 1.6; resize: vertical;" placeholder="内容を入力してください..."><?= htmlspecialchars($content ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
+                <textarea name="content" id="memo-content" style="height: 400px; padding: 15px; border: 1px solid #ccc; border-radius: 5px; line-height: 1.6; resize: vertical;" placeholder="内容を入力してください..."><?= htmlspecialchars($content ?? $memo['content'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
             </div>
 
             <div style="margin-bottom: 15px; padding: 10px; border: 1px dashed #ccc; border-radius: 5px; background: #fff;">
@@ -250,10 +255,12 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
                 </p>
                 <label style="display: block; font-weight: bold; margin-bottom: 5px;">📸 写真を添付 (PDFにも反映されます)</label>
                 <input type="file" name="memo_image" id="file-input" accept="image/*" style="font-size: 0.9rem;">
+                
                 <div style="width: 100%; background: #eee; height: 8px; border-radius: 4px; margin-top: 10px;">
-                    <div id="storage-progress-bar" style="width: <?= (int)$percent ?>%; background: #28a745; height: 100%; border-radius: 4px;"></div>
+                    <?php $p_val = $percent ?? 0; ?>
+                    <div id="storage-progress-bar" style="width: <?= (int)$p_val ?>%; background: #28a745; height: 100%; border-radius: 4px;"></div>
                 </div>
-                <small style="color: #666;">使用量: <?= $current_mb ?>MB / <?= $max_mb ?>MB</small>
+                <small style="color: #666;">使用量: <?= $current_mb ?? 0 ?>MB / <?= $max_mb ?? 512 ?>MB</small>
             </div>
 
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
@@ -271,10 +278,13 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
                     <?php 
                         $owner = $memo['username'] ?? $display_user;
                         $safeFolder = (!preg_match('/^[a-zA-Z0-9\._-]+$/', $owner)) ? 'u_' . substr(md5($owner), 0, 12) : $owner;
-                        $imgUrl = "/sample/app/data/user_memos/" . htmlspecialchars($safeFolder) . "/images/" . htmlspecialchars($memo['image_path']);
+                        
+                        // パス混入を防ぐため、現在のディレクトリ構造に合わせて調整してください
+                        $projectRoot = "/test"; // 本番環境に合わせて空文字 "" または "/test" に変更
+                        $imgUrl = $projectRoot . "/app/data/user_memos/" . htmlspecialchars($safeFolder) . "/images/" . htmlspecialchars($memo['image_path']);
                     ?>
                     <button type="button" class="delete-image-btn" title="サーバーから物理削除" onclick="deleteImageFromServer('<?= htmlspecialchars($current_id) ?>')">×</button>
-                    <img src="<?= $imgUrl ?>" class="memo-image" title="クリックで拡大">
+                    <img src="<?= $imgUrl ?>" class="memo-image" title="クリックで拡大" style="max-width: 200px; border-radius: 8px; cursor: pointer;">
                 </div>
             <?php endif; ?>
         </form>

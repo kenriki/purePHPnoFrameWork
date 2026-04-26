@@ -236,6 +236,38 @@ class MemoController
     /**
      * メモの新規保存・更新
      */
+    // private function saveMemo($id, $content)
+    // {
+    //     $db = getDB();
+    //     $isNew = empty($id);
+    //     if ($isNew)
+    //         $id = $this->generateNextId();
+
+    //     $saveUser = $this->user;
+    //     if ($saveUser === 'guest' && !empty($_POST['guest_name'])) {
+    //         $_SESSION['guest_name'] = $_POST['guest_name'];
+    //         $saveUser = 'guest_' . $_POST['guest_name'];
+    //     }
+
+    //     // --- 暗号化 ---
+    //     $ivLength = openssl_cipher_iv_length($this->cipher_method);
+    //     $iv = openssl_random_pseudo_bytes($ivLength);
+    //     $encrypted = openssl_encrypt($content, $this->cipher_method, $this->cipher_key, 0, $iv);
+    //     $saveData = base64_encode($iv . $encrypted);
+
+    //     // 物理ファイル同期
+    //     file_put_contents($this->baseDir . $id . ".txt", $saveData);
+
+    //     // DB更新
+    //     if ($isNew) {
+    //         $stmt = $db->prepare("INSERT INTO user_memos (id, username, content, create_date, update_date) VALUES (?, ?, ?, NOW(), NOW())");
+    //         $stmt->execute([$id, $saveUser, $saveData]);
+    //     } else {
+    //         $stmt = $db->prepare("UPDATE user_memos SET content = ?, update_date = NOW() WHERE id = ?");
+    //         $stmt->execute([$saveData, $id]);
+    //     }
+    // }
+
     private function saveMemo($id, $content)
     {
         $db = getDB();
@@ -249,22 +281,36 @@ class MemoController
             $saveUser = 'guest_' . $_POST['guest_name'];
         }
 
+        // --- 画像アップロード処理 ---
+        $imagePath = null;
+        if (!empty($_FILES['memo_image']['tmp_name'])) {
+            // 前回の回答で作成した uploadImage メソッドを呼び出す
+            $imagePath = $this->uploadImage($_FILES['memo_image']);
+        }
+
         // --- 暗号化 ---
         $ivLength = openssl_cipher_iv_length($this->cipher_method);
         $iv = openssl_random_pseudo_bytes($ivLength);
         $encrypted = openssl_encrypt($content, $this->cipher_method, $this->cipher_key, 0, $iv);
         $saveData = base64_encode($iv . $encrypted);
 
-        // 物理ファイル同期
+        // 物理ファイル同期（テキスト）
         file_put_contents($this->baseDir . $id . ".txt", $saveData);
 
         // DB更新
         if ($isNew) {
+            // image_path カラムを追加したSQL
             $stmt = $db->prepare("INSERT INTO user_memos (id, username, content, create_date, update_date) VALUES (?, ?, ?, NOW(), NOW())");
             $stmt->execute([$id, $saveUser, $saveData]);
         } else {
-            $stmt = $db->prepare("UPDATE user_memos SET content = ?, update_date = NOW() WHERE id = ?");
-            $stmt->execute([$saveData, $id]);
+            // 更新時は画像がある場合のみ image_path を更新する
+            if ($imagePath) {
+                $stmt = $db->prepare("UPDATE user_memos SET content = ?, update_date = NOW() WHERE id = ?");
+                $stmt->execute([$saveData, $id]);
+            } else {
+                $stmt = $db->prepare("UPDATE user_memos SET content = ?, update_date = NOW() WHERE id = ?");
+                $stmt->execute([$saveData, $id]);
+            }
         }
     }
 
@@ -496,6 +542,10 @@ class MemoController
 
         return $memos; // 配列を返す（空なら空配列）
     }
+
+    /**
+     * 24時間限定の共有URLを発行する
+     */
     public function generate_share_url()
     {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST')
@@ -527,9 +577,7 @@ class MemoController
         include TEMPLATE_PATH . 'memo/share_result.php';
         exit;
     }
-    /**
-     * 共有用URLからの閲覧処理
-     */
+    
     /**
      * 共有用URLからの閲覧処理
      * 修正ポイント: 
@@ -558,6 +606,7 @@ class MemoController
         $memo = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$memo) {
+            // ここで die してしまうと「リンク切れ」に見えます
             die("このリンクは無効か、有効期限が切れています。");
         }
 
@@ -601,5 +650,93 @@ class MemoController
         }
         exit;
     }
+    // プロパティ定義（クラスの先頭付近に配置）
+    private $max_storage = 536870912; // 512 * 1024 * 1024
+
+    /**
+     * 画像アップロードと最適化
+     */
+    public function uploadImage($file)
+    {
+        if (empty($file['tmp_name']))
+            return;
+
+        // 1. 容量チェック
+        $currentUserUsage = $this->getUserStorageUsage($this->user);
+        if ($currentUserUsage + $file['size'] > $this->max_storage) {
+            die("容量オーバーです。不要な画像を削除してください。");
+        }
+
+        // 2. 画像の最適化（リサイズ & WebP変換）
+        $image = $this->imagecreatefromany($file['tmp_name']);
+        if (!$image)
+            return;
+
+        // 保存先ディレクトリの確保
+        $imageDir = $this->baseDir . "images/";
+        if (!is_dir($imageDir)) {
+            mkdir($imageDir, 0777, true);
+        }
+
+        $filename = bin2hex(random_bytes(8)) . ".webp";
+        $path = $imageDir . $filename;
+
+        // WebP形式、クオリティ80で保存
+        imagewebp($image, $path, 80);
+
+        // PHP 8.5以降、imagedestroy() は不要（自動解放されるため削除）
+
+        // 3. 使用量をDBに反映
+        $this->updateUserUsage($this->user, filesize($path));
+
+        return $filename; // 保存したファイル名を返す
+    }
+
+    /**
+     * DBから現在のユーザーの使用量を取得
+     */
+    private function getUserStorageUsage($username)
+    {
+        $db = getDB();
+        $stmt = $db->prepare("SELECT storage_usage FROM users WHERE username = ?");
+        $stmt->execute([$username]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ? (int) $row['storage_usage'] : 0;
+    }
+
+    /**
+     * DBの使用量を更新
+     */
+    private function updateUserUsage($username, $filesize)
+    {
+        $db = getDB();
+        $stmt = $db->prepare("UPDATE users SET storage_usage = storage_usage + ? WHERE username = ?");
+        $stmt->execute([(int) $filesize, $username]);
+    }
+
+    /**
+     * 画像形式を自動判別してリソースを生成
+     */
+    private function imagecreatefromany($filepath)
+    {
+        if (!file_exists($filepath))
+            return false;
+
+        $type = @exif_imagetype($filepath);
+        switch ($type) {
+            case IMAGETYPE_GIF:
+                return imagecreatefromgif($filepath);
+            case IMAGETYPE_JPEG:
+                return imagecreatefromjpeg($filepath);
+            case IMAGETYPE_PNG:
+                return imagecreatefrompng($filepath);
+            case IMAGETYPE_WEBP:
+                return imagecreatefromwebp($filepath);
+            default:
+                return false;
+        }
+    }
+
+
 }
 ?>

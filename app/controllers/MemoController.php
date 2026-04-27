@@ -240,11 +240,13 @@ class MemoController
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         foreach ($rows as &$row) {
+            // 1. コンテンツの復号
             $decrypted = $this->decryptContent($row['content'] ?? "");
+            // 2. タイトル抽出ロジック
             $firstLine = trim(explode("\n", str_replace(["\r\n", "\r"], "\n", $decrypted))[0] ?? "");
 
             $displayTitle = !empty($firstLine) ? mb_strimwidth($firstLine, 0, 60, "...") : "無題のメモ #" . $row['id'];
-
+            // 3. サフィックス（ゲスト表示用）の定義
             $suffix = "";
             if (strpos($row['username'], 'guest_') === 0) {
                 $suffix = " <span class='guest-label'>(" . htmlspecialchars(substr($row['username'], 6)) . ")</span>";
@@ -467,7 +469,7 @@ class MemoController
                 $tempPng = $baseDir . "temp_" . time() . ".png";
                 $imgInfo = getimagesize($originalPath);
                 $img = null;
-                
+
                 // GDライブラリによる変換
                 switch ($imgInfo[2]) {
                     case IMAGETYPE_WEBP: $img = @imagecreatefromwebp($originalPath); break;
@@ -482,7 +484,7 @@ class MemoController
                     $pdf->Ln(10);
                     // 画像の埋め込み。第5引数に 'PNG' を明示
                     $pdf->Image($tempPng, $pdf->GetX() + 5, $pdf->GetY(), 100, 0, 'PNG');
-                    
+
                     // 削除フラグ（出力後に削除するため）
                     $tempFileToDelete = $tempPng;
                 } else {
@@ -502,7 +504,7 @@ class MemoController
 
         header('Content-Type: application/pdf');
         header("Content-Disposition: attachment; filename=memo_" . date('YmdHis') . ".pdf");
-        
+
         // PDFデータの生成
         $pdfData = $pdf->Output('S');
 
@@ -543,7 +545,7 @@ class MemoController
 
         try {
             $db = getDB();
-            
+
             // 1. DBから現在の画像名とユーザー名を取得
             $stmt = $db->prepare("SELECT image_path, username FROM user_memos WHERE id = ?");
             $stmt->execute([$memoId]);
@@ -553,11 +555,11 @@ class MemoController
                 // 2. パスの生成（View側とロジックを統一）
                 $owner = $memo['username'] ?: 'guest';
                 $safeFolder = preg_match('/^[a-zA-Z0-9\._-]+$/', $owner) ? $owner : 'u_' . substr(md5($owner), 0, 12);
-                
+
                 // 物理ファイルの絶対パス
                 $baseDir = "C:/Apache24/htdocs/test/app/data/user_memos/{$safeFolder}/images/";
                 $filePath = $baseDir . $memo['image_path'];
-                
+
                 // 3. 物理ファイルの削除
                 if (file_exists($filePath)) {
                     if (!unlink($filePath)) {
@@ -686,16 +688,13 @@ class MemoController
         include TEMPLATE_PATH . 'memo/share_result.php';
         exit;
     }
-    
+
     /**
      * 共有用URLからの閲覧処理
      * 修正ポイント: 
      * 1. 自クラスの decryptContent による確実な復号
      * 2. DBのusernameに基づく作成者表示
      * 3. ゲストユーザー名の整形
-     */
-    /**
-     * 共有用URLからの閲覧処理
      */
     public function view_share()
     {
@@ -713,25 +712,33 @@ class MemoController
         $memo = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$memo) {
+            // ここで die してしまうと「リンク切れ」に見えます
             die("このリンクは無効か、有効期限が切れています。");
         }
 
         // 2. 復号化処理
+        // saveMemoと同じ鍵・ロジックを使用するため、自クラスのメソッドを呼び出す
         $decryptedContent = $this->decryptContent($memo['content']);
 
         // 3. 表示用データの整理
+        // タイトル：復号した内容の1行目から抽出（getMemoListと同様のロジック）
         $lines = explode("\n", str_replace(["\r\n", "\r"], "\n", $decryptedContent));
         $firstLine = trim($lines[0] ?? "");
         $title = !empty($firstLine) ? mb_strimwidth($firstLine, 0, 60, "...") : "共有されたメモ";
 
+        // 作成者：管理ユーザー固定ではなく、DBのusernameを使用
         $creator = $memo['username'];
         if (strpos($creator, 'guest_') === 0) {
+            // ゲストの場合はプレフィックスを除去して表示
             $creator = htmlspecialchars(substr($creator, 6)) . " (ゲスト)";
         } else {
             $creator = htmlspecialchars($creator);
         }
 
+        // 有効期限
         $expires_at = $memo['share_expires_at'];
+
+        // テンプレートへ渡す変数
         $content = $decryptedContent;
 
         // --- 【修正確定版：画像パスの動的生成】 ---
@@ -752,9 +759,10 @@ class MemoController
         // 4. 表示
         $templateFile = defined('TEMPLATE_PATH') ? TEMPLATE_PATH . 'memo/view_only.php' : null;
         if ($templateFile && file_exists($templateFile)) {
+            // view_only.php 内では $title, $content, $creator, $expires_at を使用
             include $templateFile;
         } else {
-            // フォールバック表示
+            // テンプレートがない場合のフォールバック表示
             echo "<!DOCTYPE html><html lang='ja'><head><meta charset='UTF-8'><title>共有メモ</title></head><body>";
             echo "<h1>" . htmlspecialchars($title) . "</h1>";
             if ($imagePath) {
@@ -771,7 +779,11 @@ class MemoController
      */
     public function uploadImage($file)
     {
-        if (empty($file['tmp_name'])) return null;
+        if (empty($file['tmp_name']))
+            return null;
+
+        ini_set('memory_limit', '512M'); // 高精細スクショ展開用のメモリ確保
+        set_time_limit(60);              // WebP変換にかかる時間を考慮
 
         // --- PDF出力時に残ったゴミ(temp_...)を自動削除 ---
         $imageDir = $this->baseDir . "images/";
@@ -791,7 +803,7 @@ class MemoController
 
         // 2. 画像の生成 (JPG/PNG/WEBP/GIF対応)
         $image = $this->imagecreatefromany($file['tmp_name']);
-        
+
         if (!$image) {
             // ここで return してしまうと DB に image_path が入らないため、
             // ログを確認するか、エラーを出して止める必要があります。
@@ -807,12 +819,12 @@ class MemoController
         // ファイル名をランダム生成（常にWebPに変換して保存）
         $filename = bin2hex(random_bytes(8)) . ".webp";
         $fullPath = $imageDir . $filename;
-        
+
         // WebPとして保存を実行
         if (imagewebp($image, $fullPath, 80)) {
             // 3. 使用量をDBに反映
             $this->updateUserUsage($this->user, filesize($fullPath));
-            return $filename; 
+            return $filename;
         }
 
         return null;
@@ -844,11 +856,13 @@ class MemoController
      */
     private function imagecreatefromany($filepath)
     {
-        if (!file_exists($filepath)) return false;
+        if (!file_exists($filepath))
+            return false;
 
         // getimagesize でファイルタイプを判定 (IMAGETYPE_常数を利用)
         $info = @getimagesize($filepath);
-        if (!$info) return false;
+        if (!$info)
+            return false;
 
         switch ($info[2]) {
             case IMAGETYPE_JPEG:

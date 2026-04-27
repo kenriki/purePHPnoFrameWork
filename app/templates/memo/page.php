@@ -250,9 +250,9 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
             </div>
 
             <div style="margin-bottom: 15px; padding: 10px; border: 1px dashed #ccc; border-radius: 5px; background: #fff;">
-                <p style="color: #d9534f; font-size: 0.9em; font-weight: bold;">
+                <!-- <p style="color: #d9534f; font-size: 0.9em; font-weight: bold;">
                     ※現在はスクリーンショット（PNG形式）のみ対応しています。JPGやGIFを選択するとエラーになるため、ご注意ください。
-                </p>
+                </p> -->
                 <label style="display: block; font-weight: bold; margin-bottom: 5px;">📸 写真を添付 (PDFにも反映されます)</label>
                 <input type="file" name="memo_image" id="file-input" accept="image/*" style="font-size: 0.9rem;">
                 
@@ -408,20 +408,20 @@ document.addEventListener('DOMContentLoaded', function() {
     const fileInput = document.getElementById('file-input');
 
     // 1. ファイルバリデーション (PNGのみ)
-    if (fileInput) {
-        fileInput.addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
+    // if (fileInput) {
+    //     fileInput.addEventListener('change', function(e) {
+    //         const file = e.target.files[0];
+    //         if (!file) return;
 
-            const isPng = file.type === 'image/png';
-            const isPngExt = file.name.toLowerCase().endsWith('.png');
+    //         const isPng = file.type === 'image/png';
+    //         const isPngExt = file.name.toLowerCase().endsWith('.png');
 
-            if (!isPng || !isPngExt) {
-                alert("申し訳ありませんが、現在はJPGやGIF形式には対応しておりません。\nスクリーンショット（PNG形式）の画像を選択してください。");
-                this.value = ""; 
-            }
-        });
-    }
+    //         if (!isPng || !isPngExt) {
+    //             alert("申し訳ありませんが、現在はJPGやGIF形式には対応しておりません。\nスクリーンショット（PNG形式）の画像を選択してください。");
+    //             this.value = ""; 
+    //         }
+    //     });
+    // }
 
     // 2. フォーム送信時のプログレスバー
     if (form && saveBtn) {

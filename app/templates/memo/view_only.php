@@ -4,8 +4,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <title>共有されたメモ - <?= htmlspecialchars($memo['title'] ?? '無題') ?></title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="<?php if (strpos($_SERVER['HTTP_USER_AGENT'], 'Line') !== false): ?>
+    <meta property=" al:android:url"
+            content="https://desktop-mnoqic1.tail7aa158.ts.net/index.php?page=memo&action=view_share&token=60d9b1abcbfd4e11b12361901498657f&openExternalBrowser=1">
+        <meta property="al:ios:url"
+            content="https://desktop-mnoqic1.tail7aa158.ts.net/index.php?page=memo&action=view_share&token=60d9b1abcbfd4e11b12361901498657f&openExternalBrowser=1">
+        <script>
+            // JSでのリダイレクトも念のため併用
+            window.location.href = window.location.href + (window.location.href.indexOf('?') > -1 ? '&' : '?') + 'openExternalBrowser=1';
+        </script>
+    <?php endif; ?>stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
@@ -92,7 +102,7 @@
                             <i class="far fa-file-alt fa-2x text-primary me-3"></i>
                             <h2 class="h4 mb-0">共有されたメモ</h2>
                             <div class="ms-auto d-flex align-items-center">
-                                <a href="index.php?page=memo&action=view_share&token=<?= htmlspecialchars($_GET['token'] ?? '') ?>&download=pdf"
+                                <a href="index.php?openExternalBrowser=1&page=memo&action=view_share&token=<?= htmlspecialchars($_GET['token'] ?? '') ?>&download=pdf"
                                     class="btn btn-outline-danger btn-sm me-2">
                                     <i class="fas fa-file-pdf"></i> PDF保存
                                 </a>

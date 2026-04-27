@@ -105,7 +105,7 @@ class MemoController
             if (!empty($id)) {
                 // DBの状態を反転させる
                 $this->executeTogglePin($id);
-                
+
                 // 元の編集画面へリダイレクトして、URLを書き換える
                 header("Location: index.php?page=memo&action=edit&id=" . urlencode($id));
                 exit; // リダイレクト後は即座に終了
@@ -127,8 +127,8 @@ class MemoController
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pdf_export'])) {
             // フォームから画像パスとユーザー名も受け取るようにします
             $this->generatePdf(
-                $_POST['content'] ?? '', 
-                $_POST['guest_name'] ?? '', 
+                $_POST['content'] ?? '',
+                $_POST['guest_name'] ?? '',
                 $_POST['image_path'] ?? '', // 追加
                 $this->user                 // 追加（現在のログインユーザー）
             );
@@ -290,7 +290,7 @@ class MemoController
 
         // DB更新
         if ($isNew) {
-        	// image_path カラムを追加したSQL
+            // image_path カラムを追加したSQL
             $stmt = $db->prepare("INSERT INTO user_memos (id, username, content, image_path, create_date, update_date) VALUES (?, ?, ?, ?, NOW(), NOW())");
             $stmt->execute([$id, $saveUser, $saveData, $imagePath]);
         } else {
@@ -438,9 +438,13 @@ class MemoController
      */
     private function generatePdf($content, $guestName = '', $imagePath = '', $username = '')
     {
+        // 追加：これまでのWarning出力をすべて消し去る
+        if (ob_get_length())
+            ob_clean();
+
         while (ob_get_level())
             ob_end_clean();
-            
+
         require_once 'C:\\Apache24\\htdocs\\sample\\public\\tfpdf.php';
 
         $pdf = new tFPDF();
@@ -459,7 +463,7 @@ class MemoController
         if (!empty($imagePath)) {
             $owner = $username ?: 'guest';
             $safeFolder = preg_match('/^[a-zA-Z0-9\._-]+$/', $owner) ? $owner : 'u_' . substr(md5($owner), 0, 12);
-            
+
             // パスの組み立て（\ と / が混在しないよう調整）
             $baseDir = "C:/Apache24/htdocs/sample/app/data/user_memos/{$safeFolder}/images/";
             //$originalPath = $baseDir . $imagePath;
@@ -472,9 +476,15 @@ class MemoController
 
                 // GDライブラリによる変換
                 switch ($imgInfo[2]) {
-                    case IMAGETYPE_WEBP: $img = @imagecreatefromwebp($originalPath); break;
-                    case IMAGETYPE_JPEG: $img = @imagecreatefromjpeg($originalPath); break;
-                    case IMAGETYPE_PNG:  $img = @imagecreatefrompng($originalPath);  break;
+                    case IMAGETYPE_WEBP:
+                        $img = @imagecreatefromwebp($originalPath);
+                        break;
+                    case IMAGETYPE_JPEG:
+                        $img = @imagecreatefromjpeg($originalPath);
+                        break;
+                    case IMAGETYPE_PNG:
+                        $img = @imagecreatefrompng($originalPath);
+                        break;
                 }
 
                 if ($img) {
@@ -509,7 +519,8 @@ class MemoController
         $pdfData = $pdf->Output('S');
 
         // 出力前に、もし何か（警告など）が出てしまっていたらクリアする
-        if (ob_get_length()) ob_clean();
+        if (ob_get_length())
+            ob_clean();
 
         header('Content-Type: application/pdf');
         header("Content-Disposition: attachment; filename=memo_" . date('YmdHis') . ".pdf");
@@ -699,6 +710,12 @@ class MemoController
     public function view_share()
     {
         $token = $_GET['token'] ?? '';
+        // PDFダウンロードのフラグがある場合
+        if (isset($_GET['download']) && $_GET['download'] === 'pdf') {
+            // ここでPDF生成ロジックを走らせて exit する
+            $this->executePdfDownload($token);
+            return;
+        }
         if (empty($token)) {
             die("不正なアクセスです。");
         }
@@ -719,6 +736,21 @@ class MemoController
         // 2. 復号化処理
         // saveMemoと同じ鍵・ロジックを使用するため、自クラスのメソッドを呼び出す
         $decryptedContent = $this->decryptContent($memo['content']);
+
+        // PDFダウンロードがリクエストされた場合
+        if (isset($_GET['download']) && $_GET['download'] === 'pdf') {
+            // PDF生成に必要なデータをセット
+            $data = [
+                'title' => $memo['title'],
+                'content' => $this->decryptContent($memo['content']),
+                'image_path' => $memo['image_path'],
+                'username' => $memo['username']
+            ];
+
+            // 既存のPDF生成メソッドを呼び出し（出力先にブラウザを指定）
+            $this->generatePdf($data, true);
+            exit;
+        }
 
         // 3. 表示用データの整理
         // タイトル：復号した内容の1行目から抽出（getMemoListと同様のロジック）
@@ -746,13 +778,14 @@ class MemoController
         if (!empty($memo['image_path'])) {
             // 1. ベースURL（例: /sample）を動的に取得
             $baseUrl = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
-            
+
             // 2. DBのパスからファイル名のみを抽出
             $fileName = basename($memo['image_path']);
-            
+
             // 3. 画像の保存ディレクトリを組み立て
             // 閲覧者が誰であれ、画像の場所は「作成者（$memo['username']）」のフォルダを指す必要があります。
-            $imagePath = $baseUrl . '/app/data/user_memos/' . $memo['username'] . '/images/' . $fileName;
+            //$imagePath = $baseUrl . '/app/data/user_memos/' . $memo['username'] . '/images/' . $fileName;
+            $imagePath = '/sample/app/data/user_memos/' . $memo['username'] . '/images/' . $fileName;
         }
         // ------------------------------------------
 
@@ -771,6 +804,51 @@ class MemoController
             echo "<div>" . nl2br(htmlspecialchars($content)) . "</div>";
             echo "</body></html>";
         }
+        exit;
+    }
+
+    /**
+     * 共有トークンからPDFを生成して出力する
+     */
+    private function executePdfDownload($token)
+    {
+        // 重要：出力バッファをクリアして、WarningがPDFに混じらないようにする
+        if (ob_get_length())
+            ob_clean();
+
+        $db = getDB();
+        $sql = "SELECT * FROM user_memos WHERE share_token = ? AND share_expires_at > NOW()";
+        $stmt = $db->prepare($sql);
+        $stmt->execute([$token]);
+        $memo = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$memo) {
+            die("有効期限切れか、不正なトークンです。");
+        }
+
+        $decryptedContent = $this->decryptContent($memo['content']);
+
+        // 画像パスの組み立て（メソッドを呼ばず直接書く）
+        $fullImagePath = null;
+        if (!empty($memo['image_path'])) {
+            $fileName = basename($memo['image_path']);
+            $fullImagePath = $_SERVER['DOCUMENT_ROOT'] . '/sample/app/data/user_memos/' . $memo['username'] . '/images/' . $fileName;
+        }
+
+        $pdfData = [
+            'title' => !empty($memo['title']) ? $memo['title'] : '共有されたメモ',
+            'content' => $decryptedContent,
+            'image_path' => $fullImagePath,
+            'created_at' => $memo['created_at'] ?? date('Y-m-d H:i:s')
+        ];
+
+        // PDF生成。ここで header() が送出されます。
+        $this->generatePdf(
+            $pdfData['content'],    // 第1引数: $content
+            '共有ユーザー',          // 第2引数: $guestName (適宜変更可)
+            basename($memo['image_path']), // 第3引数: $imagePath (ファイル名のみ)
+            $memo['username']       // 第4引数: $username
+        );
         exit;
     }
 
@@ -838,7 +916,7 @@ class MemoController
         $db = getDB();
         $stmt = $db->prepare("SELECT storage_usage FROM users WHERE username = ?");
         $stmt->execute([$username]);
-        return (int)($stmt->fetchColumn() ?: 0);
+        return (int) ($stmt->fetchColumn() ?: 0);
     }
 
     /**
@@ -881,7 +959,8 @@ class MemoController
     /**
      * ユーザー名から安全なフォルダ名を生成する（共通ロジック）
      */
-    private function getSafeDirName($username) {
+    private function getSafeDirName($username)
+    {
         if (empty($username) || $username === 'guest') {
             return 'guest';
         }
@@ -895,24 +974,25 @@ class MemoController
     /**
      * 指定したIDのピン状態を反転させる
      */
-    private function executeTogglePin($id) {
+    private function executeTogglePin($id)
+    {
         $db = getDB();
-        
+
         // 1. 現在のピン状態を取得
         $stmt = $db->prepare("SELECT is_pinned FROM user_memos WHERE id = :id AND username = :user");
         $stmt->execute([':id' => $id, ':user' => $this->user]);
         $memo = $stmt->fetch(PDO::FETCH_ASSOC);
-        
+
         if ($memo) {
             // 2. 状態を反転（1なら0、0なら1）
             $newStatus = $memo['is_pinned'] ? 0 : 1;
-            
+
             // 3. DBを更新
             $update = $db->prepare("UPDATE user_memos SET is_pinned = :status, update_date = NOW() WHERE id = :id AND username = :user");
             $update->execute([
                 ':status' => $newStatus,
-                ':id'     => $id,
-                ':user'   => $this->user
+                ':id' => $id,
+                ':user' => $this->user
             ]);
         }
     }

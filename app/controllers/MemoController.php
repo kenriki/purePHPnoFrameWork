@@ -438,6 +438,7 @@ class MemoController
      */
     private function generatePdf($content, $guestName = '', $imagePath = '', $username = '')
     {
+        ini_set('memory_limit','256M');
         // 追加：これまでのWarning出力をすべて消し去る
         if (ob_get_length())
             ob_clean();

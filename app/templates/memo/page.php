@@ -91,13 +91,14 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
     }
 
     .memo-image {
-        width: 150px !important;      /* 閉じている時はサイズ固定 */
+        width: 150px !important;
+        /* 閉じている時はサイズ固定 */
         height: 150px !important;
         object-fit: cover;
         border-radius: 8px;
         cursor: pointer;
         border: 1px solid #eee;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         transition: transform 0.2s;
         display: block;
     }
@@ -122,7 +123,7 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
         line-height: 24px;
         cursor: pointer;
         text-align: center;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         z-index: 10;
         padding: 0;
     }
@@ -132,9 +133,11 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
         display: none;
         position: fixed;
         z-index: 10000;
-        left: 0; top: 0;
-        width: 100%; height: 100%;
-        background-color: rgba(0,0,0,0.9);
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.9);
         justify-content: center;
         align-items: center;
         cursor: zoom-out;
@@ -152,15 +155,25 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
     }
 
     @keyframes zoom {
-        from { transform: scale(0.8); opacity: 0; }
-        to { transform: scale(1); opacity: 1; }
+        from {
+            transform: scale(0.8);
+            opacity: 0;
+        }
+
+        to {
+            transform: scale(1);
+            opacity: 1;
+        }
     }
 
     /* ローディング等 */
     #upload-overlay {
         display: none;
         position: fixed;
-        top: 0; left: 0; width: 100%; height: 100%;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
         background: rgba(0, 0, 0, 0.7);
         z-index: 9999;
         flex-direction: column;
@@ -170,29 +183,47 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
     }
 
     .spinner {
-        width: 40px; height: 40px;
+        width: 40px;
+        height: 40px;
         border: 4px solid #f3f3f3;
         border-top: 4px solid #3498db;
         border-radius: 50%;
         animation: spin 1s linear infinite;
     }
-    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+    @keyframes spin {
+        0% {
+            transform: rotate(0deg);
+        }
+
+        100% {
+            transform: rotate(360deg);
+        }
+    }
 
     @media (max-width: 600px) {
-        .memo-container { padding: 10px !important; border: none; box-shadow: none; margin: 0; }
+        .memo-container {
+            padding: 10px !important;
+            border: none;
+            box-shadow: none;
+            margin: 0;
+        }
     }
 </style>
 
 <div id="upload-overlay">
     <div class="spinner"></div>
     <div style="margin-top:10px;">データを保存中...</div>
-    <div class="progress-bar-wrap" style="width: 80%; max-width: 300px; background: #444; height: 12px; border-radius: 6px; overflow: hidden; margin: 15px 0;">
-        <div id="overlay-progress-bar" style="width: 0%; height: 100%; background: #28a745; transition: width 0.3s;"></div>
+    <div class="progress-bar-wrap"
+        style="width: 80%; max-width: 300px; background: #444; height: 12px; border-radius: 6px; overflow: hidden; margin: 15px 0;">
+        <div id="overlay-progress-bar" style="width: 0%; height: 100%; background: #28a745; transition: width 0.3s;">
+        </div>
     </div>
 </div>
 
 <div class="memo-container">
-    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #007bff; margin-bottom: 20px; padding-bottom: 10px;">
+    <div
+        style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #007bff; margin-bottom: 20px; padding-bottom: 10px;">
         <h2 style="margin: 0; color: #333;">📝 メモ管理</h2>
         <span style="background: #f0f0f0; padding: 4px 12px; border-radius: 20px; font-size: 0.85rem;">
             User: <?= htmlspecialchars($display_user) ?>
@@ -200,8 +231,12 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
     </div>
 
     <div style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center;">
-        <a href="index.php?page=memo&action=list" style="text-decoration: none; padding: 10px 18px; border: 1px solid #ddd; border-radius: 5px; color: #555; background: #fff; font-weight: bold; font-size: 0.9rem;">📋 一覧表示</a>
-        <a href="index.php?page=memo&action=new" style="text-decoration: none; padding: 10px 18px; border: none; border-radius: 5px; color: #fff; background: #28a745; font-weight: bold; font-size: 0.9rem;">＋ 新規作成</a>
+        <a href="index.php?page=memo&action=list"
+            style="text-decoration: none; padding: 10px 18px; border: 1px solid #ddd; border-radius: 5px; color: #555; background: #fff; font-weight: bold; font-size: 0.9rem;">📋
+            一覧表示</a>
+        <a href="index.php?page=memo&action=new"
+            style="text-decoration: none; padding: 10px 18px; border: none; border-radius: 5px; color: #fff; background: #28a745; font-weight: bold; font-size: 0.9rem;">＋
+            新規作成</a>
         <?php if ($display_user === 'guest'): ?>
             <form action="index.php?page=memo&action=set_guest_name" method="POST"
                 style="margin-left: auto; display: flex; gap: 5px;">
@@ -219,16 +254,16 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
             <input type="hidden" name="image_path" value="<?= htmlspecialchars($memo['image_path'] ?? ''); ?>">
 
             <div class="pin-status-area" style="margin-bottom: 15px;">
-                <?php 
+                <?php
                 // 新規作成時は $memo 自体が null なので isset で判定
                 $isPinned = (isset($memo['is_pinned']) && $memo['is_pinned'] == 1);
                 $m_id = $memo['id'] ?? null;
                 ?>
                 <?php if ($m_id): ?>
-                    <a href="index.php?page=memo&action=toggle_pin_from_edit&id=<?= htmlspecialchars($m_id) ?>" 
-                    class="pin-toggle-btn" 
-                    style="text-decoration: none; display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px; border-radius: 4px; background-color: <?= $isPinned ? '#ffeeba' : '#f8f9fa' ?>; border: 1px solid <?= $isPinned ? '#ffe8a1' : '#ddd' ?>; color: #212529;"
-                    title="<?= $isPinned ? 'ピン留めを外す' : 'ピン留めする' ?>">
+                    <a href="index.php?page=memo&action=toggle_pin_from_edit&id=<?= htmlspecialchars($m_id) ?>"
+                        class="pin-toggle-btn"
+                        style="text-decoration: none; display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px; border-radius: 4px; background-color: <?= $isPinned ? '#ffeeba' : '#f8f9fa' ?>; border: 1px solid <?= $isPinned ? '#ffe8a1' : '#ddd' ?>; color: #212529;"
+                        title="<?= $isPinned ? 'ピン留めを外す' : 'ピン留めする' ?>">
                         <span style="font-size: 1.2rem;"><?= $isPinned ? '📌' : '📍' ?></span>
                         <span style="font-size: 0.9rem; font-weight: bold;"><?= $isPinned ? 'ピン留め中' : 'ピン留めする' ?></span>
                     </a>
@@ -238,15 +273,19 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
             </div>
 
             <?php if ($isGuestMode): ?>
-                <div style="background: #fff5f5; padding: 12px; border: 1px solid #d9534f; border-radius: 5px; margin-bottom: 15px;">
+                <div
+                    style="background: #fff5f5; padding: 12px; border: 1px solid #d9534f; border-radius: 5px; margin-bottom: 15px;">
                     <label style="color: #d9534f; font-weight: bold; font-size: 0.9rem;">⚠️ ゲストモード：保存時に署名が必要です</label>
                     <input type="text" name="guest_name" placeholder="お名前"
                         style="width: 100%; margin-top: 5px; padding: 8px; border: 1px solid #ccc;">
                 </div>
             <?php endif; ?>
 
-            <div style="background: #f9f9f9; padding: 15px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #eee;">
-                <textarea name="content" id="memo-content" style="height: 400px; padding: 15px; border: 1px solid #ccc; border-radius: 5px; line-height: 1.6; resize: vertical;" placeholder="内容を入力してください..."><?= htmlspecialchars($content ?? $memo['content'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
+            <div
+                style="background: #f9f9f9; padding: 15px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #eee;">
+                <textarea name="content" id="memo-content"
+                    style="height: 400px; padding: 15px; border: 1px solid #ccc; border-radius: 5px; line-height: 1.6; resize: vertical;"
+                    placeholder="内容を入力してください..."><?= htmlspecialchars($content ?? $memo['content'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
             </div>
 
             <div style="margin-bottom: 15px; padding: 10px; border: 1px dashed #ccc; border-radius: 5px; background: #fff;">
@@ -255,36 +294,44 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
                 </p> -->
                 <label style="display: block; font-weight: bold; margin-bottom: 5px;">📸 写真を添付 (PDFにも反映されます)</label>
                 <input type="file" name="memo_image" id="file-input" accept="image/*" style="font-size: 0.9rem;">
-                
+
                 <div style="width: 100%; background: #eee; height: 8px; border-radius: 4px; margin-top: 10px;">
                     <?php $p_val = $percent ?? 0; ?>
-                    <div id="storage-progress-bar" style="width: <?= (int)$p_val ?>%; background: #28a745; height: 100%; border-radius: 4px;"></div>
+                    <div id="storage-progress-bar"
+                        style="width: <?= (int) $p_val ?>%; background: #28a745; height: 100%; border-radius: 4px;"></div>
                 </div>
                 <small style="color: #666;">使用量: <?= $current_mb ?? 0 ?>MB / <?= $max_mb ?? 512 ?>MB</small>
             </div>
 
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <div style="display: flex; gap: 10px;">
-                    <button type="submit" id="save-btn" style="padding: 12px 25px; background: #007bff; color: #fff; border: none; border-radius: 5px; font-weight: bold; cursor: pointer;">💾 保存して更新</button>
-                    <button type="submit" name="pdf_export" formtarget="_blank" style="padding: 12px 15px; background: #6c757d; color: #fff; border: none; border-radius: 5px; cursor: pointer;">PDF出力</button>
+                    <button type="submit" id="save-btn"
+                        style="padding: 12px 25px; background: #007bff; color: #fff; border: none; border-radius: 5px; font-weight: bold; cursor: pointer;">💾
+                        保存して更新</button>
+                    <button type="submit" name="pdf_export" formtarget="_blank"
+                        style="padding: 12px 15px; background: #6c757d; color: #fff; border: none; border-radius: 5px; cursor: pointer;">PDF出力</button>
                 </div>
                 <?php if (!empty($current_id)): ?>
-                    <button type="submit" name="delete" onclick="return confirm('削除してもよろしいですか？')" style="color: #dc3545; background: none; border: none; text-decoration: underline; cursor: pointer;">🗑️ 削除</button>
+                    <button type="submit" name="delete" onclick="return confirm('削除してもよろしいですか？')"
+                        style="color: #dc3545; background: none; border: none; text-decoration: underline; cursor: pointer;">🗑️
+                        削除</button>
                 <?php endif; ?>
             </div>
 
             <?php if (!empty($memo['image_path'])): ?>
                 <div class="image-preview-container" id="image-wrapper">
-                    <?php 
-                        $owner = $memo['username'] ?? $display_user;
-                        $safeFolder = (!preg_match('/^[a-zA-Z0-9\._-]+$/', $owner)) ? 'u_' . substr(md5($owner), 0, 12) : $owner;
-                        
-                        // パス混入を防ぐため、現在のディレクトリ構造に合わせて調整してください
-                        $projectRoot = "/sample"; // 本番環境に合わせて空文字 "" または "/test" に変更
-                        $imgUrl = $projectRoot . "/app/data/user_memos/" . htmlspecialchars($safeFolder) . "/images/" . htmlspecialchars($memo['image_path']);
+                    <?php
+                    $owner = $memo['username'] ?? $display_user;
+                    $safeFolder = (!preg_match('/^[a-zA-Z0-9\._-]+$/', $owner)) ? 'u_' . substr(md5($owner), 0, 12) : $owner;
+
+                    // パス混入を防ぐため、現在のディレクトリ構造に合わせて調整してください
+                    $projectRoot = "/sample"; // 本番環境に合わせて空文字 "" または "/test" に変更
+                    $imgUrl = $projectRoot . "/app/data/user_memos/" . htmlspecialchars($safeFolder) . "/images/" . htmlspecialchars($memo['image_path']);
                     ?>
-                    <button type="button" class="delete-image-btn" title="サーバーから物理削除" onclick="deleteImageFromServer('<?= htmlspecialchars($current_id) ?>')">×</button>
-                    <img src="<?= $imgUrl ?>" class="memo-image" title="クリックで拡大" style="max-width: 200px; border-radius: 8px; cursor: pointer;">
+                    <button type="button" class="delete-image-btn" title="サーバーから物理削除"
+                        onclick="deleteImageFromServer('<?= htmlspecialchars($current_id) ?>')">×</button>
+                    <img src="<?= $imgUrl ?>" class="memo-image" title="クリックで拡大"
+                        style="max-width: 200px; border-radius: 8px; cursor: pointer;">
                 </div>
             <?php endif; ?>
         </form>
@@ -298,37 +345,39 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
                     </tr>
                 </thead>
                 <tbody>
-                    <?php 
+                    <?php
                     // デバッグ出力は確認できたら消してOKです
                     // var_dump(count($memoList)); 
-
-                    if (!empty($memoList) && is_array($memoList)): 
-                        foreach ($memoList as $m): 
+                
+                    if (!empty($memoList) && is_array($memoList)):
+                        foreach ($memoList as $m):
                             $isPinned = !empty($m['is_pinned']);
                             $memoId = htmlspecialchars($m['id']);
                             $memoTime = htmlspecialchars($m['time'] ?? '');
                             // display_title_html はコントローラーで生成済みのHTMLを使用
                             $titleHtml = $m['display_title_html'] ?? '無題のメモ';
-                    ?>
-                        <tr class="<?= $isPinned ? 'row-pinned' : '' ?>" style="border-bottom: 1px solid #eee;">
-                            <td style="padding: 10px;">
-                                <div style="display: flex; align-items: center; gap: 10px;">
-                                    <a href="index.php?page=memo&action=toggle_pin&id=<?= $memoId ?>" class="pin-link <?= $isPinned ? 'pin-active' : '' ?>" style="text-decoration: none;">
-                                        <?= $isPinned ? '📌' : '📍' ?>
-                                    </a>
-                                    <a href="index.php?page=memo&action=edit&id=<?= $memoId ?>" style="color: #007bff; text-decoration: none; font-weight: bold; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                                        <?= $titleHtml ?>
-                                    </a>
-                                </div>
-                            </td>
-                            <td style="padding: 10px; text-align: right; color: #888; font-size: 0.85rem;">
-                                <?= $memoTime ?>
-                            </td>
-                        </tr>
-                    <?php 
-                        endforeach; 
-                    else: 
-                    ?>
+                            ?>
+                            <tr class="<?= $isPinned ? 'row-pinned' : '' ?>" style="border-bottom: 1px solid #eee;">
+                                <td style="padding: 10px;">
+                                    <div style="display: flex; align-items: center; gap: 10px;">
+                                        <a href="index.php?page=memo&action=toggle_pin&id=<?= $memoId ?>"
+                                            class="pin-link <?= $isPinned ? 'pin-active' : '' ?>" style="text-decoration: none;">
+                                            <?= $isPinned ? '📌' : '📍' ?>
+                                        </a>
+                                        <a href="index.php?page=memo&action=edit&id=<?= $memoId ?>"
+                                            style="color: #007bff; text-decoration: none; font-weight: bold; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                            <?= $titleHtml ?>
+                                        </a>
+                                    </div>
+                                </td>
+                                <td style="padding: 10px; text-align: right; color: #888; font-size: 0.85rem;">
+                                    <?= $memoTime ?>
+                                </td>
+                            </tr>
+                        <?php
+                        endforeach;
+                    else:
+                        ?>
                         <tr>
                             <td colspan="2" style="text-align:center; color:#999; padding:40px;">
                                 メモが見つかりません。
@@ -362,103 +411,193 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
 </div>
 
 <script>
-/**
- * サーバー側の物理ファイルとDBレコード(image_path)を即座に削除する
- */
-function deleteImageFromServer(memoId) {
-    if (!memoId) return;
-    if (!confirm('画像をサーバーから完全に削除しますか？\n（この操作は取り消せません）')) return;
+    /**
+     * サーバー側の物理ファイルとDBレコード(image_path)を即座に削除する
+     */
+    function deleteImageFromServer(memoId) {
+        if (!memoId) return;
+        if (!confirm('画像をサーバーから完全に削除しますか？\n（この操作は取り消せません）')) return;
 
-    const formData = new FormData();
-    formData.append('id', memoId);
+        const formData = new FormData();
+        formData.append('id', memoId);
 
-    // サーバーに削除リクエストを送信
-    fetch('index.php?page=memo&action=delete_image', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.status === 'success') {
-            // 成功したら画面上の画像プレビューを非表示にする
-            const wrapper = document.getElementById('image-wrapper');
-            if (wrapper) {
-                wrapper.style.transition = 'opacity 0.3s';
-                wrapper.style.opacity = '0';
-                setTimeout(() => wrapper.remove(), 300);
-            }
-            alert('画像を削除しました。');
-        } else {
-            alert('削除に失敗しました: ' + (data.message || 'Unknown error'));
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('通信エラーが発生しました。');
-    });
-}
-
-document.addEventListener('DOMContentLoaded', function() {
-    console.log("JS Loaded"); // デバッグ用：コンソールにこれが出るか確認
-
-    const form = document.getElementById('memo-form');
-    const saveBtn = document.getElementById('save-btn');
-    const overlay = document.getElementById('upload-overlay');
-    const overlayBar = document.getElementById('overlay-progress-bar');
-    const fileInput = document.getElementById('file-input');
-
-    // 1. ファイルバリデーション (PNGのみ)
-    // if (fileInput) {
-    //     fileInput.addEventListener('change', function(e) {
-    //         const file = e.target.files[0];
-    //         if (!file) return;
-
-    //         const isPng = file.type === 'image/png';
-    //         const isPngExt = file.name.toLowerCase().endsWith('.png');
-
-    //         if (!isPng || !isPngExt) {
-    //             alert("申し訳ありませんが、現在はJPGやGIF形式には対応しておりません。\nスクリーンショット（PNG形式）の画像を選択してください。");
-    //             this.value = ""; 
-    //         }
-    //     });
-    // }
-
-    // 2. フォーム送信時のプログレスバー
-    if (form && saveBtn) {
-        form.addEventListener('submit', function(e) {
-            // PDF出力・削除時は無視
-            if (e.submitter && (e.submitter.name === 'pdf_export' || e.submitter.name === 'delete')) {
-                return;
-            }
-            
-            console.log("Submit start"); // デバッグ用
-            overlay.style.display = 'flex';
-            saveBtn.disabled = true;
-            
-            let p = 0;
-            const interval = setInterval(() => {
-                if (p < 90) p += 5;
-                if (overlayBar) overlayBar.style.width = p + '%';
-                if (p >= 100) clearInterval(interval);
-            }, 100);
-        });
+        // サーバーに削除リクエストを送信
+        fetch('index.php?page=memo&action=delete_image', {
+            method: 'POST',
+            body: formData
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    // 成功したら画面上の画像プレビューを非表示にする
+                    const wrapper = document.getElementById('image-wrapper');
+                    if (wrapper) {
+                        wrapper.style.transition = 'opacity 0.3s';
+                        wrapper.style.opacity = '0';
+                        setTimeout(() => wrapper.remove(), 300);
+                    }
+                    alert('画像を削除しました。');
+                } else {
+                    alert('削除に失敗しました: ' + (data.message || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('通信エラーが発生しました。');
+            });
     }
 
-    // 3. モーダル拡大処理 (ここから file 関連の記述を完全に排除)
-    const modal = document.getElementById('imageModal');
-    const fullImg = document.getElementById('imgFull');
+    document.addEventListener('DOMContentLoaded', function () {
+        console.log("JS Loaded"); // デバッグ用：コンソールにこれが出るか確認
 
-    document.querySelectorAll('.memo-image').forEach(img => {
-        img.addEventListener('click', function() {
-            if (fullImg && modal) {
-                fullImg.src = this.src;
-                modal.style.display = 'flex';
-            }
+        const form = document.getElementById('memo-form');
+        const saveBtn = document.getElementById('save-btn');
+        const overlay = document.getElementById('upload-overlay');
+        const overlayBar = document.getElementById('overlay-progress-bar');
+        const fileInput = document.getElementById('file-input');
+
+        // 1. ファイルバリデーション (PNGのみ)
+        // if (fileInput) {
+        //     fileInput.addEventListener('change', function(e) {
+        //         const file = e.target.files[0];
+        //         if (!file) return;
+
+        //         const isPng = file.type === 'image/png';
+        //         const isPngExt = file.name.toLowerCase().endsWith('.png');
+
+        //         if (!isPng || !isPngExt) {
+        //             alert("申し訳ありませんが、現在はJPGやGIF形式には対応しておりません。\nスクリーンショット（PNG形式）の画像を選択してください。");
+        //             this.value = ""; 
+        //         }
+        //     });
+        // }
+
+        // 2. フォーム送信時のプログレスバー
+        if (form && saveBtn) {
+            form.addEventListener('submit', async function (e) {
+                // PDF出力・削除時は無視
+                if (e.submitter && (e.submitter.name === 'pdf_export' || e.submitter.name === 'delete')) {
+                    return;
+                }
+
+                e.preventDefault(); // fetchを使うため、デフォルトの送信を止める
+
+                console.log("Submit start");
+
+                // --- 1. UIの初期化（二重宣言を削除） ---
+                overlay.style.display = 'flex';
+                saveBtn.disabled = true;
+
+                let p = 0;
+                const interval = setInterval(() => {
+                    if (p < 90) p += 5;
+                    if (overlayBar) overlayBar.style.width = p + '%';
+                }, 100);
+
+                const formData = new FormData(form);
+
+                // --- 2. 画像のリサイズ処理 ---
+                if (fileInput && fileInput.files.length > 0) {
+                    const file = fileInput.files[0];
+                    if (file.type.startsWith('image/')) {
+                        try {
+                            // ここで待機（await）
+                            const resizedImageBlob = await resizeImage(file, 1200, 1200);
+                            // PHP側の $_FILES['memo_image'] で受け取れるようにセット
+                            formData.set('memo_image', resizedImageBlob, 'resized_image.png');
+                            console.log('Resized success');
+                        } catch (err) {
+                            console.error('Resize error:', err);
+                        }
+                    }
+                }
+
+                // --- 3. 非同期で送信 ---
+                fetch(form.action, {
+                    method: 'POST',
+                    body: formData
+                })
+                    .then(async response => {
+                        if (!response.ok) throw new Error('Network response was not ok');
+
+                        // 1. バーを100%にする
+                        clearInterval(interval);
+                        if (overlayBar) overlayBar.style.width = '100%';
+
+                        // 2. ★ここを修正：オーバーレイのテキストを書き換える
+                        const loadingText = overlay.querySelector('div:nth-child(2)');
+                        if (loadingText) {
+                            loadingText.innerText = '保存完了しました！';
+                            loadingText.style.color = '#28a745'; // 緑色にして成功感を出す
+                            loadingText.style.fontWeight = 'bold';
+                        }
+
+                        // 3. 0.8秒だけ待ってからリロード
+                        setTimeout(() => {
+                            location.reload();
+                        }, 800);
+                    })
+            });
+        }
+
+        /**
+         * canvasを使用して画像をリサイズする関数
+         */
+        function resizeImage(file, maxWidth, maxHeight) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = function (event) {
+                    const img = new Image();
+                    img.src = event.target.result;
+                    img.onload = function () {
+                        let width = img.width;
+                        let height = img.height;
+
+                        // アスペクト比を維持してサイズ計算
+                        if (width > height) {
+                            if (width > maxWidth) {
+                                height *= maxWidth / width;
+                                width = maxWidth;
+                            }
+                        } else {
+                            if (height > maxHeight) {
+                                width *= maxHeight / height;
+                                height = maxHeight;
+                            }
+                        }
+
+                        const canvas = document.createElement('canvas');
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+
+                        // PNG形式でBlobに変換（WebPに変換して送ることも可能）
+                        canvas.toBlob((blob) => {
+                            resolve(blob);
+                        }, 'image/png', 0.8);
+                    };
+                };
+                reader.onerror = error => reject(error);
+            });
+        }
+
+        // 3. モーダル拡大処理 (ここから file 関連の記述を完全に排除)
+        const modal = document.getElementById('imageModal');
+        const fullImg = document.getElementById('imgFull');
+
+        document.querySelectorAll('.memo-image').forEach(img => {
+            img.addEventListener('click', function () {
+                if (fullImg && modal) {
+                    fullImg.src = this.src;
+                    modal.style.display = 'flex';
+                }
+            });
+        });
+
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && modal) modal.style.display = 'none';
         });
     });
-
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape' && modal) modal.style.display = 'none';
-    });
-});
 </script>

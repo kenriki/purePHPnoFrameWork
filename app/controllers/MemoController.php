@@ -492,7 +492,17 @@ class MemoController
                     imagepng($img, $tempPng);
                     // imagedestroy($img); // PHP 8.5では非推奨のため削除またはコメントアウト
 
-                    $pdf->Ln(10);
+                    // 改ページ制御
+                    $pdf->Ln(10); // 画像の上の余白
+                    $imgWidth = 100; // 出力サイズ
+                    $imgHeight = 0;   // 0にするとアスペクト比を維持して自動計算されますが、判定用に仮の値を想定
+                    
+                    // 貼り付けたい画像の高さ（ここでは100mm程度と仮定）が、ページの残り（PageHeight - 下部余白 - 現在位置）より大きいか
+                    $remainingHeight = $pdf->getPageHeight() - 20; // 20は下部マージン
+                    if ($pdf->GetY() + 100 > $remainingHeight) {
+                        $pdf->AddPage();
+                    }
+
                     // 画像の埋め込み。第5引数に 'PNG' を明示
                     $pdf->Image($tempPng, $pdf->GetX() + 5, $pdf->GetY(), 100, 0, 'PNG');
 

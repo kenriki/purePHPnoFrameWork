@@ -1,0 +1,305 @@
+<?php
+/**
+ * 簡易位置情報共有ツール (検索エラー対策・SNSアイコン修正版)
+ */
+
+ob_start();
+require_once __DIR__ . '/../../config.php';
+require_once __DIR__ . '/../../dbconfig.php';
+ob_end_clean();
+
+try {
+    $pdo = getDB();
+    // 確実にテーブルが存在するようにする
+    $pdo->exec("CREATE TABLE IF NOT EXISTS user_locations (
+        phone_number VARCHAR(50) PRIMARY KEY,
+        latitude DECIMAL(10, 8),
+        longitude DECIMAL(11, 8),
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )");
+} catch (PDOException $e) {
+    die("接続失敗: " . $e->getMessage());
+}
+
+// --- 1. 位置情報更新 API ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update') {
+    $phone = $_POST['phone'] ?? '';
+    $lat = $_POST['lat'] ?? 0;
+    $lng = $_POST['lng'] ?? 0;
+    if ($phone && $lat != 0) {
+        $stmt = $pdo->prepare("INSERT INTO user_locations (phone_number, latitude, longitude) VALUES (?, ?, ?) 
+                               ON DUPLICATE KEY UPDATE latitude=VALUES(latitude), longitude=VALUES(longitude)");
+        $stmt->execute([$phone, $lat, $lng]);
+        header('Content-Type: application/json');
+        echo json_encode(['status' => 'success']);
+        exit;
+    }
+}
+
+// --- 2. 電話番号検索 API ---
+if (isset($_GET['action']) && $_GET['action'] === 'search') {
+    $phone = $_GET['phone'] ?? '';
+    $stmt = $pdo->prepare("SELECT * FROM user_locations WHERE phone_number = ?");
+    $stmt->execute([$phone]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    header('Content-Type: application/json');
+    // 見つからない場合はエラーではなく空データを返すようにしてJSエラーを防ぐ
+    echo json_encode($user ?: ['not_found' => true]);
+    exit;
+}
+?>
+
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+    <style>
+        header,
+        footer,
+        .navbar,
+        .site-header,
+        #header,
+        .sidebar {
+            display: none !important;
+        }
+
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+            font-family: sans-serif;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            width: 100vw;
+            z-index: 1;
+        }
+
+        .ui-panel {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            width: 280px;
+            backdrop-filter: blur(8px);
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+
+        .btn-start {
+            background: #28a745;
+        }
+
+        .btn-search {
+            background: #007bff;
+        }
+
+        .sns-share {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 15px;
+        }
+
+        .sns-btn {
+            flex: 1;
+            margin: 0 2px;
+            padding: 10px 0;
+            text-align: center;
+            border-radius: 8px;
+            color: white;
+            font-size: 20px;
+            text-decoration: none;
+        }
+
+        .line {
+            background: #06C755;
+        }
+
+        .x-com {
+            background: #000;
+        }
+
+        .fb {
+            background: #1877F2;
+        }
+
+        .teams {
+            background: #6264A7;
+        }
+
+        .status {
+            font-size: 11px;
+            color: #666;
+            margin-top: 8px;
+            text-align: center;
+        }
+
+        hr {
+            border: 0;
+            border-top: 1px solid #eee;
+            margin: 12px 0;
+        }
+
+        .label {
+            font-size: 12px;
+            font-weight: bold;
+            color: #333;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="ui-panel">
+        <div class="label">📍 自分の位置を共有</div>
+        <input type="text" id="my_phone" placeholder="自分の番号を入力">
+        <button class="btn-start" onclick="startTracking()">共有を開始</button>
+        <div id="gps_status" class="status">未送信</div>
+        <hr>
+        <div class="label">🔍 友達を探す</div>
+        <input type="text" id="search_phone" placeholder="友達の番号を入力">
+        <button class="btn-search" onclick="searchUser()">友達を特定</button>
+        <hr>
+        <div class="label">このアプリを友達に送る:</div>
+        <div class="sns-share">
+            <a href="#" id="share-line" class="sns-btn line" target="_blank"><i class="fab fa-line"></i></a>
+            <a href="#" id="share-x" class="sns-btn x-com" target="_blank"><i class="fa-brands fa-x-twitter"></i></a>
+            <a href="#" id="share-fb" class="sns-btn fb" target="_blank"><i class="fab fa-facebook-f"></i></a>
+            <a href="#" id="share-teams" class="sns-btn teams" target="_blank"><i
+                    class="fab fa-microsoft-teams"></i></a>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const map = L.map('map', { zoomControl: false }).setView([35.6812, 139.7671], 13);
+        L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { attribution: '© Google Maps' }).addTo(map);
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+        const markers = {};
+        const redIcon = new L.Icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+            iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34],
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', shadowSize: [41, 41]
+        });
+
+        let myPhone = "";
+        let updateInterval = null;
+
+        // SNS共有リンク生成
+        const currentUrl = encodeURIComponent(window.location.href);
+        const shareText = encodeURIComponent("現在地を共有中です。ここから確認してね！");
+        document.getElementById('share-line').href = `https://social-plugins.line.me/lineit/share?url=${currentUrl}`;
+        document.getElementById('share-x').href = `https://twitter.com/intent/tweet?url=${currentUrl}&text=${shareText}`;
+        document.getElementById('share-fb').href = `https://www.facebook.com/sharer/sharer.php?u=${currentUrl}`;
+        document.getElementById('share-teams').href = `https://teams.microsoft.com/l/chat/0/0?users=&message=${shareText}%20${currentUrl}`;
+
+        function startTracking() {
+            const input = document.getElementById('my_phone').value;
+            if (!input) return alert("自分の番号を入力してください");
+            myPhone = input;
+            localStorage.setItem('saved_phone', myPhone);
+            if (updateInterval) clearInterval(updateInterval);
+            updateMyLocation();
+            updateInterval = setInterval(updateMyLocation, 15000);
+            alert("共有を開始しました！");
+        }
+
+        function updateMyLocation() {
+            if (!navigator.geolocation || !myPhone) return;
+            navigator.geolocation.getCurrentPosition(pos => {
+                const lat = pos.coords.latitude;
+                const lng = pos.coords.longitude;
+                const fd = new FormData();
+                fd.append('action', 'update');
+                fd.append('phone', myPhone);
+                fd.append('lat', lat);
+                fd.append('lng', lng);
+
+                fetch(window.location.href, { method: 'POST', body: fd })
+                    .then(res => res.json())
+                    .then(data => {
+                        document.getElementById('gps_status').innerText = `送信中: ${new Date().toLocaleTimeString()}`;
+                        if (!markers['me']) {
+                            markers['me'] = L.marker([lat, lng], { icon: redIcon }).addTo(map).bindPopup("自分");
+                            map.panTo([lat, lng]);
+                        } else {
+                            markers['me'].setLatLng([lat, lng]);
+                        }
+                    });
+            }, null, { enableHighAccuracy: true });
+        }
+
+        async function searchUser() {
+            const target = document.getElementById('search_phone').value;
+            if (!target) return alert("友達の番号を入力してください");
+
+            try {
+                // URLパラメータを正しく連結
+                const baseUrl = window.location.href.split('#')[0];
+                const separator = baseUrl.includes('?') ? '&' : '?';
+                const res = await fetch(`${baseUrl}${separator}action=search&phone=${target}`);
+                const data = await res.json();
+
+                if (data && data.latitude) {
+                    const pos = [parseFloat(data.latitude), parseFloat(data.longitude)];
+                    if (markers['friend']) {
+                        markers['friend'].setLatLng(pos);
+                    } else {
+                        markers['friend'] = L.marker(pos, { icon: redIcon }).addTo(map);
+                    }
+                    map.setView(pos, 16);
+                    markers['friend'].bindPopup(`<b>友達 (${target})</b><br>最終更新: ${data.updated_at}`).openPopup();
+                } else {
+                    alert("友達が見つかりませんでした。番号が正しいか、相手が送信を開始しているか確認してください。");
+                }
+            } catch (e) {
+                console.error(e);
+                alert("通信中にエラーが発生しました。");
+            }
+        }
+
+        window.onload = () => {
+            const saved = localStorage.getItem('saved_phone');
+            if (saved) document.getElementById('my_phone').value = saved;
+        };
+    </script>
+</body>
+
+</html>

@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <title>共有されたメモ - <?= htmlspecialchars($memo['title'] ?? '無題') ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
@@ -77,6 +78,26 @@
                                         <?= htmlspecialchars(date('Y/m/d H:i', strtotime($memo['share_expires_at']))) ?>
                                     </strong>
                                 </span>
+                            </div>
+                        </div>
+                        <div class="memo-body">
+                            <?php if (!empty($imagePath)): ?>
+                                <div class="memo-image" style="margin-bottom: 20px;">
+                                    <img src="<?php echo htmlspecialchars($imagePath); ?>" alt="添付画像"
+                                        style="max-width: 100%; height: auto; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                                </div>
+                            <?php endif; ?>
+
+                        </div>
+                        <div class="d-flex align-items-center mb-4">
+                            <i class="far fa-file-alt fa-2x text-primary me-3"></i>
+                            <h2 class="h4 mb-0">共有されたメモ</h2>
+                            <div class="ms-auto d-flex align-items-center">
+                                <a href="index.php?page=memo&action=view_share&token=<?= htmlspecialchars($_GET['token'] ?? '') ?>&download=pdf"
+                                    class="btn btn-outline-danger btn-sm me-2">
+                                    <i class="fas fa-file-pdf"></i> PDF保存
+                                </a>
+                                <span class="badge bg-danger share-badge">期間限定公開</span>
                             </div>
                         </div>
                     </div>

@@ -14,14 +14,14 @@
 class MemoController
 {
     private $baseDir;
-    private $user;
+    public $user;
     private $cipher_method = 'aes-256-cbc';
     private $cipher_key = 'your-secret-key-here'; // 運用時は .env 等へ
     private $max_storage = 536870912; // 512MB
-    private $safeDirName;
+    public $safeDirName;
 
     // ブラウザから画像にアクセスするためのベースURL（環境に合わせて調整してください）
-    private $publicImageBaseUrl = "sample/app/data/user_memos";
+    public $publicImageBaseUrl = "sample/app/data/user_memos";
 
     /**
      * コンストラクタ
@@ -41,6 +41,11 @@ class MemoController
         if (!is_dir($this->baseDir)) {
             mkdir($this->baseDir, 0777, true);
         }
+    }
+
+    public function getUser()
+    {
+        return $this->user;
     }
 
     /**
@@ -213,7 +218,7 @@ class MemoController
     {
         $db = getDB();
         $params = [];
-        $sql = "SELECT id, username, content, is_pinned, 
+        $sql = "SELECT id, username, content, is_pinned, image_path,
                        DATE_FORMAT(create_date, '%Y-%m-%d %H:%i') as time 
                 FROM user_memos WHERE ";
 
@@ -496,7 +501,7 @@ class MemoController
                     $pdf->Ln(10); // 画像の上の余白
                     $imgWidth = 100; // 出力サイズ
                     $imgHeight = 0;   // 0にするとアスペクト比を維持して自動計算されますが、判定用に仮の値を想定
-                    
+
                     // 貼り付けたい画像の高さ（ここでは100mm程度と仮定）が、ページの残り（PageHeight - 下部余白 - 現在位置）より大きいか
                     $remainingHeight = $pdf->getPageHeight() - 20; // 20は下部マージン
                     if ($pdf->GetY() + 100 > $remainingHeight) {
@@ -614,7 +619,6 @@ class MemoController
     private function redirect($action, $msg)
     {
         header("Location: index.php?page=memo&action=$action&message=$msg");
-        //header("Location: index.php?page=home");
         exit;
     }
 
@@ -970,7 +974,7 @@ class MemoController
     /**
      * ユーザー名から安全なフォルダ名を生成する（共通ロジック）
      */
-    private function getSafeDirName($username)
+    public function getSafeDirName($username)
     {
         if (empty($username) || $username === 'guest') {
             return 'guest';
@@ -1006,6 +1010,59 @@ class MemoController
                 ':user' => $this->user
             ]);
         }
+    }
+
+    /**
+     * 最近添付された画像リストを取得
+     */
+    public function getRecentImages($limit = 10)
+    {
+        $db = getDB();
+
+        // 安全のため、数値以外が入らないように強制キャスト
+        $intLimit = (int) $limit;
+
+        // LIMIT句に直接数値を埋め込む（バインドミスの回避）
+        $sql = <<<SQL
+        SELECT id, image_path, content, create_date
+        FROM user_memos
+        WHERE username = :user
+          AND image_path IS NOT NULL
+          AND image_path != ''
+        ORDER BY create_date DESC
+        LIMIT {$intLimit}
+        SQL;
+
+        $stmt = $db->prepare($sql);
+        $stmt->bindValue(':user', $this->user, PDO::PARAM_STR);
+        // :limit の bindValue は削除（直接埋め込んだため）
+
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * すべての画像リストを取得
+     */
+    public function getRecentImagesAll()
+    {
+        $db = getDB();
+
+        // LIMIT句に直接数値を埋め込む（バインドミスの回避）
+        $sql = "SELECT id, content, image_path, create_date 
+        FROM user_memos 
+        WHERE username = :username 
+        AND image_path IS NOT NULL 
+        AND image_path != '' 
+        AND is_deleted = 0 
+        ORDER BY create_date DESC";
+
+        $stmt = $db->prepare($sql);
+        $stmt->bindValue(':username', trim($this -> user), PDO::PARAM_STR);
+        $stmt->execute();
+        // $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        // var_dump(count($result));
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 }
 ?>

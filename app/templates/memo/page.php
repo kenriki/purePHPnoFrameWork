@@ -210,7 +210,90 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
         }
     }
 </style>
+<style>
+    /* 実際のファイル選択ボタンは隠す */
+    .camera-upload-container input[type="file"] {
+        display: none;
+    }
 
+    /* ラベルをボタンに見せる */
+    .camera-btn {
+        display: inline-block;
+        background-color: #4b4b4b; /* シックなグレー。青(保存ボタン)と分けるため */
+        color: white;
+        padding: 12px 24px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: bold;
+        font-size: 1rem;
+        transition: background 0.3s, transform 0.1s;
+        border: none;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        text-align: center;
+    }
+
+    /* スマホで押した時の反応 */
+    .camera-btn:active {
+        transform: translateY(2px);
+        box-shadow: none;
+        background-color: #333;
+    }
+
+    .camera-icon {
+        margin-right: 8px;
+        font-size: 1.2rem;
+    }
+
+    /* 撮影済みファイル名を表示するエリア（任意） */
+    #file-name-preview {
+        display: block;
+        padding: 5px;
+    }
+</style>
+<style>
+    /* 共通：本来の入力フォームは隠す */
+    .file-upload-container input[type="file"] {
+        display: none;
+    }
+
+    /* ギャラリーボタンのデザイン */
+    .gallery-btn {
+        display: inline-block;
+        background-color: #007bff; /* 鮮やかな青 */
+        color: white;
+        padding: 12px 24px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: bold;
+        font-size: 1rem;
+        transition: all 0.3s;
+        border: none;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        text-align: center;
+        min-width: 200px;
+    }
+
+    /* ホバー・アクティブ時 */
+    .gallery-btn:hover {
+        background-color: #0056b3;
+    }
+
+    .gallery-btn:active {
+        transform: translateY(2px);
+        box-shadow: none;
+    }
+
+    .gallery-icon {
+        margin-right: 8px;
+    }
+
+    .file-name-label {
+        font-size: 0.8rem;
+        color: #666;
+        margin-top: 5px;
+        height: 1.2em; /* レイアウト崩れ防止 */
+    }
+</style>
 <div id="upload-overlay">
     <div class="spinner"></div>
     <div style="margin-top:10px;">データを保存中...</div>
@@ -289,12 +372,26 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
             </div>
 
             <div style="margin-bottom: 15px; padding: 10px; border: 1px dashed #ccc; border-radius: 5px; background: #fff;">
-                <!-- <p style="color: #d9534f; font-size: 0.9em; font-weight: bold;">
-                    ※現在はスクリーンショット（PNG形式）のみ対応しています。JPGやGIFを選択するとエラーになるため、ご注意ください。
-                </p> -->
+                <p style="color: #d9534f; font-size: 0.9em; font-weight: bold;">
+                    ※１ユーザの写真の保存容量は５１２メガとなります。
+                </p>
                 <label style="display: block; font-weight: bold; margin-bottom: 5px;">📸 写真を添付 (PDFにも反映されます)</label>
-                <input type="file" name="memo_image" id="file-input" accept="image/*" style="font-size: 0.9rem;">
-
+                <div class="file-upload-container" style="margin-top: 10px;">
+                    <label for="file-input" class="gallery-btn">
+                        <span class="gallery-icon">📁</span> ギャラリーから画像を選択
+                        <!-- capture属性を外すことで、ライブラリ選択を優先させます -->
+                        <input type="file" name="memo_image" id="file-input" accept="image/*">
+                    </label>
+                    <div id="gallery-name-preview" class="file-name-label"></div>
+                </div>
+                <br>
+                <div class="camera-upload-container">
+                    <label for="file-input" class="camera-btn">
+                        <span class="camera-icon">📸</span> カメラを起動して撮影
+                        <input type="file" name="memo_image" id="file-input" accept="image/*" capture="environment">
+                    </label>
+                    <div id="file-name-preview" style="font-size: 0.8rem; color: #666; margin-top: 5px;"></div>
+                </div>
                 <div style="width: 100%; background: #eee; height: 8px; border-radius: 4px; margin-top: 10px;">
                     <?php $p_val = $percent ?? 0; ?>
                     <div id="storage-progress-bar"
@@ -374,7 +471,7 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
                                     <?= $memoTime ?>
                                 </td>
                             </tr>
-                        <?php
+                            <?php
                         endforeach;
                     else:
                         ?>

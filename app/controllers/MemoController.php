@@ -16,12 +16,13 @@ class MemoController
     private $baseDir;
     public $user;
     private $cipher_method = 'aes-256-cbc';
-    private $cipher_key = 'your-secret-key-here'; // 運用時は .env 等へ
+    private $cipher_key;
     private $max_storage = 536870912; // 512MB
     public $safeDirName;
+    
 
     // ブラウザから画像にアクセスするためのベースURL（環境に合わせて調整してください）
-    public $publicImageBaseUrl = "sample/app/data/user_memos";
+    public $publicImageBaseUrl = "/sample/app/data/user_memos";
 
     /**
      * コンストラクタ
@@ -31,6 +32,7 @@ class MemoController
         if (session_status() === PHP_SESSION_NONE) {
             session_start();
         }
+        $this->cipher_key = getenv('CIPHER_KEY')  ?? 'default-key';
 
         // ログインユーザーの特定
         $this->user = $_SESSION['user'] ?? $_SESSION['username'] ?? 'guest';
@@ -584,7 +586,7 @@ class MemoController
                 $safeFolder = preg_match('/^[a-zA-Z0-9\._-]+$/', $owner) ? $owner : 'u_' . substr(md5($owner), 0, 12);
 
                 // 物理ファイルの絶対パス
-                $baseDir = "C:/Apache24/htdocs/test/app/data/user_memos/{$safeFolder}/images/";
+                $baseDir = "C:/Apache24/htdocs/sample/app/data/user_memos/{$safeFolder}/images/";
                 $filePath = $baseDir . $memo['image_path'];
 
                 // 3. 物理ファイルの削除

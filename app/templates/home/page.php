@@ -39,7 +39,9 @@ if (!isset($page['dashboard'])) {
      CSS デザイン定義
      ====================================================================================== -->
 <style>
-    /* 全体レイアウト */
+    /* ==========================================
+       全体レイアウト
+    ========================================== */
     .dashboard-container {
         padding: 20px;
         background: #fff;
@@ -58,7 +60,6 @@ if (!isset($page['dashboard'])) {
     /* --- メインエリア：カレンダー --- */
     .main-content {
         min-width: 0;
-        /* フレックス/グリッド内のオーバーフロー防止 */
     }
 
     .view-selector {
@@ -83,17 +84,30 @@ if (!isset($page['dashboard'])) {
         border-color: #007bff;
     }
 
-    /* 年間カレンダーのグリッド配置 */
     #year-view-container {
         display: none;
         grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
         gap: 15px;
     }
 
+    /* ==========================================
+       サイドパネル & コンポーネント
+    ========================================== */
     .side-panel {
         display: flex;
         flex-direction: column;
         gap: 20px;
+    }
+
+    .btn-new-memo {
+        display: block;
+        text-align: center;
+        background: #28a745;
+        color: white !important;
+        padding: 12px;
+        border-radius: 8px;
+        text-decoration: none;
+        font-weight: bold;
     }
 
     .pinned-section {
@@ -115,12 +129,7 @@ if (!isset($page['dashboard'])) {
         font-size: 0.85rem;
     }
 
-    .action-button-new:hover {
-        transform: translateY(-2px);
-        opacity: 0.95;
-    }
-
-    /* 2. 最新フォトグリッド */
+    /* 最新フォトグリッド */
     .photo-insta-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -145,7 +154,7 @@ if (!isset($page['dashboard'])) {
         transform: scale(1.1);
     }
 
-    /* 3. 全画像スライダー */
+    /* 全画像スライダー */
     .slider-horizontal-area {
         position: relative;
         overflow: hidden;
@@ -175,15 +184,12 @@ if (!isset($page['dashboard'])) {
         gap: 12px;
         padding: 5px 0 15px 0;
         scrollbar-width: none;
-        /* Firefox */
         -ms-overflow-style: none;
-        /* IE */
         scroll-behavior: smooth;
     }
 
     #master-image-slider::-webkit-scrollbar {
         display: none;
-        /* Chrome/Safari */
     }
 
     .slider-unit {
@@ -201,40 +207,7 @@ if (!isset($page['dashboard'])) {
         transition: box-shadow 0.2s;
     }
 
-    .slider-unit:hover img {
-        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
-    }
-
-    .img-delete-trigger {
-        position: absolute;
-        top: -6px;
-        right: -6px;
-        background: rgba(220, 53, 69, 0.9);
-        color: #fff;
-        border: none;
-        border-radius: 50%;
-        width: 22px;
-        height: 22px;
-        font-size: 12px;
-        cursor: pointer;
-        z-index: 10;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    .btn-new-memo {
-        display: block;
-        text-align: center;
-        background: #28a745;
-        color: white !important;
-        padding: 12px;
-        border-radius: 8px;
-        text-decoration: none;
-        font-weight: bold;
-    }
-
-    /* 土日の背景色 */
+    /* カレンダー背景色 */
     .fc-day-sat {
         background-color: #f0f7ff !important;
     }
@@ -247,39 +220,192 @@ if (!isset($page['dashboard'])) {
         background-color: #fffde7 !important;
     }
 
+    /* ==========================================
+       インスタ風モーダル (PC & スマホ共通)
+    ========================================== */
+    .insta-modal {
+        display: none;
+        /* JSで flex に切り替え */
+        position: fixed;
+        z-index: 9999;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.9);
+        backdrop-filter: blur(5px);
+        /* 中身を中央に寄せる */
+        align-items: center;
+        justify-content: center;
+    }
+
+    .insta-modal-content {
+        position: relative;
+        background-color: #fff;
+        width: 95%;
+        max-width: 1000px;
+        /* PCでの最大幅 */
+        height: 85vh;
+        /* 画面の高さ8.5割 */
+        border-radius: 8px;
+        overflow: hidden;
+        display: flex;
+        /* PCでは横並び */
+        flex-direction: row;
+    }
+
+    .insta-container {
+        display: flex;
+        width: 100%;
+        height: 100%;
+    }
+
+    /* 左側：画像エリア */
+    .insta-image-box {
+        flex: 1.5;
+        background: #000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 0;
+    }
+
+    .insta-image-box img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+
+    /* 右側：情報エリア */
+    .insta-info-box {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        padding: 20px;
+        border-left: 1px solid #efefef;
+        background: #fff;
+        min-height: 0;
+    }
+
+    .insta-user-info {
+        padding-bottom: 15px;
+        border-bottom: 1px solid #efefef;
+        margin-bottom: 15px;
+    }
+
+    .insta-caption {
+        flex-grow: 1;
+        overflow-y: auto;
+        font-size: 0.95rem;
+        line-height: 1.6;
+        white-space: pre-wrap;
+        color: #262626;
+        margin-bottom: 15px;
+    }
+
+    .insta-footer {
+        padding-top: 15px;
+        border-top: 1px solid #efefef;
+    }
+
+    .insta-btn-edit {
+        display: block;
+        text-align: center;
+        background: #0095f6;
+        color: #fff !important;
+        text-decoration: none;
+        padding: 10px;
+        border-radius: 4px;
+        font-weight: bold;
+    }
+
+    .insta-close {
+        position: absolute;
+        top: 10px;
+        right: 15px;
+        color: #fff;
+        font-size: 35px;
+        font-weight: bold;
+        cursor: pointer;
+        z-index: 10001;
+        text-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+    }
+
+    /* ==========================================
+       レスポンシブ：スマホ・タブレット (768px以下)
+    ========================================== */
+    @media (max-width: 768px) {
+        .dashboard-grid {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .main-content {
+            order: 1;
+            margin-bottom: 20px;
+        }
+
+        .side-panel {
+            order: 2;
+            width: 100%;
+        }
+
+        /* モーダルを縦並びに切り替え */
+        .insta-modal-content {
+            flex-direction: column;
+            height: 90vh;
+            width: 90%;
+        }
+
+        .insta-container {
+            flex-direction: column;
+        }
+
+        .insta-image-box {
+            flex: 1;
+            /* 画像の比率を調整 */
+            min-height: 40%;
+        }
+
+        .insta-info-box {
+            flex: 1;
+            border-left: none;
+            border-top: 1px solid #efefef;
+        }
+
+        .fc .fc-toolbar-title {
+            font-size: 1.2rem !important;
+        }
+    }
+
+    /* 中間サイズ (992px以下) */
     @media (max-width: 992px) {
         .dashboard-grid {
             grid-template-columns: 1fr;
         }
     }
 
-    /* スマホ・タブレット向けの調整 */
-    @media (max-width: 768px) {
+    /* 画面幅が狭い時（スマホなど）の設定 */
+    @media (max-width: 1024px) {
+
+        /* 768より少し広めに設定しておくとタブレット等でも安定します */
         .dashboard-grid {
             display: flex;
             flex-direction: column;
-            /* 縦並び */
+            /* 強制的に縦並びにする */
+            gap: 20px;
         }
 
-        /* メインコンテンツ（カレンダー）を一番上に */
-        .main-content {
-            order: 1;
-            margin-bottom: 20px;
-        }
-
-        /* サイドパネルをカレンダーの下に */
+        .main-content,
         .side-panel {
-            order: 2;
-            width: 100%;
+            width: 100% !important;
+            /* 横幅を画面いっぱいに */
+            min-width: 0;
         }
 
-        /* カレンダーがはみ出さないよう調整 */
+        /* カレンダーの文字がはみ出さないように調整 */
         .fc {
-            min-height: 400px;
-        }
-
-        .fc .fc-toolbar-title {
-            font-size: 1.2rem !important;
+            font-size: 0.8rem;
         }
     }
 </style>
@@ -337,16 +463,35 @@ if (!isset($page['dashboard'])) {
                     <?php
                     $topSix = $controller->getRecentImages(6);
                     foreach ($topSix as $pic):
-                        $path = $controller->publicImageBaseUrl . '/' . $uDir . '/images/' . $pic['image_path']; ?>
-                        <a href="index.php?page=memo&action=edit&id=<?= $pic['id'] ?>" class="photo-grid-item">
-                            <img src="<?= htmlspecialchars($path) ?>"
+                        $imgName = $pic['image_path'] ?? '';
+                        if (empty($imgName))
+                            continue;
+
+                        $imgPath = $controller->publicImageBaseUrl . '/' . $uDir . '/images/' . $imgName;
+
+                        // --- JS用に安全に加工 ---
+                        $rawContent = $pic['content'] ?? '';
+                        $decryptedBody = method_exists($controller, 'decryptContent') ? $controller->decryptContent($rawContent) : $rawContent;
+
+                        // 改行をスペースに変換し、バックスラッシュでクォートをエスケープ
+                        $jsBody = str_replace(["\r", "\n"], ' ', $decryptedBody);
+                        $jsBody = addslashes($jsBody);
+                        // onclick属性の中で安全に動くようHTMLエンティティ化
+                        $finalBody = htmlspecialchars($jsBody, ENT_QUOTES, 'UTF-8');
+
+                        $displayDate = isset($pic['create_date']) ? date('m/d', strtotime($pic['create_date'])) : '--/--';
+                        ?>
+                        <a href="javascript:void(0)"
+                            onclick="openInstaModal('<?= htmlspecialchars($imgPath, ENT_QUOTES) ?>', '<?= $finalBody ?>', '<?= $pic['id'] ?>', '<?= $displayDate ?>')"
+                            class="photo-grid-item">
+                            <img src="<?= htmlspecialchars($imgPath) ?>"
                                 onerror="this.src='https://placehold.jp/150x150.png?text=NoImage'">
                         </a>
                     <?php endforeach; ?>
                 </div>
             </div>
 
-            <!-- 3. すべての添付画像（上限なしスライダー） -->
+            <!-- 3. すべての添付画像（スライダー） -->
             <div class="side-panel-section">
                 <div class="panel-title" style="border-left: 4px solid #28a745; color: #28a745;">
                     <span>🖼️ すべての添付画像</span>
@@ -358,82 +503,53 @@ if (!isset($page['dashboard'])) {
                 <div class="slider-horizontal-area">
                     <div id="master-image-slider">
                         <?php
-                        // 1. まず取得した生データの件数を画面に出して確認（デバッグ用）
                         $allGallery = $controller->getRecentImagesAll();
-                        // 開発者ツール(F12)のコンソールか、画面上に件数を出す
-                        // echo "<!-- DEBUG: Count = " . count($allGallery) . " -->"; 
-                        
                         if (!empty($allGallery)):
                             foreach ($allGallery as $item):
-                                // --- 1. 画像パスの生成 ---
                                 $imgName = $item['image_path'] ?? '';
                                 if (empty($imgName))
                                     continue;
 
-                                $currentImgUser = $this->user ?? $uDir;
-                                $imgPath = $controller->publicImageBaseUrl . '/' . $currentImgUser . '/images/' . $imgName;
+                                $imgPath = $controller->publicImageBaseUrl . '/' . $uDir . '/images/' . $imgName;
 
-                                // --- 2. データの復号（ここが最優先） ---
+                                // --- ここでJS用に極限まで安全に加工する ---
                                 $rawContent = $item['content'] ?? '';
-                                $decryptedBody = '';
+                                $decryptedBody = method_exists($controller, 'decryptContent') ? $controller->decryptContent($rawContent) : $rawContent;
 
-                                if (!empty($rawContent)) {
-                                    // 💡 image_d48099.png で定義されているメソッドを使用
-                                    if (method_exists($controller, 'decryptContent')) {
-                                        $decryptedBody = $controller->decryptContent($rawContent);
-                                    } else {
-                                        $decryptedBody = $rawContent;
-                                    }
-                                } else {
-                                    $decryptedBody = 'No Title';
-                                }
+                                // 1. 改行を消す（JSの引数に改行があるとエラーになるため）
+                                $jsBody = str_replace(["\r", "\n"], ' ', $decryptedBody);
+                                // 2. クォートをエスケープする（I'm -> I\'m にする）
+                                $jsBody = addslashes($jsBody);
+                                // 3. HTMLとして安全にする（onclick属性を壊さないため）
+                                $finalBody = htmlspecialchars($jsBody, ENT_QUOTES, 'UTF-8');
 
-                                // --- 3. 復号されたテキストから表示用タイトルを作成 ---
-                                // 💡 復号後の $decryptedBody を使うことで日本語になります
+                                // タイトル表示用
                                 $cleanText = trim(strip_tags(html_entity_decode($decryptedBody)));
-                                $displayTitle = mb_substr($cleanText, 0, 10);
-                                if (mb_strlen($cleanText) > 10) {
-                                    $displayTitle .= '...';
-                                }
-
-                                // --- 4. 日付の整形 ---
-                                $rawDate = $item['create_date'] ?? null;
-                                $displayDate = $rawDate ? date('m/d', strtotime($rawDate)) : '--/--';
+                                $displayTitle = mb_strimwidth($cleanText, 0, 20, '...');
+                                $displayDate = isset($item['create_date']) ? date('m/d', strtotime($item['create_date'])) : '--/--';
                                 ?>
-
-                                <div class="slider-unit" id="img-unit-<?= htmlspecialchars($item['id'] ?? uniqid()) ?>">
+                                <div class="slider-unit" id="img-unit-<?= htmlspecialchars($item['id']) ?>">
                                     <div
-                                        style="position: relative; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                                        style="background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                                        <a href="javascript:void(0)"
+                                            onclick="openInstaModal('<?= htmlspecialchars($imgPath, ENT_QUOTES) ?>', '<?= $finalBody ?>', '<?= $item['id'] ?>', '<?= $displayDate ?>')"
+                                            style="display: block; text-decoration: none;">
 
-                                        <!-- 削除ボタン -->
-                                        <button class="img-delete-trigger"
-                                            onclick="ajaxDeleteImage('<?= $item['id'] ?>')">×</button>
-
-                                        <a href="index.php?page=memo&action=edit&id=<?= $item['id'] ?>"
-                                            style="text-decoration: none; display: block;">
-
-                                            <!-- 画像本体 -->
                                             <img src="<?= htmlspecialchars($imgPath) ?>"
                                                 style="width: 100%; height: 90px; object-fit: cover; display: block;"
-                                                onerror="this.src='https://placehold.jp/24/cccccc/ffffff/150x100.png?text=No%20Image'">
+                                                onerror="this.src='https://placehold.jp/150x100.png?text=NoImage'">
 
-                                            <!-- テキスト情報 -->
                                             <div style="padding: 5px; text-align: center;">
                                                 <span
-                                                    style="color: #007bff; font-weight: bold; font-size: 0.7rem; display: block;">
-                                                    <?= htmlspecialchars($displayDate) ?>
-                                                </span>
+                                                    style="color: #007bff; font-weight: bold; font-size: 0.7rem; display: block;"><?= htmlspecialchars($displayDate) ?></span>
                                                 <strong
-                                                    style="color: #333; font-size: 0.75rem; line-height: 1.2; word-break: break-all; display: block;">
-                                                    <!-- 💡 復号済みのタイトルを表示 -->
-                                                    <?= htmlspecialchars($displayTitle) ?>
-                                                </strong>
+                                                    style="color: #333; font-size: 0.75rem; display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;"><?= htmlspecialchars($displayTitle ?: 'No Title') ?></strong>
                                             </div>
                                         </a>
                                     </div>
                                 </div>
-                            <?php endforeach; 
-                            else: ?>
+                            <?php endforeach;
+                        else: ?>
                             <p style="text-align:center; color:#999; width:100%;">画像はありません</p>
                         <?php endif; ?>
                     </div>
@@ -460,6 +576,29 @@ if (!isset($page['dashboard'])) {
                 <canvas id="activityChart"></canvas>
             </div>
 
+        </div>
+    </div>
+    <!-- 画像拡大モーダル (インスタ風) -->
+    <div id="insta-modal" class="insta-modal modal-content-container" onclick="closeInstaModal(event)">
+        <div class="insta-modal-content">
+            <span class="insta-close">&times;</span>
+            <div class="insta-container">
+                <!-- 左：画像エリア -->
+                <div class="insta-image-box modal-image-wrapper">
+                    <img id="insta-img" src="" alt="">
+                </div>
+                <!-- 右：キャプション（メモ内容）エリア -->
+                <div class="insta-info-box modal-info-card">
+                    <div class="insta-user-info">
+                        <strong>📸 添付メモのプレビュー</strong>
+                        <div id="insta-date" style="font-size: 0.75rem; color: #999;"></div>
+                    </div>
+                    <div id="insta-caption" class="insta-caption"></div>
+                    <div class="insta-footer">
+                        <a id="insta-edit-link" href="#" class="insta-btn-edit">メモを編集する</a>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -506,6 +645,26 @@ if (!isset($page['dashboard'])) {
                     info.jsEvent.preventDefault();
                 }
             },
+            // FullCalendarの設定内
+            // datesSet: function (info) {
+            //     // 1. info.view.currentStart から現在表示中の日付を取得（安全な方法）
+            //     var viewDate = info.view.currentStart;
+            //     var year = viewDate.getFullYear();
+            //     var month = ('0' + (viewDate.getMonth() + 1)).slice(-2);
+            //     var day = ('0' + viewDate.getDate()).slice(-2);
+
+            //     var dateStr = year + '-' + month + '-' + day;
+
+            //     // 2. ボタンを取得（クラス名が .btn-new-memo か .action-button-new か確認してください）
+            //     // スクショから推測して両方の可能性を考慮します
+            //     var newMemoBtn = document.querySelector('.btn-new-memo') || document.querySelector('.action-button-new');
+
+            //     if (newMemoBtn) {
+            //         // 現在のURLを取得してベースを作成
+            //         newMemoBtn.href = 'index.php?page=memo&action=new&date=' + dateStr;
+            //         console.log("Selected Date for Button:", dateStr); // デバッグ用
+            //     }
+            // },
             dateClick: (info) => {
                 window.location.href = `index.php?page=memo&action=new&date=${info.dateStr}`;
             },
@@ -630,7 +789,33 @@ if (!isset($page['dashboard'])) {
                 }
             });
     }
+    /**
+     * インスタ風モーダルを開く
+     * @param {string} imgSrc 画像URL
+     * @param {string} caption 復号済みメモ本文
+     * @param {string} id メモID
+     * @param {string} date 日付
+     */
+    function openInstaModal(imgSrc, caption, id, date) {
+        document.getElementById('insta-img').src = imgSrc;
+        document.getElementById('insta-caption').innerText = caption;
+        document.getElementById('insta-date').innerText = date + " 投稿";
+        document.getElementById('insta-edit-link').href = `index.php?page=memo&action=edit&id=${id}`;
 
+        document.getElementById('insta-modal').style.display = 'block';
+        document.body.style.overflow = 'hidden'; // 背景スクロール防止
+    }
+
+    /**
+     * モーダルを閉じる
+     */
+    function closeInstaModal(event) {
+        // 背景または×ボタンをクリックした場合のみ閉じる
+        if (event.target.id === 'insta-modal' || event.target.className === 'insta-close') {
+            document.getElementById('insta-modal').style.display = 'none';
+            document.body.style.overflow = '';
+        }
+    }
 
     /**
      * ======================================================================================

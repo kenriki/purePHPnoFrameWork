@@ -384,6 +384,30 @@ if (!isset($page['dashboard'])) {
             grid-template-columns: 1fr;
         }
     }
+
+    /* 画面幅が狭い時（スマホなど）の設定 */
+    @media (max-width: 1024px) {
+
+        /* 768より少し広めに設定しておくとタブレット等でも安定します */
+        .dashboard-grid {
+            display: flex;
+            flex-direction: column;
+            /* 強制的に縦並びにする */
+            gap: 20px;
+        }
+
+        .main-content,
+        .side-panel {
+            width: 100% !important;
+            /* 横幅を画面いっぱいに */
+            min-width: 0;
+        }
+
+        /* カレンダーの文字がはみ出さないように調整 */
+        .fc {
+            font-size: 0.8rem;
+        }
+    }
 </style>
 
 <!-- ======================================================================================
@@ -523,7 +547,7 @@ if (!isset($page['dashboard'])) {
                                     </div>
                                 </div>
                             <?php endforeach;
-                            else: ?>
+                        else: ?>
                             <p style="text-align:center; color:#999; width:100%;">画像はありません</p>
                         <?php endif; ?>
                     </div>

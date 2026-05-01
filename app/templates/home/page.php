@@ -463,24 +463,26 @@ if (!isset($page['dashboard'])) {
                     <?php
                     $topSix = $controller->getRecentImages(6);
                     foreach ($topSix as $pic):
-                        // パスとデータの準備
                         $imgName = $pic['image_path'] ?? '';
                         if (empty($imgName))
                             continue;
 
                         $imgPath = $controller->publicImageBaseUrl . '/' . $uDir . '/images/' . $imgName;
 
-                        // 本文の復号
+                        // --- JS用に安全に加工 ---
                         $rawContent = $pic['content'] ?? '';
                         $decryptedBody = method_exists($controller, 'decryptContent') ? $controller->decryptContent($rawContent) : $rawContent;
-                        if (empty($decryptedBody))
-                            $decryptedBody = 'No Title';
 
-                        // 日付の整形
+                        // 改行をスペースに変換し、バックスラッシュでクォートをエスケープ
+                        $jsBody = str_replace(["\r", "\n"], ' ', $decryptedBody);
+                        $jsBody = addslashes($jsBody);
+                        // onclick属性の中で安全に動くようHTMLエンティティ化
+                        $finalBody = htmlspecialchars($jsBody, ENT_QUOTES, 'UTF-8');
+
                         $displayDate = isset($pic['create_date']) ? date('m/d', strtotime($pic['create_date'])) : '--/--';
                         ?>
                         <a href="javascript:void(0)"
-                            onclick="openInstaModal('<?= htmlspecialchars($imgPath) ?>', '<?= htmlspecialchars(addslashes($decryptedBody)) ?>', '<?= $pic['id'] ?>', '<?= $displayDate ?>')"
+                            onclick="openInstaModal('<?= htmlspecialchars($imgPath, ENT_QUOTES) ?>', '<?= $finalBody ?>', '<?= $pic['id'] ?>', '<?= $displayDate ?>')"
                             class="photo-grid-item">
                             <img src="<?= htmlspecialchars($imgPath) ?>"
                                 onerror="this.src='https://placehold.jp/150x150.png?text=NoImage'">

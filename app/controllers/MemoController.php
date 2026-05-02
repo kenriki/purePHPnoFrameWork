@@ -19,7 +19,7 @@ class MemoController
     private $cipher_key;
     private $max_storage = 536870912; // 512MB
     public $safeDirName;
-    
+
 
     // ブラウザから画像にアクセスするためのベースURL（環境に合わせて調整してください）
     public $publicImageBaseUrl = "/sample/app/data/user_memos";
@@ -32,7 +32,7 @@ class MemoController
         if (session_status() === PHP_SESSION_NONE) {
             session_start();
         }
-        $this->cipher_key = getenv('CIPHER_KEY')  ?? 'default-key';
+        $this->cipher_key = getenv('CIPHER_KEY') ?? 'default-key';
 
         // ログインユーザーの特定
         $this->user = $_SESSION['user'] ?? $_SESSION['username'] ?? 'guest';
@@ -445,7 +445,7 @@ class MemoController
      */
     private function generatePdf($content, $guestName = '', $imagePath = '', $username = '')
     {
-        ini_set('memory_limit','256M');
+        ini_set('memory_limit', '256M');
         // 追加：これまでのWarning出力をすべて消し去る
         if (ob_get_length())
             ob_clean();
@@ -462,7 +462,8 @@ class MemoController
 
         // ヘッダー
         $header = "メモ エクスポート (" . date('Y-m-d H:i') . ")";
-        $pdf->Cell(0, 10, $header, 'B', 1);
+        //$pdf->Cell(0, 10, $header, 'B', 1);
+        $pdf->Cell(0, 10, $header, 'B', 1, 'L'); // 'L'を明示し、1で改行
         $pdf->Ln(5);
 
         // 本文出力
@@ -525,7 +526,8 @@ class MemoController
                 // デバッグ用：ファイルが見つからない場合にパスを表示
                 $pdf->Ln(5);
                 $pdf->SetTextColor(200, 0, 0);
-                $pdf->Cell(0, 10, "Debug: File not found at " . $originalPath);
+                //$pdf->Cell(0, 10, "Debug: File not found at " . $originalPath);
+                $pdf->Cell(100, 6, "（添付画像は表示できませんでした）", 0, 0, 'C');
                 $pdf->SetTextColor(0, 0, 0);
             }
         }
@@ -872,6 +874,58 @@ class MemoController
     /**
      * 画像アップロード・ストレージ管理
      */
+    // public function uploadImage($file)
+    // {
+    //     if (empty($file['tmp_name']))
+    //         return null;
+
+    //     ini_set('memory_limit', '512M'); // 高精細スクショ展開用のメモリ確保
+    //     set_time_limit(60);              // WebP変換にかかる時間を考慮
+
+    //     // --- PDF出力時に残ったゴミ(temp_...)を自動削除 ---
+    //     $imageDir = $this->baseDir . "images/";
+    //     if (is_dir($imageDir)) {
+    //         foreach (scandir($imageDir) as $f) {
+    //             if (strpos($f, 'temp_') === 0 && (time() - filemtime($imageDir . $f) > 300)) {
+    //                 @unlink($imageDir . $f);
+    //             }
+    //         }
+    //     }
+
+    //     // 1. 容量チェック
+    //     $usage = $this->getUserStorageUsage($this->user);
+    //     if ($usage + $file['size'] > $this->max_storage) {
+    //         die("容量オーバーです。不要な画像を削除してください。");
+    //     }
+
+    //     // 2. 画像の生成 (JPG/PNG/WEBP/GIF対応)
+    //     $image = $this->imagecreatefromany($file['tmp_name']);
+
+    //     if (!$image) {
+    //         // ここで return してしまうと DB に image_path が入らないため、
+    //         // ログを確認するか、エラーを出して止める必要があります。
+    //         error_log("画像生成に失敗しました: " . $file['name']);
+    //         return null;
+    //     }
+
+    //     // 保存先ディレクトリの確保
+    //     if (!is_dir($imageDir)) {
+    //         mkdir($imageDir, 0777, true);
+    //     }
+
+    //     // ファイル名をランダム生成（常にWebPに変換して保存）
+    //     $filename = bin2hex(random_bytes(8)) . ".webp";
+    //     $fullPath = $imageDir . $filename;
+
+    //     // WebPとして保存を実行
+    //     if (imagewebp($image, $fullPath, 80)) {
+    //         // 3. 使用量をDBに反映
+    //         $this->updateUserUsage($this->user, filesize($fullPath));
+    //         return $filename;
+    //     }
+
+    //     return null;
+    // }
     public function uploadImage($file)
     {
         if (empty($file['tmp_name']))
@@ -897,14 +951,53 @@ class MemoController
         }
 
         // 2. 画像の生成 (JPG/PNG/WEBP/GIF対応)
-        $image = $this->imagecreatefromany($file['tmp_name']);
+        $src = $this->imagecreatefromany($file['tmp_name']);
 
-        if (!$image) {
-            // ここで return してしまうと DB に image_path が入らないため、
-            // ログを確認するか、エラーを出して止める必要があります。
+        if (!$src) {
             error_log("画像生成に失敗しました: " . $file['name']);
             return null;
         }
+
+        if (function_exists('exif_read_data')) {
+            $exif = @exif_read_data($file['tmp_name']);
+            if (!empty($exif['Orientation'])) {
+                switch ($exif['Orientation']) {
+                    case 3:
+                        $src = imagerotate($src, 180, 0);
+                        break;
+                    case 6:
+                        $src = imagerotate($src, -90, 0);
+                        break;
+                    case 8:
+                        $src = imagerotate($src, 90, 0);
+                        break;
+                }
+            }
+        }
+
+        // --- 【追加】Exif削除とリサイズ処理 ---
+        $width = imagesx($src);
+        $height = imagesy($src);
+        $maxWidth = 1200; // 実用的なリサイズ幅
+
+        if ($width > $maxWidth) {
+            $newWidth = $maxWidth;
+            $newHeight = (int) ($height * ($maxWidth / $width));
+        } else {
+            $newWidth = $width;
+            $newHeight = $height;
+        }
+
+        // 新しいキャンバスを作成（ここでメタデータが引き継がれずクリーンになる）
+        $dst = imagecreatetruecolor($newWidth, $newHeight);
+
+        // 透過設定の維持（WebP/PNG用）
+        imagealphablending($dst, false);
+        imagesavealpha($dst, true);
+
+        // 再サンプリング実行
+        imagecopyresampled($dst, $src, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
+        // ------------------------------------
 
         // 保存先ディレクトリの確保
         if (!is_dir($imageDir)) {
@@ -915,10 +1008,11 @@ class MemoController
         $filename = bin2hex(random_bytes(8)) . ".webp";
         $fullPath = $imageDir . $filename;
 
-        // WebPとして保存を実行
-        if (imagewebp($image, $fullPath, 80)) {
-            // 3. 使用量をDBに反映
+        // WebPとして保存を実行（クリーンな $dst を保存）
+        if (imagewebp($dst, $fullPath, 80)) {
+            // 3. 使用量をDBに反映（実際のファイルサイズを取得）
             $this->updateUserUsage($this->user, filesize($fullPath));
+
             return $filename;
         }
 
@@ -1060,11 +1154,40 @@ class MemoController
         ORDER BY create_date DESC";
 
         $stmt = $db->prepare($sql);
-        $stmt->bindValue(':username', trim($this -> user), PDO::PARAM_STR);
+        $stmt->bindValue(':username', trim($this->user), PDO::PARAM_STR);
         $stmt->execute();
         // $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
         // var_dump(count($result));
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+    /**
+     * ユーザーに紐づく直近のメモを取得する（Geminiコンテキスト用）
+     */
+    public function getRecentMemosAll($userName, $limit = 100)
+    {
+        try {
+            $pdo = getDB();
+            // WHERE user_id を WHERE username に変更
+            $stmt = $pdo->prepare("SELECT content, create_date FROM user_memos WHERE username = ? AND is_deleted = 0 ORDER BY create_date DESC LIMIT ?");
+            $stmt->bindValue(1, $userName, PDO::PARAM_STR); // 文字列なので STR
+            $stmt->bindValue(2, $limit, PDO::PARAM_INT);
+            $stmt->execute();
+
+            $memos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $result = [];
+            foreach ($memos as $m) {
+                $decrypted = method_exists($this, 'decryptContent')
+                    ? $this->decryptContent($m['content'])
+                    : $m['content'];
+
+                $result[] = "[{$m['create_date']}] " . $decrypted;
+            }
+            return $result;
+        } catch (Exception $e) {
+            // デバッグ時はここを error_log($e->getMessage()); にすると確実です
+            return [];
+        }
     }
 }
 ?>

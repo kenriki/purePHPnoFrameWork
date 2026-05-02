@@ -462,7 +462,8 @@ class MemoController
 
         // ヘッダー
         $header = "メモ エクスポート (" . date('Y-m-d H:i') . ")";
-        $pdf->Cell(0, 10, $header, 'B', 1);
+        //$pdf->Cell(0, 10, $header, 'B', 1);
+        $pdf->Cell(0, 10, $header, 'B', 1, 'L'); // 'L'を明示し、1で改行
         $pdf->Ln(5);
 
         // 本文出力
@@ -1069,7 +1070,7 @@ class MemoController
     /**
      * ユーザーに紐づく直近のメモを取得する（Geminiコンテキスト用）
      */
-    public function getRecentMemosAll($userName, $limit = 30)
+    public function getRecentMemosAll($userName, $limit = 100)
     {
         try {
             $pdo = getDB();

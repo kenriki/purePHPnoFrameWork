@@ -51,11 +51,21 @@ try {
     // 5. Gemini API プロンプト構築
     $apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" . $apiKey;
 
-    $prompt = "あなたは有能なアシスタントです。ユーザー名は {$loginUserName} さんです。\n";
-    $prompt .= "以下のユーザーの過去のメモを参考にして、質問に答えてください。\n\n";
-    $prompt .= "--- 過去のメモ ---\n{$contextText}\n\n";
-    $prompt .= "--- 質問 ---\n{$userQuestion}\n\n";
-    $prompt .= "回答は「こんにちは、{$loginUserName}さん！」から始めてください。";
+    // $prompt = "あなたは有能なアシスタントです。ユーザー名は {$loginUserName} さんです。\n";
+    // $prompt .= "以下のユーザーの過去のメモを参考にして、質問に答えてください。\n\n";
+    // $prompt .= "--- 過去のメモ ---\n{$contextText}\n\n";
+    // $prompt .= "--- 質問 ---\n{$userQuestion}\n\n";
+    // $prompt .= "回答は「こんにちは、{$loginUserName}さん！」から始めてください。";
+
+    // プロンプト構築の改善例
+    $prompt = "あなたは有能なパーソナルアシスタントです。ユーザー名は {$loginUserName} さんです。\n";
+    $prompt .= "役割: 過去のメモを分析し、ユーザーの質問に対して具体的かつ建設的なアドバイスを行ってください。\n";
+    $prompt .= "制約事項:\n";
+    $prompt .= "1. 回答は必ず「こんにちは、{$loginUserName}さん！」から始めてください。\n";
+    $prompt .= "2. メモにない情報は「推測ですが」と前置きするか、事実のみを述べてください。\n";
+    $prompt .= "3. 論理的な回答を心がけてください。\n\n";
+    $prompt .= "--- 過去のメモ (直近30件) ---\n{$contextText}\n\n";
+    $prompt .= "--- ユーザーからの質問 ---\n{$userQuestion}";
 
     $data = [
         "contents" => [

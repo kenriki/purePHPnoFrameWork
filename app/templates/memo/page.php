@@ -219,7 +219,8 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
     /* ラベルをボタンに見せる */
     .camera-btn {
         display: inline-block;
-        background-color: #4b4b4b; /* シックなグレー。青(保存ボタン)と分けるため */
+        background-color: #4b4b4b;
+        /* シックなグレー。青(保存ボタン)と分けるため */
         color: white;
         padding: 12px 24px;
         border-radius: 8px;
@@ -228,7 +229,7 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
         font-size: 1rem;
         transition: background 0.3s, transform 0.1s;
         border: none;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         text-align: center;
     }
 
@@ -259,7 +260,8 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
     /* ギャラリーボタンのデザイン */
     .gallery-btn {
         display: inline-block;
-        background-color: #007bff; /* 鮮やかな青 */
+        background-color: #007bff;
+        /* 鮮やかな青 */
         color: white;
         padding: 12px 24px;
         border-radius: 8px;
@@ -268,7 +270,7 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
         font-size: 1rem;
         transition: all 0.3s;
         border: none;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         text-align: center;
         min-width: 200px;
     }
@@ -291,7 +293,15 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
         font-size: 0.8rem;
         color: #666;
         margin-top: 5px;
-        height: 1.2em; /* レイアウト崩れ防止 */
+        height: 1.2em;
+        /* レイアウト崩れ防止 */
+    }
+
+    /* PC（画面幅が広いデバイス）ではカメラボタンを非表示にする例 */
+    @media screen and (min-width: 769px) {
+        label[for="file-input"] {
+            display: none !important;
+        }
     }
 </style>
 <div id="upload-overlay">
@@ -329,6 +339,10 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
                     style="padding: 6px 10px; background:#007bff; color:#fff; border:none; border-radius:4px; cursor:pointer;">適用</button>
             </form>
         <?php endif; ?>
+    </div>
+
+    <div style="margin-top: 30px; padding-top: 15px; border-top: 1px solid #eee;">
+        <a href="index.php?page=home" style="text-decoration: none; color: #007bff; font-weight: bold;">🏠 ホーム画面へ戻る</a>
     </div>
 
     <?php if ($current_action === 'new' || $current_action === 'edit'): ?>
@@ -377,10 +391,10 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
                 </p>
                 <label style="display: block; font-weight: bold; margin-bottom: 5px;">📸 写真を添付 (PDFにも反映されます)</label>
                 <div class="file-upload-container" style="margin-top: 10px;">
-                    <label for="file-input" class="gallery-btn">
+                    <label for="file-input-gallery" class="gallery-btn">
                         <span class="gallery-icon">📁</span> ギャラリーから画像を選択
                         <!-- capture属性を外すことで、ライブラリ選択を優先させます -->
-                        <input type="file" name="memo_image" id="file-input" accept="image/*">
+                        <input type="file" name="memo_image" id="file-input-gallery" accept="image/*">
                     </label>
                     <div id="gallery-name-preview" class="file-name-label"></div>
                 </div>
@@ -391,6 +405,9 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
                         <input type="file" name="memo_image" id="file-input" accept="image/*" capture="environment">
                     </label>
                     <div id="file-name-preview" style="font-size: 0.8rem; color: #666; margin-top: 5px;"></div>
+                    <label for="ai-scan-input" class="camera-btn" <span class="camera-icon">📸</span> レシート分析GO
+                        <input type="file" id="ai-scan-input" accept="image/*" capture="environment" style="display:none;">
+                    </label>
                 </div>
                 <div style="width: 100%; background: #eee; height: 8px; border-radius: 4px; margin-top: 10px;">
                     <?php $p_val = $percent ?? 0; ?>
@@ -551,7 +568,8 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
         const saveBtn = document.getElementById('save-btn');
         const overlay = document.getElementById('upload-overlay');
         const overlayBar = document.getElementById('overlay-progress-bar');
-        const fileInput = document.getElementById('file-input');
+        const fileInput = document.getElementById('file-input-gallery');
+        const cameraInput = document.getElementById('camera-input');
 
         // 1. ファイルバリデーション (PNGのみ)
         // if (fileInput) {
@@ -594,8 +612,11 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
                 const formData = new FormData(form);
 
                 // --- 2. 画像のリサイズ処理 ---
-                if (fileInput && fileInput.files.length > 0) {
-                    const file = fileInput.files[0];
+                if (
+                    (fileInput && fileInput.files.length > 0) ||
+                    (cameraInput && cameraInput.files.length > 0)
+                ) {
+                    const file = (fileInput?.files?.[0]) || (cameraInput?.files?.[0]);
                     if (file.type.startsWith('image/')) {
                         try {
                             // ここで待機（await）
@@ -696,5 +717,85 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape' && modal) modal.style.display = 'none';
         });
+    });
+</script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const aiScanInput = document.getElementById('ai-scan-input');
+        const memoContent = document.getElementById('memo-content');
+
+        if (aiScanInput && memoContent) {
+            aiScanInput.addEventListener('change', async function (e) {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                // 1. 解析開始：UIをロックして状態を表示
+                const originalContent = memoContent.value;
+                aiScanInput.disabled = true; // 連打防止
+                memoContent.value = "【AI解析中... しばらくお待ちください】\n" + originalContent;
+
+                const formData = new FormData();
+                formData.append('receipt_image', file);
+
+                try {
+                    const response = await fetch('gemini_proxy.php', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    // レスポンスをテキストとして取得
+                    const resultText = await response.text();
+
+                    // --- 429エラー（レート制限）の特別ハンドリング ---
+                    if (response.status === 429) {
+                        let waitSec = 30; // 30秒待機（無料枠の標準的な目安）
+                        const countdownInterval = setInterval(() => {
+                            memoContent.value = `【混雑中：あと ${waitSec} 秒で再試行可能】\n無料枠の上限に達しました。少し休ませてください。\n----------------\n\n${originalContent}`;
+                            waitSec--;
+                            if (waitSec < 0) {
+                                clearInterval(countdownInterval);
+                                memoContent.value = `【準備完了：再試行してください】\n----------------\n\n${originalContent}`;
+                                aiScanInput.disabled = false;
+                            }
+                        }, 1000);
+                        return; // ここで終了し、finallyでの解除をさせない
+                    }
+
+                    if (!response.ok) {
+                        throw new Error(`サーバーエラー(HTTP ${response.status}): ${resultText}`);
+                    }
+
+                    // JSONパース
+                    let data;
+                    try {
+                        data = JSON.parse(resultText);
+                    } catch (parseError) {
+                        throw new Error(`JSONパース失敗: ${resultText}`);
+                    }
+
+                    // Geminiからの応答チェック
+                    if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts[0].text) {
+                        const aiText = data.candidates[0].content.parts[0].text;
+                        // 成功：解析結果を挿入
+                        memoContent.value = `--- 解析成功 ---\n${aiText}\n----------------\n\n${originalContent}`;
+                    } else {
+                        throw new Error("Geminiからの応答が空、またはエラー形式です: " + resultText);
+                    }
+
+                } catch (error) {
+                    // 全てのエラーをテキストエリアに書き出す
+                    console.error("Full Error:", error);
+                    memoContent.value = `【デバッグ情報：解析に失敗しました】\n${error.message}\n----------------\n\n${originalContent}`;
+                } finally {
+                    // 429エラー以外の時は、すぐに入力をリセットして再開可能にする
+                    // ※429の時はタイマー側で解除するため、ここでは条件分岐が必要な場合もありますが、
+                    // シンプルに一度リセットする形にしています。
+                    if (!aiScanInput.disabled || !memoContent.value.includes('混雑中')) {
+                        aiScanInput.disabled = false;
+                        aiScanInput.value = '';
+                    }
+                }
+            });
+        }
     });
 </script>

@@ -405,6 +405,9 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
                         <input type="file" name="memo_image" id="file-input" accept="image/*" capture="environment">
                     </label>
                     <div id="file-name-preview" style="font-size: 0.8rem; color: #666; margin-top: 5px;"></div>
+                    <label for="ai-scan-input" class="camera-btn" <span class="camera-icon">📸</span> レシート分析GO
+                        <input type="file" id="ai-scan-input" accept="image/*" capture="environment" style="display:none;">
+                    </label>
                 </div>
                 <div style="width: 100%; background: #eee; height: 8px; border-radius: 4px; margin-top: 10px;">
                     <?php $p_val = $percent ?? 0; ?>
@@ -714,5 +717,85 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape' && modal) modal.style.display = 'none';
         });
+    });
+</script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const aiScanInput = document.getElementById('ai-scan-input');
+        const memoContent = document.getElementById('memo-content');
+
+        if (aiScanInput && memoContent) {
+            aiScanInput.addEventListener('change', async function (e) {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                // 1. 解析開始：UIをロックして状態を表示
+                const originalContent = memoContent.value;
+                aiScanInput.disabled = true; // 連打防止
+                memoContent.value = "【AI解析中... しばらくお待ちください】\n" + originalContent;
+
+                const formData = new FormData();
+                formData.append('receipt_image', file);
+
+                try {
+                    const response = await fetch('gemini_proxy.php', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    // レスポンスをテキストとして取得
+                    const resultText = await response.text();
+
+                    // --- 429エラー（レート制限）の特別ハンドリング ---
+                    if (response.status === 429) {
+                        let waitSec = 30; // 30秒待機（無料枠の標準的な目安）
+                        const countdownInterval = setInterval(() => {
+                            memoContent.value = `【混雑中：あと ${waitSec} 秒で再試行可能】\n無料枠の上限に達しました。少し休ませてください。\n----------------\n\n${originalContent}`;
+                            waitSec--;
+                            if (waitSec < 0) {
+                                clearInterval(countdownInterval);
+                                memoContent.value = `【準備完了：再試行してください】\n----------------\n\n${originalContent}`;
+                                aiScanInput.disabled = false;
+                            }
+                        }, 1000);
+                        return; // ここで終了し、finallyでの解除をさせない
+                    }
+
+                    if (!response.ok) {
+                        throw new Error(`サーバーエラー(HTTP ${response.status}): ${resultText}`);
+                    }
+
+                    // JSONパース
+                    let data;
+                    try {
+                        data = JSON.parse(resultText);
+                    } catch (parseError) {
+                        throw new Error(`JSONパース失敗: ${resultText}`);
+                    }
+
+                    // Geminiからの応答チェック
+                    if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts[0].text) {
+                        const aiText = data.candidates[0].content.parts[0].text;
+                        // 成功：解析結果を挿入
+                        memoContent.value = `--- 解析成功 ---\n${aiText}\n----------------\n\n${originalContent}`;
+                    } else {
+                        throw new Error("Geminiからの応答が空、またはエラー形式です: " + resultText);
+                    }
+
+                } catch (error) {
+                    // 全てのエラーをテキストエリアに書き出す
+                    console.error("Full Error:", error);
+                    memoContent.value = `【デバッグ情報：解析に失敗しました】\n${error.message}\n----------------\n\n${originalContent}`;
+                } finally {
+                    // 429エラー以外の時は、すぐに入力をリセットして再開可能にする
+                    // ※429の時はタイマー側で解除するため、ここでは条件分岐が必要な場合もありますが、
+                    // シンプルに一度リセットする形にしています。
+                    if (!aiScanInput.disabled || !memoContent.value.includes('混雑中')) {
+                        aiScanInput.disabled = false;
+                        aiScanInput.value = '';
+                    }
+                }
+            });
+        }
     });
 </script>

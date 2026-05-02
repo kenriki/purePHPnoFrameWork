@@ -526,7 +526,8 @@ class MemoController
                 // デバッグ用：ファイルが見つからない場合にパスを表示
                 $pdf->Ln(5);
                 $pdf->SetTextColor(200, 0, 0);
-                $pdf->Cell(0, 10, "Debug: File not found at " . $originalPath);
+                //$pdf->Cell(0, 10, "Debug: File not found at " . $originalPath);
+                $pdf->Cell(100, 6, "（添付画像は表示できませんでした）", 0, 0, 'C');
                 $pdf->SetTextColor(0, 0, 0);
             }
         }

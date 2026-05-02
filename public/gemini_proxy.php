@@ -3,7 +3,7 @@
  * gemini_proxy.php - 決定版
  * v1beta + 2.0-flash 構成
  */
-
+set_time_limit(120);
 ini_set('display_errors', 0);
 error_reporting(0);
 ob_start();

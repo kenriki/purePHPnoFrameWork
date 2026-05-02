@@ -19,7 +19,7 @@ class MemoController
     private $cipher_key;
     private $max_storage = 536870912; // 512MB
     public $safeDirName;
-    
+
 
     // ブラウザから画像にアクセスするためのベースURL（環境に合わせて調整してください）
     public $publicImageBaseUrl = "/sample/app/data/user_memos";
@@ -32,7 +32,7 @@ class MemoController
         if (session_status() === PHP_SESSION_NONE) {
             session_start();
         }
-        $this->cipher_key = getenv('CIPHER_KEY')  ?? 'default-key';
+        $this->cipher_key = getenv('CIPHER_KEY') ?? 'default-key';
 
         // ログインユーザーの特定
         $this->user = $_SESSION['user'] ?? $_SESSION['username'] ?? 'guest';
@@ -445,7 +445,7 @@ class MemoController
      */
     private function generatePdf($content, $guestName = '', $imagePath = '', $username = '')
     {
-        ini_set('memory_limit','256M');
+        ini_set('memory_limit', '256M');
         // 追加：これまでのWarning出力をすべて消し去る
         if (ob_get_length())
             ob_clean();
@@ -1060,11 +1060,40 @@ class MemoController
         ORDER BY create_date DESC";
 
         $stmt = $db->prepare($sql);
-        $stmt->bindValue(':username', trim($this -> user), PDO::PARAM_STR);
+        $stmt->bindValue(':username', trim($this->user), PDO::PARAM_STR);
         $stmt->execute();
         // $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
         // var_dump(count($result));
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+    /**
+     * ユーザーに紐づく直近のメモを取得する（Geminiコンテキスト用）
+     */
+    public function getRecentMemosAll($userName, $limit = 30)
+    {
+        try {
+            $pdo = getDB();
+            // WHERE user_id を WHERE username に変更
+            $stmt = $pdo->prepare("SELECT content, create_date FROM user_memos WHERE username = ? AND is_deleted = 0 ORDER BY create_date DESC LIMIT ?");
+            $stmt->bindValue(1, $userName, PDO::PARAM_STR); // 文字列なので STR
+            $stmt->bindValue(2, $limit, PDO::PARAM_INT);
+            $stmt->execute();
+
+            $memos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $result = [];
+            foreach ($memos as $m) {
+                $decrypted = method_exists($this, 'decryptContent')
+                    ? $this->decryptContent($m['content'])
+                    : $m['content'];
+
+                $result[] = "[{$m['create_date']}] " . $decrypted;
+            }
+            return $result;
+        } catch (Exception $e) {
+            // デバッグ時はここを error_log($e->getMessage()); にすると確実です
+            return [];
+        }
     }
 }
 ?>

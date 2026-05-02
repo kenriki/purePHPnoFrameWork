@@ -447,7 +447,27 @@ if (!isset($page['dashboard'])) {
                     </div>
                 <?php endfor; ?>
             </div>
+
+            <!-- カレンダーの下に追加するUIイメージ -->
+            <div class="ai-bot-section"
+                style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 12px; border: 1px solid #dee2e6;">
+                <h4 style="font-size: 0.9rem; color: #555; margin-top: 0;">💬 AIアシスタント（週の振り返り）</h4>
+                <div id="ai-chat-response"
+                    style="font-size: 0.85rem; min-height: 60px; color: #333; margin-bottom: 10px; background: #fff; padding: 10px; border-radius: 8px; border: 1px solid #eee; line-height: 1.5;">
+                    <!-- 初期表示：PHP側でランダムな一言をいれても良いですね -->
+                    「最近のメモから、あなたにぴったりのアドバイスを生成します。」
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" id="ai-chat-input" placeholder="最近の傾向はどう？"
+                        style="flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #ccc; font-size: 0.9rem;">
+                    <button id="ai-chat-btn" onclick="askGeminiBot()"
+                        style="background: #007bff; color: white; border: none; padding: 8px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 0.85rem; white-space: nowrap;">
+                        相談する
+                    </button>
+                </div>
+            </div>
         </div>
+
 
         <!-- 右：サイドパネル  -->
         <div class="side-panel">
@@ -463,13 +483,14 @@ if (!isset($page['dashboard'])) {
                     <?php
                     $topSix = $controller->getRecentImages(6);
                     foreach ($topSix as $pic):
+                        // パスとデータの準備
                         $imgName = $pic['image_path'] ?? '';
                         if (empty($imgName))
                             continue;
 
                         $imgPath = $controller->publicImageBaseUrl . '/' . $uDir . '/images/' . $imgName;
 
-                        // --- JS用に安全に加工 ---
+                        // 本文の復号
                         $rawContent = $pic['content'] ?? '';
                         $decryptedBody = method_exists($controller, 'decryptContent') ? $controller->decryptContent($rawContent) : $rawContent;
 
@@ -531,6 +552,7 @@ if (!isset($page['dashboard'])) {
                                 <div class="slider-unit" id="img-unit-<?= htmlspecialchars($item['id']) ?>">
                                     <div
                                         style="background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                                        <!-- スライダー画像もクリックでモーダルを開く場合 -->
                                         <a href="javascript:void(0)"
                                             onclick="openInstaModal('<?= htmlspecialchars($imgPath, ENT_QUOTES) ?>', '<?= $finalBody ?>', '<?= $item['id'] ?>', '<?= $displayDate ?>')"
                                             style="display: block; text-decoration: none;">
@@ -538,7 +560,6 @@ if (!isset($page['dashboard'])) {
                                             <img src="<?= htmlspecialchars($imgPath) ?>"
                                                 style="width: 100%; height: 90px; object-fit: cover; display: block;"
                                                 onerror="this.src='https://placehold.jp/150x100.png?text=NoImage'">
-
                                             <div style="padding: 5px; text-align: center;">
                                                 <span
                                                     style="color: #007bff; font-weight: bold; font-size: 0.7rem; display: block;"><?= htmlspecialchars($displayDate) ?></span>
@@ -608,6 +629,7 @@ if (!isset($page['dashboard'])) {
      ====================================================================================== -->
 <script>
     let mainCalendar;
+    let currentMemoIdForShare = null;
     const yearCalendars = [];
     const dbData = <?= json_encode($page['dashboard'] ?? ['events' => [], 'chart' => []]) ?>;
 
@@ -797,6 +819,7 @@ if (!isset($page['dashboard'])) {
      * @param {string} date 日付
      */
     function openInstaModal(imgSrc, caption, id, date) {
+        currentMemoIdForShare = id; // ★ここで現在開いているメモのIDを保存する
         document.getElementById('insta-img').src = imgSrc;
         document.getElementById('insta-caption').innerText = caption;
         document.getElementById('insta-date').innerText = date + " 投稿";
@@ -831,4 +854,103 @@ if (!isset($page['dashboard'])) {
      *   必要です。オフライン環境下では背景色が表示されませんが、エラーにはなりません。
      * ======================================================================================
      */
+</script>
+<script>
+    /**
+     * AIアシスタント（Gemini）対話用関数
+     * 表現を公共サービスの窓口のような丁寧な言葉遣いに最適化
+     */
+    async function askGeminiBot() {
+        const input = document.getElementById('ai-chat-input');
+        const responseArea = document.getElementById('ai-chat-response');
+        const question = input.value.trim();
+
+        if (!question) return;
+
+        // 1. 受付中の状態を表示
+        input.disabled = true;
+        const originalPlaceholder = input.placeholder;
+        input.placeholder = "確認中...";
+        responseArea.innerText = "🔍 ただいま過去の記録をお調べしております。少々お待ちください。";
+
+        try {
+            const response = await fetch('ask_gemini_bot.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question: question })
+            });
+
+            // --- 混雑時（429）の対応：待ち時間を分かりやすく提示 ---
+            if (response.status === 429) {
+                let waitSec = 30;
+                const timer = setInterval(() => {
+                    responseArea.innerText = `⚠️ 申し訳ございません。ただいま窓口が大変混み合っております。あと ${waitSec} 秒ほどお待ちいただけますでしょうか。`;
+                    if (waitSec-- < 0) {
+                        clearInterval(timer);
+                        responseArea.innerText = "大変お待たせいたしました。受付の準備が整いましたので、もう一度お声がけください。";
+                        resetUI(input, originalPlaceholder);
+                    }
+                }, 1000);
+                return;
+            }
+
+            // --- エラーハンドリング：技術用語を排除した「市役所風」案内 ---
+            if (!response.ok) {
+                if (response.status === 404) {
+                    throw new Error("申し訳ございません。現在、相談員（AI）が席を外しており、お繋ぎすることができません。しばらくしてから再度お試しください。");
+                } else if (response.status >= 500) {
+                    throw new Error("システムに一時的な不具合が発生しております。復旧まで今しばらくお待ちいただけますようお願い申し上げます。");
+                } else {
+                    throw new Error("通信環境等の影響により、お手続きが完了できませんでした。恐れ入りますが、もう一度最初からお試しください。");
+                }
+            }
+
+            const resultText = await response.text();
+            let data;
+            try {
+                data = JSON.parse(resultText);
+            } catch (e) {
+                throw new Error("お預かりした情報の処理中に問題が発生いたしました。お手数ですが、もう一度ご入力をお願いいたします。");
+            }
+
+            const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || "申し訳ございません。適切な回答が見つかりませんでした。";
+
+            // 2. 正常終了：丁寧に一文字ずつ表示
+            responseArea.innerText = "";
+            let i = 0;
+            const typing = setInterval(() => {
+                responseArea.innerText += aiText[i];
+                i++;
+                if (i >= aiText.length) {
+                    clearInterval(typing);
+                    resetUI(input, originalPlaceholder);
+                }
+            }, 20);
+
+        } catch (error) {
+            console.error("Bot Error:", error);
+            // ユーザーには丁寧なエラー文を表示
+            responseArea.innerText = `❌ ${error.message}`;
+            resetUI(input, originalPlaceholder);
+        }
+    }
+
+    /**
+     * UIの状態をリセットする共通処理
+     */
+    function resetUI(input, originalPlaceholder) {
+        input.disabled = false;
+        input.value = "";
+        input.placeholder = originalPlaceholder;
+        input.focus();
+    }
+
+    /**
+     * Enterキーでの送信受付
+     */
+    document.getElementById('ai-chat-input')?.addEventListener('keypress', function (e) {
+        if (e.key === 'Enter' && !this.disabled) {
+            askGeminiBot();
+        }
+    });
 </script>

@@ -408,6 +408,13 @@ if (!isset($page['dashboard'])) {
             font-size: 0.8rem;
         }
     }
+
+    #analysis-result {
+        user-select: all;
+        /* タップした時に全選択されやすくする */
+        -webkit-user-select: all;
+        /* iOS用 */
+    }
 </style>
 
 <!-- ======================================================================================
@@ -456,6 +463,13 @@ if (!isset($page['dashboard'])) {
                     style="font-size: 0.85rem; min-height: 60px; color: #333; margin-bottom: 10px; background: #fff; padding: 10px; border-radius: 8px; border: 1px solid #eee; line-height: 1.5;">
                     <!-- 初期表示：PHP側でランダムな一言をいれても良いですね -->
                     「最近のメモから、あなたにぴったりのアドバイスを生成します。」
+                </div>
+                <!-- 結果が出た後に表示するアクションボタン（初期は非表示でもOK） -->
+                <div id="ai-response-actions" style="margin-bottom: 10px; gap: 10px;">
+                    <button onclick="copyAiResponse()"
+                        style="font-size: 0.75rem; background: #6c757d; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer;">コピー</button>
+                    <!-- <button onclick="saveAiResponseAsMemo()"
+                        style="font-size: 0.75rem; background: #28a745; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer;">メモに保存</button> -->
                 </div>
                 <div style="display: flex; gap: 8px;">
                     <input type="text" id="ai-chat-input" placeholder="最近の傾向はどう？"
@@ -856,6 +870,73 @@ if (!isset($page['dashboard'])) {
      */
 </script>
 <script>
+
+    /**
+    * AIの回答結果をクリップボードにコピーする
+    */
+    async function copyAiResponse() {
+        const responseArea = document.getElementById('ai-chat-response');
+        const text = responseArea.innerText;
+
+        if (!text || text === "分析中..." || text.includes("アドバイスを生成します")) {
+            return; // 内容がない場合は何もしない
+        }
+
+        try {
+            await navigator.clipboard.writeText(text);
+            // ユーザーへのフィードバック（alertをトースト通知等に変えるとよりスマートです）
+            alert('クリップボードにコピーしました！');
+        } catch (err) {
+            console.error('コピーに失敗しました', err);
+            alert('コピーに失敗しました。ブラウザの設定を確認してください。');
+        }
+    }
+    /**
+     * AIの回答結果を新規メモとしてサーバーに保存する
+     */
+    async function saveAiResponseAsMemo() {
+        const responseArea = document.getElementById('ai-chat-response');
+        const text = responseArea.innerText;
+
+        if (!text || text === "分析中..." || text.includes("アドバイスを生成します")) {
+            alert('保存する内容がありません。');
+            return;
+        }
+
+        if (!confirm('この解析結果を新規メモとして保存しますか？')) {
+            return;
+        }
+
+        // AIの回答であることを明示するためのヘッダーを付与
+        const today = new Date().toLocaleDateString();
+        const fullContent = `【AI振り返り ${today}】\n\n${text}`;
+
+        try {
+            // MemoControllerの保存処理を叩く
+            // ルーティング設定に合わせてURLを調整してください（例: index.php?action=save）
+            const response = await fetch('index.php?action=save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                    // saveMemo($id, $content) の $content に渡る値を指定
+                    'content': fullContent,
+                    // 新規作成なので id は空、または送信しない
+                    'id': ''
+                })
+            });
+
+            if (response.ok) {
+                alert('AIの振り返りを保存しました！');
+            } else {
+                throw new Error('保存に失敗しました');
+            }
+        } catch (err) {
+            console.error('Save Error:', err);
+            alert('エラーが発生しました。Controllerの受信設定を確認してください。');
+        }
+    }
     /**
      * AIアシスタント（Gemini）対話用関数
      * 表現を公共サービスの窓口のような丁寧な言葉遣いに最適化

@@ -874,6 +874,58 @@ class MemoController
     /**
      * 画像アップロード・ストレージ管理
      */
+    // public function uploadImage($file)
+    // {
+    //     if (empty($file['tmp_name']))
+    //         return null;
+
+    //     ini_set('memory_limit', '512M'); // 高精細スクショ展開用のメモリ確保
+    //     set_time_limit(60);              // WebP変換にかかる時間を考慮
+
+    //     // --- PDF出力時に残ったゴミ(temp_...)を自動削除 ---
+    //     $imageDir = $this->baseDir . "images/";
+    //     if (is_dir($imageDir)) {
+    //         foreach (scandir($imageDir) as $f) {
+    //             if (strpos($f, 'temp_') === 0 && (time() - filemtime($imageDir . $f) > 300)) {
+    //                 @unlink($imageDir . $f);
+    //             }
+    //         }
+    //     }
+
+    //     // 1. 容量チェック
+    //     $usage = $this->getUserStorageUsage($this->user);
+    //     if ($usage + $file['size'] > $this->max_storage) {
+    //         die("容量オーバーです。不要な画像を削除してください。");
+    //     }
+
+    //     // 2. 画像の生成 (JPG/PNG/WEBP/GIF対応)
+    //     $image = $this->imagecreatefromany($file['tmp_name']);
+
+    //     if (!$image) {
+    //         // ここで return してしまうと DB に image_path が入らないため、
+    //         // ログを確認するか、エラーを出して止める必要があります。
+    //         error_log("画像生成に失敗しました: " . $file['name']);
+    //         return null;
+    //     }
+
+    //     // 保存先ディレクトリの確保
+    //     if (!is_dir($imageDir)) {
+    //         mkdir($imageDir, 0777, true);
+    //     }
+
+    //     // ファイル名をランダム生成（常にWebPに変換して保存）
+    //     $filename = bin2hex(random_bytes(8)) . ".webp";
+    //     $fullPath = $imageDir . $filename;
+
+    //     // WebPとして保存を実行
+    //     if (imagewebp($image, $fullPath, 80)) {
+    //         // 3. 使用量をDBに反映
+    //         $this->updateUserUsage($this->user, filesize($fullPath));
+    //         return $filename;
+    //     }
+
+    //     return null;
+    // }
     public function uploadImage($file)
     {
         if (empty($file['tmp_name']))
@@ -899,14 +951,53 @@ class MemoController
         }
 
         // 2. 画像の生成 (JPG/PNG/WEBP/GIF対応)
-        $image = $this->imagecreatefromany($file['tmp_name']);
+        $src = $this->imagecreatefromany($file['tmp_name']);
 
-        if (!$image) {
-            // ここで return してしまうと DB に image_path が入らないため、
-            // ログを確認するか、エラーを出して止める必要があります。
+        if (!$src) {
             error_log("画像生成に失敗しました: " . $file['name']);
             return null;
         }
+
+        if (function_exists('exif_read_data')) {
+            $exif = @exif_read_data($file['tmp_name']);
+            if (!empty($exif['Orientation'])) {
+                switch ($exif['Orientation']) {
+                    case 3:
+                        $src = imagerotate($src, 180, 0);
+                        break;
+                    case 6:
+                        $src = imagerotate($src, -90, 0);
+                        break;
+                    case 8:
+                        $src = imagerotate($src, 90, 0);
+                        break;
+                }
+            }
+        }
+
+        // --- 【追加】Exif削除とリサイズ処理 ---
+        $width = imagesx($src);
+        $height = imagesy($src);
+        $maxWidth = 1200; // 実用的なリサイズ幅
+
+        if ($width > $maxWidth) {
+            $newWidth = $maxWidth;
+            $newHeight = (int) ($height * ($maxWidth / $width));
+        } else {
+            $newWidth = $width;
+            $newHeight = $height;
+        }
+
+        // 新しいキャンバスを作成（ここでメタデータが引き継がれずクリーンになる）
+        $dst = imagecreatetruecolor($newWidth, $newHeight);
+
+        // 透過設定の維持（WebP/PNG用）
+        imagealphablending($dst, false);
+        imagesavealpha($dst, true);
+
+        // 再サンプリング実行
+        imagecopyresampled($dst, $src, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
+        // ------------------------------------
 
         // 保存先ディレクトリの確保
         if (!is_dir($imageDir)) {
@@ -917,10 +1008,11 @@ class MemoController
         $filename = bin2hex(random_bytes(8)) . ".webp";
         $fullPath = $imageDir . $filename;
 
-        // WebPとして保存を実行
-        if (imagewebp($image, $fullPath, 80)) {
-            // 3. 使用量をDBに反映
+        // WebPとして保存を実行（クリーンな $dst を保存）
+        if (imagewebp($dst, $fullPath, 80)) {
+            // 3. 使用量をDBに反映（実際のファイルサイズを取得）
             $this->updateUserUsage($this->user, filesize($fullPath));
+
             return $filename;
         }
 

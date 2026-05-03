@@ -749,7 +749,7 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
                 // 1. 解析開始：UIをロックして状態を表示
                 const originalContent = memoContent.value;
                 aiScanInput.disabled = true; // 連打防止
-                memoContent.value = "【AI解析中... しばらくお待ちください】\n" + originalContent;
+                memoContent.value = "【解析中... しばらくお待ちください】\n" + originalContent;
 
                 const formData = new FormData();
                 formData.append('receipt_image', file);

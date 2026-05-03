@@ -73,12 +73,17 @@ if (session_status() === PHP_SESSION_NONE) {
                             // A. ホーム（IDで判定）または「メモ」という名前のページは全員に表示
                             if ($id === 'home' 
                                 || $origTitle === 'メモ' 
-                                || $origTitle === 'メモ一覧'
+                                || $origTitle === 'メモ(Excelダウンロード)' 
                             ) {
                                 $shouldShow = true;
                             }
                             // B. タイトルに「サンプル」が含まれるページは admin のみ表示
                             elseif (strpos($origTitle, 'サンプル') !== false) {
+                                if ($userRole === 'admin') {
+                                    $shouldShow = true;
+                                }
+                            }
+                            elseif (strpos($origTitle, 'メモ一覧') !== false) {
                                 if ($userRole === 'admin') {
                                     $shouldShow = true;
                                 }

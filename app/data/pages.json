@@ -38,6 +38,12 @@
         "template": "memo_list/page.php",
         "controller": "PageController"
     },
+
+    "memo_excel": {
+        "title": "メモ(Excelダウンロード)",
+        "template": "memo_excel/page.php",
+        "controller": "PageController"
+    },
     "sample": {
         "title": "サンプルページ",
         "sections": [

@@ -354,10 +354,16 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
             <input type="hidden" name="id" id="memo-id-input" value="<?= htmlspecialchars($current_id ?? '') ?>">
             <input type="hidden" name="image_path" value="<?= htmlspecialchars($memo['image_path'] ?? ''); ?>">
             <input type="hidden" name="id" id="memo-id-input" value="<?= htmlspecialchars($current_id ?? '') ?>">
-
+            <?php
+            // 安全に YYYY-MM-DD 形式に変換
+            $formattedDate = "";
+            if (!empty($targetDate)) {
+                $formattedDate = date('Y-m-d', strtotime($targetDate));
+            }
+            ?>
             <div class="mb-3">
                 <label class="form-label">予定日</label>
-                <input type="date" name="event_date" id="event_date" value="<?= htmlspecialchars($targetDate) ?>">
+                <input type="date" name="event_date" id="event_date" value="<?= htmlspecialchars($formattedDate) ?>">
             </div>
 
             <div class="pin-status-area" style="margin-bottom: 15px;">

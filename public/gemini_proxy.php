@@ -91,13 +91,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['receipt_image'])) {
 
     // --- 修正版 cURL 設定 ---
     $ch = curl_init($apiUrl);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+    // 処理全体は最大120秒待つ（AIの解析時間をたっぷり取る）
+    curl_setopt($ch, CURLOPT_TIMEOUT, 120);
+    
     curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     // curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // 基本はコメントアウト推奨（環境による）
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
 
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);

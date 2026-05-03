@@ -10,111 +10,114 @@ mb_internal_encoding("UTF-8");
 require_once __DIR__ . '/../app/dbconfig.php';
 require_once __DIR__ . '/../app/router.php';
 
-// アクティブ時間の更新処理
+// 2. ページパラメータの取得
+$page = $_GET['page'] ?? 'home';
+$action = $_GET['action'] ?? '';
+
+/**
+ * 3. ログイン・アクティブ状態の管理とGoogle連携チェック
+ */
+$isGoogleLinked = false;
 if (isset($_SESSION['user_id'])) {
     try {
         $db = getDB();
+
+        // アクティブ時間の更新
         $stmtActive = $db->prepare("UPDATE users SET last_active_at = NOW() WHERE id = ?");
         $stmtActive->execute([$_SESSION['user_id']]);
+
+        // Google連携状態の確認 (トークンの有無)
+        $stmtToken = $db->prepare("SELECT user_name FROM google_tokens WHERE user_name = ?");
+        $userName = $_SESSION['user_id'] ?? 'kenmochi';
+        $stmtToken->execute([$userName]);
+        if ($stmtToken->fetch()) {
+            $isGoogleLinked = true;
+        }
+
     } catch (Exception $e) {
-        // 更新失敗で画面が止まらないよう、エラー時はログ出力などにとどめる
-        error_log("Active time update failed: " . $e->getMessage());
+        error_log("Session/Token check failed: " . $e->getMessage());
     }
 }
 
-// 2. ページパラメータの取得
-$page = $_GET['page'] ?? 'home';
-$action = $_GET['action'] ?? ''; // actionを追加取得
-
 /**
- * 共有メモ閲覧（ログイン不要）
- * セッションチェック（アクティブ時間更新）の前に置くことで、未ログインでも閲覧可能にする
+ * 4. Google認証・連携専用ルーティング
+ * 連携ボタンから page=google_auth でアクセスされた場合
  */
-if ($page === 'view_share') {
-    require_once __DIR__ . '/../app/controllers/MemoController.php';
-    $controller = new MemoController();
-    $controller->view_share(); // この中で include & exit する
+if ($page === 'google_auth') {
+    // auth.php へリダイレクト
+    header("Location: auth.php");
     exit;
 }
 
 /**
- * 共有URL生成処理
+ * 5. 共有メモ閲覧（ログイン不要）
+ */
+if ($page === 'view_share') {
+    require_once __DIR__ . '/../app/controllers/MemoController.php';
+    $controller = new MemoController();
+    $controller->view_share();
+    exit;
+}
+
+/**
+ * 6. 共有URL生成処理
  */
 if ($page === 'generate_share_url') {
     require_once __DIR__ . '/../app/controllers/MemoController.php';
     $controller = new MemoController();
-    $controller->generate_share_url(); // 実行
-    exit; // これで index.php の後半（既存の memo 判定）を無視させる
-}
-
-// ログイン中のアクティブ時間の更新処理（ここより下はログイン前提の処理が含まれる）
-if (isset($_SESSION['user_id'])) {
-    try {
-        $db = getDB();
-        $stmtActive = $db->prepare("UPDATE users SET last_active_at = NOW() WHERE id = ?");
-        $stmtActive->execute([$_SESSION['user_id']]);
-    } catch (Exception $e) {
-        error_log("Active time update failed: " . $e->getMessage());
-    }
+    $controller->generate_share_url();
+    exit;
 }
 
 /**
- * 3. 【追加】合言葉（guest_name）のセッション保存処理
- * フォームから 'set_guest_name' が送られてきたら、ここでセッションに焼く
+ * 7. 合言葉（guest_name）のセッション保存処理
  */
 if ($page === 'memo' && $action === 'set_guest_name') {
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        // 入力された値をセッションに保存
         $_SESSION['guest_name'] = $_POST['guest_name'] ?? '';
     }
-    // 保存後、パラメータを綺麗にして一覧画面へリダイレクト（二重送信防止）
     header("Location: /index.php?page=memo&action=list");
     exit;
 }
 
 /**
- * 4. 特定のページ（memo）に対するカスタムルーティング
+ * 8. 特定のページ（memo）に対するカスタムルーティング
  */
 if ($page === 'memo') {
     $pageId = 'memo';
     require_once __DIR__ . '/../app/controllers/MemoController.php';
 
+    // Google未連携の状態でカレンダー操作をしようとした場合の警告用フラグを渡す
     $controller = new MemoController();
     $data = $controller->handleRequest();
 
-    // データの展開
+    // データの展開（$isGoogleLinked をビューで使えるようにする）
+    $data['isGoogleLinked'] = $isGoogleLinked;
     extract($data);
 
-    // ビューの表示
     include __DIR__ . '/../app/templates/memo/page.php';
-
     exit;
 }
 
 /**
- * マイメモ一覧（memo_list）に対するカスタムルーティング
+ * 9. マイメモ一覧（memo_list）に対するカスタムルーティング
  */
 if ($page === 'memo_list') {
     require_once __DIR__ . '/../app/controllers/PageController.php';
 
     $controller = new PageController();
-    // メソッドを実行してデータを取得
-    $page = $controller->showMemoList();
+    $pageData = $controller->showMemoList();
 
-    // ヘッダーが期待している変数をセットしてエラーを回避
     $pageId = 'memo_list';
 
-    // ヘッダーを読み込む
     include __DIR__ . '/../app/templates/layout/header.php';
-    // コンテンツ本体を読み込む
     include __DIR__ . '/../app/templates/memo_list/page.php';
-    // フッターが必要な場合はここに追加
     include __DIR__ . '/../app/templates/layout/footer.php';
     exit;
 }
 
 /**
- * 5. 既存のルーティングの実行（memo 以外）
+ * 10. 既存のルーティングの実行（HOMEなど）
  */
 route($page);
 ?>

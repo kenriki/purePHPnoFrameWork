@@ -29,11 +29,40 @@ if (!isset($page['dashboard'])) {
         'pinned' => []
     ];
 }
+
+// .env からクライアントIDを取得（環境に合わせてどちらかを使用）
+$clientId = $_ENV['GOOGLE_CLIENT_ID'] ?? getenv('GOOGLE_CLIENT_ID');
+$redirectUri = 'https://desktop-mnoqic1.tail7aa158.ts.net/index.php?page=google_callback';
+
+// 名前（profile）とメールアドレス（email）のスコープを追加
+$scopes = [
+    'https://www.googleapis.com/auth/calendar.events',
+    'https://www.googleapis.com/auth/userinfo.profile',
+    'https://www.googleapis.com/auth/userinfo.email'
+];
+
+// $authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" . http_build_query([
+//     'client_id' => $clientId,
+//     'redirect_uri' => $redirectUri,
+//     'response_type' => 'code',
+//     'scope' => implode(' ', $scopes),
+//     'access_type' => 'offline',
+//     'prompt' => 'consent' // 毎回同意画面を出して確実にスコープを承認させる
+// ]);
+$authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" . http_build_query([
+    'client_id' => $clientId,
+    'redirect_uri' => $redirectUri,
+    'response_type' => 'code',
+    'scope' => implode(' ', $scopes),
+    'access_type' => 'offline',   // オフラインアクセスを有効にしてリフレッシュトークンを得る
+    'prompt' => 'select_account' // consentを外すと、ログイン済みなら同意画面をスキップできる
+]);
 ?>
 
 <!-- 外部スクリプトの読み込み（CDN経由） -->
 <!-- 1. FullCalendar本体 -->
 <script src="/assets/js/fullcalendar@6.1.11/index.global.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@fullcalendar/google-calendar@6.1.15/index.global.min.js"></script>
 <!-- 2. ical.js (これが必要です！) -->
 <script src="https://cdn.jsdelivr.net/npm/ical.js@1.5.0/build/ical.min.js"></script>
 <!-- 3. FullCalendar iCalendarプラグイン -->
@@ -421,17 +450,23 @@ if (!isset($page['dashboard'])) {
         /* iOS用 */
     }
 </style>
-
+<script>
+    const GOOGLE_API_KEY = "<?php echo getenv('GOOGLE_CALENDAR_API_KEY'); ?>";
+    const CALENDAR_ID = "<?php echo getenv('GOOGLE_CALENDAR_ID'); ?>";
+</script>
 <!-- ======================================================================================
      HTML コンテンツ
      ====================================================================================== -->
 <div class="dashboard-container">
 
     <header class="dashboard-header">
-        <h2>📅 統合ダッシュボード</h2>
+        <h2>📅 ダッシュボード</h2>
         <div style="font-size: 0.8rem; color: #777;">
             最終同期: <?php echo date('Y/m/d H:i'); ?>
         </div>
+        <a href="<?php echo $authUrl; ?>" class="btn btn-primary">
+            Googleと同期する
+        </a>
     </header>
 
     <div class="dashboard-grid">
@@ -659,7 +694,11 @@ if (!isset($page['dashboard'])) {
         url: './get_holidays.php',
         format: 'ics', // これがプラグインを呼び出すトリガーになります
         display: 'background',
-        color: '#ffcccc' // 視認性のために少し濃い色でテストすることをお勧めします
+        color: '#ffcccc', // 視認性のために少し濃い色でテストすることをお勧めします
+        // 読み込み失敗時にアラートを出さず、コンソールログに留める
+        failure: function () {
+            console.warn("祝日データの取得に失敗しました。");
+        }
     };
 
     document.addEventListener('DOMContentLoaded', function () {
@@ -688,9 +727,9 @@ if (!isset($page['dashboard'])) {
                 window.location.href = "index.php?page=memo&action=new&date=" + dateStr;
             },
             eventSources: [
+                // 1. 自作メモのデータソース（色判定ロジックを含む）
                 {
                     id: 'memo-data',
-                    // dbData.eventsの中身をループして、日付ごとに色を判定する
                     events: (dbData.events || []).map(event => {
                         // 日本時間での「今日」を取得
                         const now = new Date();
@@ -699,7 +738,6 @@ if (!isset($page['dashboard'])) {
                             ('0' + now.getDate()).slice(-2);
 
                         const eventDate = event.start; // メモの日付
-
                         let color = '#3788d8'; // 過去：青
 
                         if (eventDate === today) {
@@ -715,12 +753,27 @@ if (!isset($page['dashboard'])) {
                         };
                     })
                 },
+                // // 2. Googleカレンダーのデータソース（独立して追加）
+                // {
+                //     googleCalendarId: CALENDAR_ID,
+                //     className: 'google-event',
+                //     color: '#34a853' // Googleカレンダーの予定だと分かるように緑系にするのが一般的です
+                // },
+                // 3. 祝日データソース
                 holidaySource
             ],
             eventClick: function (info) {
+                // 1. Googleカレンダーの予定（URLを持っている）の場合
+                if (info.event.url) {
+                    info.jsEvent.preventDefault(); // デフォルトの挙動（ページ遷移）を阻止
+                    window.open(info.event.url, '_blank'); // 別タブでGoogleカレンダーを開く
+                    return; // 処理終了
+                }
+
+                // 2. 自作メモアプリの予定（IDを持っていて背景イベントではない）の場合
                 if (info.event.id && info.event.display !== 'background') {
-                    window.location.href = `index.php?page=memo&action=edit&id=${info.event.id}`;
                     info.jsEvent.preventDefault();
+                    window.location.href = `index.php?page=memo&action=edit&id=${info.event.id}`;
                 }
             },
             // 日付表示が切り替わった時に動く処理
@@ -766,7 +819,39 @@ if (!isset($page['dashboard'])) {
                 headerToolbar: false,
                 height: 'auto',
                 eventSources: [
-                    { id: 'memo-data-' + m, events: dbData.events || [] },
+                    // 1. 自作メモのデータソース（色判定ロジックを含む）
+                    {
+                        id: 'memo-data',
+                        events: (dbData.events || []).map(event => {
+                            // 日本時間での「今日」を取得
+                            const now = new Date();
+                            const today = now.getFullYear() + '-' +
+                                ('0' + (now.getMonth() + 1)).slice(-2) + '-' +
+                                ('0' + now.getDate()).slice(-2);
+
+                            const eventDate = event.start; // メモの日付
+                            let color = '#3788d8'; // 過去：青
+
+                            if (eventDate === today) {
+                                color = '#ff0000'; // 当日：赤
+                            } else if (eventDate > today) {
+                                color = '#ff9800'; // 未来：橙
+                            }
+
+                            return {
+                                ...event,
+                                backgroundColor: color,
+                                borderColor: color
+                            };
+                        })
+                    },
+                    // 2. Googleカレンダーのデータソース（独立して追加）
+                    // {
+                    //     googleCalendarId: CALENDAR_ID,
+                    //     className: 'google-event',
+                    //     color: '#34a853' // Googleカレンダーの予定だと分かるように緑系にするのが一般的です
+                    // },
+                    // 3. 祝日データソース
                     holidaySource
                 ],
                 eventClick: function (info) {

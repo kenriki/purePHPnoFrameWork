@@ -38,6 +38,12 @@
         "template": "memo_list/page.php",
         "controller": "PageController"
     },
+
+    "memo_excel": {
+        "title": "メモ(Excelダウンロード)",
+        "template": "memo_excel/page.php",
+        "controller": "PageController"
+    },
     "sample": {
         "title": "サンプルページ",
         "sections": [
@@ -140,6 +146,19 @@
             {
                 "type": "php",
                 "file": "sample7.php"
+            }
+        ]
+    },
+    "life360MapX": {
+        "title": "地図アプリ",
+        "sections": [
+            {
+                "type": "text",
+                "content": "地図アプリ"
+            },
+            {
+                "type": "php",
+                "file": "sample8.php"
             }
         ]
     },
@@ -281,5 +300,27 @@
     "generate_share_url": {
         "title": "共有URL発行中...",
         "controller": "MemoController"
+    },
+    "google_auth": {
+        "title": "Googleカレンダー連携",
+        "sections": [
+            {
+                "type": "text",
+                "content": "Googleカレンダーとの連携処理を開始します。自動的に認証画面へ移動しない場合は、下のリンクをクリックしてください。"
+            },
+            {
+                "type": "php",
+                "file": "auth.php"
+            }
+        ]
+    },
+    "google_callback": {
+        "title": "Google連携完了",
+        "sections": [
+            {
+                "type": "php",
+                "file": "auth-callback.php"
+            }
+        ]
     }
 }

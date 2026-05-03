@@ -16,6 +16,7 @@ function checkAuthentication($page)
         'forgot_password',
         'reset_password',
         'autologin',
+        'life360MapX',
 
         //パスワードを忘れた人向けの新しいページ
         'forgot_password_request',
@@ -83,6 +84,27 @@ function route($page)
 
         // それ以外の時は、通常の画面表示(show)を実行
         return $controller->show();
+    }
+
+    if ($page === 'gemini_proxy') {
+        // PageControllerを通さず、直接ファイルを読み込む
+        // これにより、余計なヘッダーHTMLが読み込まれるのを防ぎます
+        require __DIR__ . '/gemini_proxy.php';
+        return;
+    }
+
+    // --- Google認証の振り分け ---
+    if ($page === 'google_auth') {
+        // 認証開始：auth.php へリダイレクト
+        // public/auth.php を直接読み込むか、headerで飛ばす
+        header("Location: /../public/auth.php");
+        exit;
+    }
+
+    if ($page === 'google_callback') {
+        // 認証後の戻り先：auth-callback.php を読み込む
+        require __DIR__ . '/../public/auth-callback.php';
+        return;
     }
 
     // --- アンケートの振り分け ---

@@ -1,5 +1,7 @@
 <?php
-
+// MemoController.php の上部などで
+require_once __DIR__ . '/../utils/GoogleCalendarSync.php';
+use app\utils\GoogleCalendarSync;
 /**
  * MemoController - 高機能メモ管理コントローラ
  * * 主な機能:
@@ -218,60 +220,17 @@ class MemoController
     /**
      * メモ一覧の取得（復号・タイトル抽出処理含む）
      */
-    // private function getMemoList($target_date = null)
-    // {
-    //     $db = getDB();
-    //     $params = [];
-    //     $sql = "SELECT id, username, content, is_pinned, image_path,
-    //                    DATE_FORMAT(create_date, '%Y-%m-%d %H:%i') as time 
-    //             FROM user_memos WHERE ";
-
-    //     // ユーザー条件
-    //     if ($this->user !== 'guest' && !empty($this->user)) {
-    //         $sql .= "username = :username";
-    //         $params[':username'] = $this->user;
-    //     } else {
-    //         $guestSig = 'guest_' . ($_SESSION['guest_name'] ?? '');
-    //         $sql .= "username = " . (($_SESSION['guest_name'] ?? '') ? ":guest_sig" : "'guest'");
-    //         if ($_SESSION['guest_name'] ?? '')
-    //             $params[':guest_sig'] = $guestSig;
-    //     }
-
-    //     // カレンダー日付条件
-    //     if ($target_date) {
-    //         $sql .= " AND DATE(create_date) = :target_date";
-    //         $params[':target_date'] = $target_date;
-    //     }
-
-    //     $sql .= " ORDER BY is_pinned DESC, update_date DESC";
-    //     $stmt = $db->prepare($sql);
-    //     $stmt->execute($params);
-    //     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-    //     foreach ($rows as &$row) {
-    //         // 1. コンテンツの復号
-    //         $decrypted = $this->decryptContent($row['content'] ?? "");
-    //         // 2. タイトル抽出ロジック
-    //         $firstLine = trim(explode("\n", str_replace(["\r\n", "\r"], "\n", $decrypted))[0] ?? "");
-
-    //         $displayTitle = !empty($firstLine) ? mb_strimwidth($firstLine, 0, 60, "...") : "無題のメモ #" . $row['id'];
-    //         // 3. サフィックス（ゲスト表示用）の定義
-    //         $suffix = "";
-    //         if (strpos($row['username'], 'guest_') === 0) {
-    //             $suffix = " <span class='guest-label'>(" . htmlspecialchars(substr($row['username'], 6)) . ")</span>";
-    //         }
-    //         $row['display_title_html'] = htmlspecialchars($displayTitle) . $suffix;
-    //     }
-    //     return $rows;
-    // }
     private function getMemoList($target_date = null)
     {
+        if (empty($target_date) || $target_date === 'null' || $target_date === '') {
+            $target_date = null;
+        }
         $db = getDB();
         $params = [];
 
-        // 【修正ポイント1】
+        // 1. 自前DBからメモを取得
         // 表示用の時間は create_date (5/3など) を使い、
-        // ソートやフィルタの基準は event_date (11/5など) に切り替えます
+        // フィルタやソートは event_date (11/5など) を基準にする
         $sql = "SELECT id, username, content, is_pinned, image_path, event_date,
                    DATE_FORMAT(create_date, '%Y-%m-%d %H:%i') as time 
             FROM user_memos WHERE ";
@@ -287,41 +246,67 @@ class MemoController
                 $params[':guest_sig'] = $guestSig;
         }
 
-        // カレンダー日付条件
+        // カレンダー日付条件（event_dateと比較）
         if ($target_date) {
-            // 【修正ポイント2】
-            // カレンダーで選んだ日付（target_date）は、予定日（event_date）と比較する
-            $sql .= " AND event_date = :target_date";
+            $sql .= " AND DATE(event_date) = :target_date";
             $params[':target_date'] = $target_date;
         }
 
-        // 【修正ポイント3】
-        // 予定日の降順（新しい予定が上）、同じ予定日なら作成が新しい順に並べる
         $sql .= " ORDER BY is_pinned DESC, event_date DESC, create_date DESC";
 
         $stmt = $db->prepare($sql);
         $stmt->execute($params);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+        // 2. 自前データの復号と整形
         foreach ($rows as &$row) {
-            // 1. コンテンツの復号
             $decrypted = $this->decryptContent($row['content'] ?? "");
-            // 2. タイトル抽出ロジック
             $firstLine = trim(explode("\n", str_replace(["\r\n", "\r"], "\n", $decrypted))[0] ?? "");
-
             $displayTitle = !empty($firstLine) ? mb_strimwidth($firstLine, 0, 60, "...") : "無題のメモ #" . $row['id'];
 
-            // 【エンジニア的な工夫】
-            // 未来日のメモには、一覧で一目で分かるように日付をタイトルに添えるのもアリです
-            // if (strtotime($row['event_date']) > time()) { $displayTitle = "【予】" . $displayTitle; }
-
-            // 3. サフィックス（ゲスト表示用）の定義
             $suffix = "";
             if (strpos($row['username'], 'guest_') === 0) {
                 $suffix = " <span class='guest-label'>(" . htmlspecialchars(substr($row['username'], 6)) . ")</span>";
             }
             $row['display_title_html'] = htmlspecialchars($displayTitle) . $suffix;
+            $row['source'] = 'local'; // データ元を識別
         }
+
+        // 3. Google カレンダーからのイベント取得（同期）
+        if ($target_date) {
+            try {
+                $sync = new GoogleCalendarSync($db); // コンストラクタに合わせて調整
+
+                // 取得範囲を「指定された日の属する月」の全期間に設定
+                $timeMin = date('Y-m-01T00:00:00Z', strtotime($target_date));
+                $timeMax = date('Y-m-tT23:59:59Z', strtotime($target_date));
+
+                // 引数を3つ渡す（$username, $timeMin, $timeMax）
+                $googleEvents = $sync->getEvents($this->user, $timeMin, $timeMax);
+
+                if ($googleEvents) {
+                    foreach ($googleEvents as $gEvent) {
+                        // イベントの開始日を取得（全日予定なら 'date'、時間指定なら 'dateTime'）
+                        $eventDate = !empty($gEvent['start']['date'])
+                            ? $gEvent['start']['date']
+                            : date('Y-m-d', strtotime($gEvent['start']['dateTime']));
+
+                        $rows[] = [
+                            'id' => 'google_' . $gEvent['id'],
+                            'username' => $this->user,
+                            'display_title_html' => "🗓️ <span style='color:#4285f4;'>" . htmlspecialchars($gEvent['summary']) . "</span>",
+                            'event_date' => $eventDate, // ループ内の各イベント本来の日付を入れる
+                            'time' => 'Google同期済み',
+                            'is_pinned' => 0,
+                            'source' => 'google'
+                        ];
+                    }
+                }
+            } catch (Exception $e) {
+                error_log("Google Calendar Fetch Failed: " . $e->getMessage());
+            }
+        }
+
         return $rows;
     }
 
@@ -332,8 +317,9 @@ class MemoController
     {
         $db = getDB();
         $isNew = empty($id);
-        if ($isNew)
+        if ($isNew) {
             $id = $this->generateNextId();
+        }
 
         $saveUser = $this->user;
         if ($saveUser === 'guest' && !empty($_POST['guest_name'])) {
@@ -351,7 +337,6 @@ class MemoController
         // --- 画像アップロード処理 ---
         $imagePath = null;
         if (!empty($_FILES['memo_image']['tmp_name'])) {
-            // 前回の回答で作成した uploadImage メソッドを呼び出す
             $imagePath = $this->uploadImage($_FILES['memo_image']);
         }
 
@@ -364,61 +349,68 @@ class MemoController
         // 物理ファイル同期（テキスト）
         file_put_contents($this->baseDir . $id . ".txt", $saveData);
 
-        // DB更新
-        // if ($isNew) {
-        //     // image_path カラムを追加したSQL
-        //     $stmt = $db->prepare("INSERT INTO user_memos (id, username, content, image_path, create_date, update_date) VALUES (?, ?, ?, ?, ?, NOW())");
-        //     $stmt->execute([$id, $saveUser, $saveData, $imagePath, $event_date]);
-        // } else {
-        //     $sql = "UPDATE user_memos SET content = ?, create_date = ?, update_date = NOW()";
-        //     $params = [$saveData, $event_date];
-        //     // 更新時は画像がある場合のみ image_path を更新する
-        //     if ($imagePath) {
-        //         $sql .= ", image_path = ?";
-        //         $params[] = $imagePath;
-        //     }
-        //     $sql .= " WHERE id = ?";
-        //     $params[] = $id;
-        //     $db->prepare($sql)->execute($params);
-        // }
-        if ($isNew) {
-            // 新規作成時：
-            // create_date = NOW() (システムが勝手に「今日 5/3」をセット)
-            // event_date = $event_date (カレンダーで選んだ「未来 11/5」をセット)
-            $sql = "INSERT INTO user_memos (
-            id, 
-            username, 
-            content, 
-            image_path, 
-            event_date, 
-            create_date, 
-            update_date
-        ) VALUES (?, ?, ?, ?, ?, NOW(), NOW())";
+        // --- DB更新処理 ---
+        try {
+            if ($isNew) {
+                // 新規作成時
+                $sql = "INSERT INTO user_memos (
+                id, 
+                username, 
+                content, 
+                image_path, 
+                event_date, 
+                create_date, 
+                update_date
+            ) VALUES (?, ?, ?, ?, ?, NOW(), NOW())";
 
-            $stmt = $db->prepare($sql);
-            // 第5引数に「カレンダーで選んだ日付」を渡す
-            $stmt->execute([$id, $saveUser, $saveData, $imagePath, $event_date]);
+                $stmt = $db->prepare($sql);
+                $success = $stmt->execute([$id, $saveUser, $saveData, $imagePath, $event_date]);
+            } else {
+                // 更新時
+                $sql = "UPDATE user_memos SET 
+                    content = ?, 
+                    event_date = ?, 
+                    update_date = NOW()";
+                $params = [$saveData, $event_date];
 
-        } else {
-            // 更新時：
-            // 作成日(create_date)は変えず、予定日(event_date)と内容だけを更新
-            $sql = "UPDATE user_memos SET 
-                content = ?, 
-                event_date = ?, 
-                update_date = NOW()";
-            $params = [$saveData, $event_date];
+                if ($imagePath) {
+                    $sql .= ", image_path = ?";
+                    $params[] = $imagePath;
+                }
 
-            // 更新時は画像がある場合のみ image_path を更新する
-            if ($imagePath) {
-                $sql .= ", image_path = ?";
-                $params[] = $imagePath;
+                $sql .= " WHERE id = ? AND username = ?";
+                $params[] = $id;
+                $params[] = $saveUser;
+
+                $success = $db->prepare($sql)->execute($params);
             }
 
-            $sql .= " WHERE id = ? AND username = ?";
-            $params[] = $id;
-            $params[] = $saveUser;
+            // --- Googleカレンダー同期 (DB保存が成功した場合のみ実行) ---
+            if ($success) {
+                // 外部ファイルやクラスとして定義されている前提
+                try {
+                    // $this->db は getDB() で取得したインスタンスを使用
+                    $sync = new GoogleCalendarSync($db);
 
-            $db->prepare($sql)->execute($params);
+                    // カレンダーに表示するタイトル（冒頭10文字）
+                    $title = "★" . mb_substr($content, 0, 10);
+
+                    // 同期実行 (Google側の形式に合わせて日付部分のみ抽出)
+                    $targetDate = substr($event_date, 0, 10);
+                    $sync->sync($saveUser, $title, $content, $targetDate);
+
+                } catch (Exception $e) {
+                    // カレンダー同期に失敗しても、メモ保存自体は完了しているため
+                    // エラーをログに吐いて処理を続行（ユーザーにはメモ保存完了を返す）
+                    error_log("Google Calendar Sync Failed: " . $e->getMessage());
+                }
+            }
+
+            return $success;
+
+        } catch (PDOException $e) {
+            error_log("DB Save Failed: " . $e->getMessage());
+            return false;
         }
     }
 
@@ -472,8 +464,49 @@ class MemoController
                 'id' => $row['id'],
                 'start' => $row['start'],
                 'title' => mb_strimwidth(explode("\n", trim($decrypted))[0], 0, 30, "..."),
-                'url' => "index.php?page=memo&action=show&id=" . $row['id']
+                'url' => "index.php?page=memo&action=edit&id=" . $row['id']
             ];
+        }
+
+        // Google カレンダーからのイベント取得とマージ 
+        try {
+            // 1. 表示範囲（今月いっぱい）を指定
+            // $start = date('Y-m-01');
+            // $end = date('Y-m-t');
+            // 【修正ポイント】リクエストパラメータから期間を取得し、なければ今月分にする
+            //$start = $_GET['start'] ?? date('Y-m-01');
+            //$end = $_GET['end'] ?? date('Y-m-t');
+
+            // もし「去年まで遡って一気に取得したい」場合は以下のように固定も可能
+            $start = date('Y-01-01', strtotime('-1 year'));
+            $end = date('Y-12-31', strtotime('+1 year'));
+
+            // 2. GoogleCalendarSyncのインスタンス化とデータ取得
+            $sync = new GoogleCalendarSync($db);
+            // $username は "kenmochi" であることを確認済み
+            $googleEvents = $sync->getEventsForFullCalendar($username, $start, $end);
+
+            // デバッグログ: 何件取得できたかを確認
+            error_log("Google Events Found: " . (is_array($googleEvents) ? count($googleEvents) : 0));
+
+            if (!empty($googleEvents) && is_array($googleEvents)) {
+                foreach ($googleEvents as $gEvent) {
+                    // FullCalendarが認識できる形式で $events 配列に追加
+                    $events[] = [
+                        'id' => $gEvent['id'] ?? uniqid('google_'),
+                        'title' => $gEvent['title'] ?? '(予定あり)', // ここが空だと表示されません
+                        'start' => $gEvent['start'],
+                        'end' => $gEvent['end'],
+                        'color' => $gEvent['color'] ?? '#4285f4', // デフォルトはGoogle Blue
+                        'url' => $gEvent['url'] ?? '#',
+                        'extendedProps' => [
+                            'source' => 'google'
+                        ]
+                    ];
+                }
+            }
+        } catch (\Exception $e) {
+            error_log("Dashboard Google Sync Error: " . $e->getMessage());
         }
 
         // 2. ピン留め
@@ -983,58 +1016,6 @@ class MemoController
     /**
      * 画像アップロード・ストレージ管理
      */
-    // public function uploadImage($file)
-    // {
-    //     if (empty($file['tmp_name']))
-    //         return null;
-
-    //     ini_set('memory_limit', '512M'); // 高精細スクショ展開用のメモリ確保
-    //     set_time_limit(60);              // WebP変換にかかる時間を考慮
-
-    //     // --- PDF出力時に残ったゴミ(temp_...)を自動削除 ---
-    //     $imageDir = $this->baseDir . "images/";
-    //     if (is_dir($imageDir)) {
-    //         foreach (scandir($imageDir) as $f) {
-    //             if (strpos($f, 'temp_') === 0 && (time() - filemtime($imageDir . $f) > 300)) {
-    //                 @unlink($imageDir . $f);
-    //             }
-    //         }
-    //     }
-
-    //     // 1. 容量チェック
-    //     $usage = $this->getUserStorageUsage($this->user);
-    //     if ($usage + $file['size'] > $this->max_storage) {
-    //         die("容量オーバーです。不要な画像を削除してください。");
-    //     }
-
-    //     // 2. 画像の生成 (JPG/PNG/WEBP/GIF対応)
-    //     $image = $this->imagecreatefromany($file['tmp_name']);
-
-    //     if (!$image) {
-    //         // ここで return してしまうと DB に image_path が入らないため、
-    //         // ログを確認するか、エラーを出して止める必要があります。
-    //         error_log("画像生成に失敗しました: " . $file['name']);
-    //         return null;
-    //     }
-
-    //     // 保存先ディレクトリの確保
-    //     if (!is_dir($imageDir)) {
-    //         mkdir($imageDir, 0777, true);
-    //     }
-
-    //     // ファイル名をランダム生成（常にWebPに変換して保存）
-    //     $filename = bin2hex(random_bytes(8)) . ".webp";
-    //     $fullPath = $imageDir . $filename;
-
-    //     // WebPとして保存を実行
-    //     if (imagewebp($image, $fullPath, 80)) {
-    //         // 3. 使用量をDBに反映
-    //         $this->updateUserUsage($this->user, filesize($fullPath));
-    //         return $filename;
-    //     }
-
-    //     return null;
-    // }
     public function uploadImage($file)
     {
         if (empty($file['tmp_name']))
@@ -1063,6 +1044,8 @@ class MemoController
         $src = $this->imagecreatefromany($file['tmp_name']);
 
         if (!$src) {
+            // ここで return してしまうと DB に image_path が入らないため、
+            // ログを確認するか、エラーを出して止める必要があります。
             error_log("画像生成に失敗しました: " . $file['name']);
             return null;
         }

@@ -10,6 +10,7 @@ if (session_status() === PHP_SESSION_NONE) {
     <meta charset="UTF-8">
     <title><?= htmlspecialchars($page['title'] ?? 'システム') ?></title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
     <link rel="stylesheet" href="/assets/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
@@ -70,11 +71,19 @@ if (session_status() === PHP_SESSION_NONE) {
                             $shouldShow = false;
 
                             // A. ホーム（IDで判定）または「メモ」という名前のページは全員に表示
-                            if ($id === 'home' || $origTitle === 'メモ'|| $origTitle === 'メモ一覧') {
+                            if ($id === 'home' 
+                                || $origTitle === 'メモ' 
+                                || $origTitle === 'メモ(Excelダウンロード)' 
+                            ) {
                                 $shouldShow = true;
                             }
                             // B. タイトルに「サンプル」が含まれるページは admin のみ表示
                             elseif (strpos($origTitle, 'サンプル') !== false) {
+                                if ($userRole === 'admin') {
+                                    $shouldShow = true;
+                                }
+                            }
+                            elseif (strpos($origTitle, 'メモ一覧') !== false) {
                                 if ($userRole === 'admin') {
                                     $shouldShow = true;
                                 }

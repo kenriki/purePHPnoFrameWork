@@ -32,7 +32,12 @@ if (!isset($page['dashboard'])) {
 ?>
 
 <!-- 外部スクリプトの読み込み（CDN経由） -->
+<!-- 1. FullCalendar本体 -->
 <script src="/assets/js/fullcalendar@6.1.11/index.global.min.js"></script>
+<!-- 2. ical.js (これが必要です！) -->
+<script src="https://cdn.jsdelivr.net/npm/ical.js@1.5.0/build/ical.min.js"></script>
+<!-- 3. FullCalendar iCalendarプラグイン -->
+<script src="https://cdn.jsdelivr.net/npm/@fullcalendar/icalendar@6.1.11/index.global.min.js"></script>
 <script src="/assets/js/chart.js"></script>
 
 <!-- ======================================================================================
@@ -486,7 +491,7 @@ if (!isset($page['dashboard'])) {
         <!-- 右：サイドパネル  -->
         <div class="side-panel">
             <!-- 1. 新規作成 -->
-            <a href="index.php?page=memo&action=new" class="btn-new-memo">＋ 新規メモを作成</a>
+            <a href="index.php?page=memo&action=new&date=<?= date('Y-m-d') ?>" class="btn-new-memo">＋ 新規メモを作成</a>
 
             <!-- 2. 最新フォト（上位6枚） -->
             <div class="side-panel-section">
@@ -650,10 +655,11 @@ if (!isset($page['dashboard'])) {
     // 祝日設定を共通化
     const holidaySource = {
         id: 'holidays',
-        url: 'https://calendar.google.com/calendar/ical/ja.japanese%23holiday%40group.v.calendar.google.com/public/basic.ics',
-        format: 'ics',
+        // 日本の祝日カレンダーURL[cite: 3]
+        url: './get_holidays.php',
+        format: 'ics', // これがプラグインを呼び出すトリガーになります
         display: 'background',
-        color: '#ffebee'
+        color: '#ffcccc' // 視認性のために少し濃い色でテストすることをお勧めします
     };
 
     document.addEventListener('DOMContentLoaded', function () {
@@ -661,6 +667,7 @@ if (!isset($page['dashboard'])) {
 
         // メインカレンダー初期化
         mainCalendar = new FullCalendar.Calendar(mainEl, {
+            selectable: true,
             initialView: 'dayGridMonth',
             locale: 'ja',
             height: 'auto',
@@ -668,11 +675,46 @@ if (!isset($page['dashboard'])) {
             dayMaxEvents: 3,
             navLinks: true,
             navLinkDayClick: function (date, jsEvent) {
-                switchView('day');
-                mainCalendar.gotoDate(date);
+                // 日付を YYYY-MM-DD 形式に変換
+                const y = date.getFullYear();
+                const m = ('0' + (date.getMonth() + 1)).slice(-2);
+                const d = ('0' + date.getDate()).slice(-2);
+                const dateStr = `${y}-${m}-${d}`;
+
+                // アラートで動作確認
+                //alert("新規作成へ移動: " + dateStr);
+
+                // 遷移処理
+                window.location.href = "index.php?page=memo&action=new&date=" + dateStr;
             },
             eventSources: [
-                { id: 'memo-data', events: dbData.events || [] },
+                {
+                    id: 'memo-data',
+                    // dbData.eventsの中身をループして、日付ごとに色を判定する
+                    events: (dbData.events || []).map(event => {
+                        // 日本時間での「今日」を取得
+                        const now = new Date();
+                        const today = now.getFullYear() + '-' +
+                            ('0' + (now.getMonth() + 1)).slice(-2) + '-' +
+                            ('0' + now.getDate()).slice(-2);
+
+                        const eventDate = event.start; // メモの日付
+
+                        let color = '#3788d8'; // 過去：青
+
+                        if (eventDate === today) {
+                            color = '#ff0000'; // 当日：赤
+                        } else if (eventDate > today) {
+                            color = '#ff9800'; // 未来：橙
+                        }
+
+                        return {
+                            ...event,
+                            backgroundColor: color,
+                            borderColor: color
+                        };
+                    })
+                },
                 holidaySource
             ],
             eventClick: function (info) {
@@ -681,28 +723,26 @@ if (!isset($page['dashboard'])) {
                     info.jsEvent.preventDefault();
                 }
             },
-            // FullCalendarの設定内
-            // datesSet: function (info) {
-            //     // 1. info.view.currentStart から現在表示中の日付を取得（安全な方法）
-            //     var viewDate = info.view.currentStart;
-            //     var year = viewDate.getFullYear();
-            //     var month = ('0' + (viewDate.getMonth() + 1)).slice(-2);
-            //     var day = ('0' + viewDate.getDate()).slice(-2);
+            // 日付表示が切り替わった時に動く処理
+            datesSet: function (info) {
+                // 現在カレンダーが「メイン」で表示している日付を取得
+                // info.view.currentStart は表示されている期間（日ビューならその日）の開始日を指します
+                const currentDate = info.view.currentStart;
 
-            //     var dateStr = year + '-' + month + '-' + day;
+                const y = currentDate.getFullYear();
+                const m = ('0' + (currentDate.getMonth() + 1)).slice(-2);
+                const d = ('0' + currentDate.getDate()).slice(-2);
+                const dateStr = `${y}-${m}-${d}`;
 
-            //     // 2. ボタンを取得（クラス名が .btn-new-memo か .action-button-new か確認してください）
-            //     // スクショから推測して両方の可能性を考慮します
-            //     var newMemoBtn = document.querySelector('.btn-new-memo') || document.querySelector('.action-button-new');
-
-            //     if (newMemoBtn) {
-            //         // 現在のURLを取得してベースを作成
-            //         newMemoBtn.href = 'index.php?page=memo&action=new&date=' + dateStr;
-            //         console.log("Selected Date for Button:", dateStr); // デバッグ用
-            //     }
-            // },
-            dateClick: (info) => {
-                window.location.href = `index.php?page=memo&action=new&date=${info.dateStr}`;
+                // 「新規メモを作成」ボタンのリンクを、カレンダーの日付に合わせて書き換える
+                const btn = document.getElementById('btn-new-memo');
+                if (btn) {
+                    btn.href = `index.php?page=memo&action=new&date=${dateStr}`;
+                }
+            },
+            dateClick: function (info) {
+                //alert("クリックした日付: " + info.dateStr);
+                window.location.href = "index.php?page=memo&action=new&date=" + info.dateStr;
             },
             moreLinkClick: function (info) {
                 const d = info.date;

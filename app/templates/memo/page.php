@@ -10,6 +10,10 @@ $display_user = $user ?? $_SESSION['user'] ?? 'guest';
 // 判定ロジック：$display_user が 'guest' か空ならゲストモード
 $isGuestMode = ($display_user === 'guest' || empty($display_user));
 
+// URLに date=2026-05-04 があればそれを使う、なければ今日
+//$targetDate = isset($_GET['date']) ? $_GET['date'] : date('Y-m-d');
+$targetDate = $_GET['date'] ?? ($memo['create_date'] ?? date('Y-m-d'));
+
 // --- ストレージ計算用の補助 ---
 $max_mb = 512;
 $memos = $result['memos'] ?? [];
@@ -349,6 +353,12 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
         <form id="memo-form" method="post" action="index.php?page=memo" enctype="multipart/form-data">
             <input type="hidden" name="id" id="memo-id-input" value="<?= htmlspecialchars($current_id ?? '') ?>">
             <input type="hidden" name="image_path" value="<?= htmlspecialchars($memo['image_path'] ?? ''); ?>">
+            <input type="hidden" name="id" id="memo-id-input" value="<?= htmlspecialchars($current_id ?? '') ?>">
+
+            <div class="mb-3">
+                <label class="form-label">予定日</label>
+                <input type="date" name="event_date" id="event_date" value="<?= htmlspecialchars($targetDate) ?>">
+            </div>
 
             <div class="pin-status-area" style="margin-bottom: 15px;">
                 <?php

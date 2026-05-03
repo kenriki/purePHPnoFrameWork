@@ -2,6 +2,7 @@
 /**
  * gemini_proxy.php - 決定版
  * v1beta + 2.0-flash 構成
+ * ImageProcessorControllerを使用したリサイズ処理追加版
  */
 set_time_limit(120);
 ini_set('display_errors', 0);
@@ -13,6 +14,8 @@ header('Content-Type: application/json; charset=utf-8');
 
 // 1. dbconfig.php の読み込み (getDB関数を使用)
 require_once '../app/dbconfig.php';
+// 画像処理用コントローラーの読み込み
+require_once '../app/controllers/ImageProcessorController.php';
 
 // 2. セッションチェック
 if (empty($_SESSION['user_id'])) {
@@ -54,8 +57,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['receipt_image'])) {
         send_json_error('Bad Request', '画像がアップロードされていません。', 400);
     }
 
-    $imageData = base64_encode(file_get_contents($imageTmpPath));
-    $mimeType = $_FILES['receipt_image']['type'];
+    // --- 【修正・追加箇所】リサイズ処理の安全な組み込み ---
+    // 一時ファイルのパスを生成
+    $lightPath = tempnam(sys_get_temp_dir(), 'resize_');
+
+    // ImageProcessorController::processAndSave が存在すると仮定
+    // もしメソッド名が違う場合は、ここを実際のメソッド名（例: resizeImage 等）に変えてください
+    if (ImageProcessorController::processAndSave($imageTmpPath, $lightPath, 1000)) {
+        $finalPath = $lightPath;
+    } else {
+        $finalPath = $imageTmpPath; // 失敗時はオリジナルを使用
+    }
+
+    $imageData = base64_encode(file_get_contents($finalPath));
+    $mimeType = 'image/jpeg'; // リサイズ後はJPEGになるため固定
+
+    // 使い終わった一時ファイルを削除（ベテランSEの作法）
+    if ($finalPath === $lightPath && file_exists($lightPath)) {
+        unlink($lightPath);
+    }
+    // --- 【修正・追加箇所】ここまで ---
 
     // リクエストボディ（1.5 でも 2.0 でも共通の構造）
     // $payload のフルセット
@@ -65,6 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['receipt_image'])) {
                 "parts" => [
                     [
                         "text" => "レシートを解析し、以下の項目を日本語で抽出してください。
+                        数量が1の場合で単価が明記されていない際は、小計の値を単価として補完してください。
                         不明な項目は「不明」と記載してください：
                         1. 店舗名
                         2. 電話番号（ハイフンあり）
@@ -94,7 +116,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['receipt_image'])) {
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
     // 処理全体は最大120秒待つ（AIの解析時間をたっぷり取る）
     curl_setopt($ch, CURLOPT_TIMEOUT, 120);
-    
+
     curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));

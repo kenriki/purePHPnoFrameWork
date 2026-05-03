@@ -220,54 +220,11 @@ class MemoController
     /**
      * メモ一覧の取得（復号・タイトル抽出処理含む）
      */
-    // private function getMemoList($target_date = null)
-    // {
-    //     $db = getDB();
-    //     $params = [];
-    //     $sql = "SELECT id, username, content, is_pinned, image_path,
-    //                    DATE_FORMAT(create_date, '%Y-%m-%d %H:%i') as time 
-    //             FROM user_memos WHERE ";
-
-    //     // ユーザー条件
-    //     if ($this->user !== 'guest' && !empty($this->user)) {
-    //         $sql .= "username = :username";
-    //         $params[':username'] = $this->user;
-    //     } else {
-    //         $guestSig = 'guest_' . ($_SESSION['guest_name'] ?? '');
-    //         $sql .= "username = " . (($_SESSION['guest_name'] ?? '') ? ":guest_sig" : "'guest'");
-    //         if ($_SESSION['guest_name'] ?? '')
-    //             $params[':guest_sig'] = $guestSig;
-    //     }
-
-    //     // カレンダー日付条件
-    //     if ($target_date) {
-    //         $sql .= " AND DATE(create_date) = :target_date";
-    //         $params[':target_date'] = $target_date;
-    //     }
-
-    //     $sql .= " ORDER BY is_pinned DESC, update_date DESC";
-    //     $stmt = $db->prepare($sql);
-    //     $stmt->execute($params);
-    //     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-    //     foreach ($rows as &$row) {
-    //         // 1. コンテンツの復号
-    //         $decrypted = $this->decryptContent($row['content'] ?? "");
-    //         // 2. タイトル抽出ロジック
-    //         $firstLine = trim(explode("\n", str_replace(["\r\n", "\r"], "\n", $decrypted))[0] ?? "");
-
-    //         $displayTitle = !empty($firstLine) ? mb_strimwidth($firstLine, 0, 60, "...") : "無題のメモ #" . $row['id'];
-    //         // 3. サフィックス（ゲスト表示用）の定義
-    //         $suffix = "";
-    //         if (strpos($row['username'], 'guest_') === 0) {
-    //             $suffix = " <span class='guest-label'>(" . htmlspecialchars(substr($row['username'], 6)) . ")</span>";
-    //         }
-    //         $row['display_title_html'] = htmlspecialchars($displayTitle) . $suffix;
-    //     }
-    //     return $rows;
-    // }
     private function getMemoList($target_date = null)
     {
+        if (empty($target_date) || $target_date === 'null' || $target_date === '') {
+            $target_date = null;
+        }
         $db = getDB();
         $params = [];
 
@@ -316,7 +273,6 @@ class MemoController
         }
 
         // 3. Google カレンダーからのイベント取得（同期）
-        // MemoController.php
         if ($target_date) {
             try {
                 $sync = new GoogleCalendarSync($db); // コンストラクタに合わせて調整
@@ -523,7 +479,7 @@ class MemoController
 
             // もし「去年まで遡って一気に取得したい」場合は以下のように固定も可能
             $start = date('Y-01-01', strtotime('-1 year'));
-            $end   = date('Y-12-31', strtotime('+1 year'));
+            $end = date('Y-12-31', strtotime('+1 year'));
 
             // 2. GoogleCalendarSyncのインスタンス化とデータ取得
             $sync = new GoogleCalendarSync($db);

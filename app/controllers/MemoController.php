@@ -152,7 +152,9 @@ class MemoController
                 $this->redirect("list", "deleted");
             }
 
-            $this->saveMemo($memo_id, $content);
+            $event_date = $_POST['event_date'] ?? null;
+
+            $this->saveMemo($memo_id, $content, $event_date);
             $this->redirect("list", "saved");
         }
 
@@ -266,7 +268,7 @@ class MemoController
     /**
      * メモの新規保存・更新
      */
-    private function saveMemo($id, $content)
+    private function saveMemo($id, $content, $event_date = null)
     {
         $db = getDB();
         $isNew = empty($id);
@@ -277,6 +279,13 @@ class MemoController
         if ($saveUser === 'guest' && !empty($_POST['guest_name'])) {
             $_SESSION['guest_name'] = $_POST['guest_name'];
             $saveUser = 'guest_' . $_POST['guest_name'];
+        }
+
+        // 未来日が指定されている場合はその日付を使用し、なければ現在時刻
+        if (empty($event_date)) {
+            $event_date = date('Y-m-d H:i:s');
+        } else if (strlen($event_date) === 10) {
+            $event_date .= ' ' . date('H:i:s');
         }
 
         // --- 画像アップロード処理 ---
@@ -298,11 +307,11 @@ class MemoController
         // DB更新
         if ($isNew) {
             // image_path カラムを追加したSQL
-            $stmt = $db->prepare("INSERT INTO user_memos (id, username, content, image_path, create_date, update_date) VALUES (?, ?, ?, ?, NOW(), NOW())");
-            $stmt->execute([$id, $saveUser, $saveData, $imagePath]);
+            $stmt = $db->prepare("INSERT INTO user_memos (id, username, content, image_path, create_date, update_date) VALUES (?, ?, ?, ?, ?, NOW())");
+            $stmt->execute([$id, $saveUser, $saveData, $imagePath, $event_date]);
         } else {
-            $sql = "UPDATE user_memos SET content = ?, update_date = NOW()";
-            $params = [$saveData];
+            $sql = "UPDATE user_memos SET content = ?, create_date = ?, update_date = NOW()";
+            $params = [$saveData, $event_date];
             // 更新時は画像がある場合のみ image_path を更新する
             if ($imagePath) {
                 $sql .= ", image_path = ?";

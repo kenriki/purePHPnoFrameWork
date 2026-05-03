@@ -140,8 +140,11 @@ try {
         'candidates' => [
             [
                 'content' => [
+                    // 'parts' => [
+                    //     ['text' => "【システムエラー】" . $shortMsg]
+                    // ]
                     'parts' => [
-                        ['text' => "【システムエラー】" . $shortMsg]
+                        ['text' => "申し訳ございません。５分程度開けて実行してください"]
                     ]
                 ]
             ]

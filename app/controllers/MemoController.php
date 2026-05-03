@@ -218,13 +218,63 @@ class MemoController
     /**
      * メモ一覧の取得（復号・タイトル抽出処理含む）
      */
+    // private function getMemoList($target_date = null)
+    // {
+    //     $db = getDB();
+    //     $params = [];
+    //     $sql = "SELECT id, username, content, is_pinned, image_path,
+    //                    DATE_FORMAT(create_date, '%Y-%m-%d %H:%i') as time 
+    //             FROM user_memos WHERE ";
+
+    //     // ユーザー条件
+    //     if ($this->user !== 'guest' && !empty($this->user)) {
+    //         $sql .= "username = :username";
+    //         $params[':username'] = $this->user;
+    //     } else {
+    //         $guestSig = 'guest_' . ($_SESSION['guest_name'] ?? '');
+    //         $sql .= "username = " . (($_SESSION['guest_name'] ?? '') ? ":guest_sig" : "'guest'");
+    //         if ($_SESSION['guest_name'] ?? '')
+    //             $params[':guest_sig'] = $guestSig;
+    //     }
+
+    //     // カレンダー日付条件
+    //     if ($target_date) {
+    //         $sql .= " AND DATE(create_date) = :target_date";
+    //         $params[':target_date'] = $target_date;
+    //     }
+
+    //     $sql .= " ORDER BY is_pinned DESC, update_date DESC";
+    //     $stmt = $db->prepare($sql);
+    //     $stmt->execute($params);
+    //     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    //     foreach ($rows as &$row) {
+    //         // 1. コンテンツの復号
+    //         $decrypted = $this->decryptContent($row['content'] ?? "");
+    //         // 2. タイトル抽出ロジック
+    //         $firstLine = trim(explode("\n", str_replace(["\r\n", "\r"], "\n", $decrypted))[0] ?? "");
+
+    //         $displayTitle = !empty($firstLine) ? mb_strimwidth($firstLine, 0, 60, "...") : "無題のメモ #" . $row['id'];
+    //         // 3. サフィックス（ゲスト表示用）の定義
+    //         $suffix = "";
+    //         if (strpos($row['username'], 'guest_') === 0) {
+    //             $suffix = " <span class='guest-label'>(" . htmlspecialchars(substr($row['username'], 6)) . ")</span>";
+    //         }
+    //         $row['display_title_html'] = htmlspecialchars($displayTitle) . $suffix;
+    //     }
+    //     return $rows;
+    // }
     private function getMemoList($target_date = null)
     {
         $db = getDB();
         $params = [];
-        $sql = "SELECT id, username, content, is_pinned, image_path,
-                       DATE_FORMAT(create_date, '%Y-%m-%d %H:%i') as time 
-                FROM user_memos WHERE ";
+
+        // 【修正ポイント1】
+        // 表示用の時間は create_date (5/3など) を使い、
+        // ソートやフィルタの基準は event_date (11/5など) に切り替えます
+        $sql = "SELECT id, username, content, is_pinned, image_path, event_date,
+                   DATE_FORMAT(create_date, '%Y-%m-%d %H:%i') as time 
+            FROM user_memos WHERE ";
 
         // ユーザー条件
         if ($this->user !== 'guest' && !empty($this->user)) {
@@ -239,11 +289,16 @@ class MemoController
 
         // カレンダー日付条件
         if ($target_date) {
-            $sql .= " AND DATE(create_date) = :target_date";
+            // 【修正ポイント2】
+            // カレンダーで選んだ日付（target_date）は、予定日（event_date）と比較する
+            $sql .= " AND event_date = :target_date";
             $params[':target_date'] = $target_date;
         }
 
-        $sql .= " ORDER BY is_pinned DESC, update_date DESC";
+        // 【修正ポイント3】
+        // 予定日の降順（新しい予定が上）、同じ予定日なら作成が新しい順に並べる
+        $sql .= " ORDER BY is_pinned DESC, event_date DESC, create_date DESC";
+
         $stmt = $db->prepare($sql);
         $stmt->execute($params);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -255,6 +310,11 @@ class MemoController
             $firstLine = trim(explode("\n", str_replace(["\r\n", "\r"], "\n", $decrypted))[0] ?? "");
 
             $displayTitle = !empty($firstLine) ? mb_strimwidth($firstLine, 0, 60, "...") : "無題のメモ #" . $row['id'];
+
+            // 【エンジニア的な工夫】
+            // 未来日のメモには、一覧で一目で分かるように日付をタイトルに添えるのもアリです
+            // if (strtotime($row['event_date']) > time()) { $displayTitle = "【予】" . $displayTitle; }
+
             // 3. サフィックス（ゲスト表示用）の定義
             $suffix = "";
             if (strpos($row['username'], 'guest_') === 0) {
@@ -305,20 +365,59 @@ class MemoController
         file_put_contents($this->baseDir . $id . ".txt", $saveData);
 
         // DB更新
+        // if ($isNew) {
+        //     // image_path カラムを追加したSQL
+        //     $stmt = $db->prepare("INSERT INTO user_memos (id, username, content, image_path, create_date, update_date) VALUES (?, ?, ?, ?, ?, NOW())");
+        //     $stmt->execute([$id, $saveUser, $saveData, $imagePath, $event_date]);
+        // } else {
+        //     $sql = "UPDATE user_memos SET content = ?, create_date = ?, update_date = NOW()";
+        //     $params = [$saveData, $event_date];
+        //     // 更新時は画像がある場合のみ image_path を更新する
+        //     if ($imagePath) {
+        //         $sql .= ", image_path = ?";
+        //         $params[] = $imagePath;
+        //     }
+        //     $sql .= " WHERE id = ?";
+        //     $params[] = $id;
+        //     $db->prepare($sql)->execute($params);
+        // }
         if ($isNew) {
-            // image_path カラムを追加したSQL
-            $stmt = $db->prepare("INSERT INTO user_memos (id, username, content, image_path, create_date, update_date) VALUES (?, ?, ?, ?, ?, NOW())");
+            // 新規作成時：
+            // create_date = NOW() (システムが勝手に「今日 5/3」をセット)
+            // event_date = $event_date (カレンダーで選んだ「未来 11/5」をセット)
+            $sql = "INSERT INTO user_memos (
+            id, 
+            username, 
+            content, 
+            image_path, 
+            event_date, 
+            create_date, 
+            update_date
+        ) VALUES (?, ?, ?, ?, ?, NOW(), NOW())";
+
+            $stmt = $db->prepare($sql);
+            // 第5引数に「カレンダーで選んだ日付」を渡す
             $stmt->execute([$id, $saveUser, $saveData, $imagePath, $event_date]);
+
         } else {
-            $sql = "UPDATE user_memos SET content = ?, create_date = ?, update_date = NOW()";
+            // 更新時：
+            // 作成日(create_date)は変えず、予定日(event_date)と内容だけを更新
+            $sql = "UPDATE user_memos SET 
+                content = ?, 
+                event_date = ?, 
+                update_date = NOW()";
             $params = [$saveData, $event_date];
+
             // 更新時は画像がある場合のみ image_path を更新する
             if ($imagePath) {
                 $sql .= ", image_path = ?";
                 $params[] = $imagePath;
             }
-            $sql .= " WHERE id = ?";
+
+            $sql .= " WHERE id = ? AND username = ?";
             $params[] = $id;
+            $params[] = $saveUser;
+
             $db->prepare($sql)->execute($params);
         }
     }
@@ -363,7 +462,8 @@ class MemoController
         $db = getDB();
 
         // 1. カレンダー (作成日基準)
-        $stmt = $db->prepare("SELECT id, content, DATE(create_date) as start FROM user_memos WHERE username = ?");
+        //$stmt = $db->prepare("SELECT id, content, DATE(create_date) as start FROM user_memos WHERE username = ?");
+        $stmt = $db->prepare("SELECT id, content, DATE(event_date) as start FROM user_memos WHERE username = ?");
         $stmt->execute([$username]);
         $events = [];
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {

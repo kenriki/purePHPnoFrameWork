@@ -319,7 +319,7 @@ class MemoController
         // MemoController.php
         if ($target_date) {
             try {
-                $sync = new GoogleCalendarSync($this->$db); // コンストラクタに合わせて調整
+                $sync = new GoogleCalendarSync($db); // コンストラクタに合わせて調整
 
                 // 取得範囲を「指定された日の属する月」の全期間に設定
                 $timeMin = date('Y-m-01T00:00:00Z', strtotime($target_date));

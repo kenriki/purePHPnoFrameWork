@@ -12,7 +12,8 @@ $isGuestMode = ($display_user === 'guest' || empty($display_user));
 
 // URLに date=2026-05-04 があればそれを使う、なければ今日
 //$targetDate = isset($_GET['date']) ? $_GET['date'] : date('Y-m-d');
-$targetDate = $_GET['date'] ?? ($memo['create_date'] ?? date('Y-m-d'));
+//$targetDate = $_GET['date'] ?? ($memo['create_date'] ?? date('Y-m-d'));
+$targetDate = $memo['event_date'] ?? ($_GET['date'] ?? date('Y-m-d'));
 
 // --- ストレージ計算用の補助 ---
 $max_mb = 512;

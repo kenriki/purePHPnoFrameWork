@@ -24,10 +24,11 @@ $user_email = $session_user['email'] ?? $_SESSION['email'] ?? '未取得';
 if ($db_ptr instanceof PDO && $db_user_id) {
     try {
         // sample_db.user_memos から取得
-        $sql = "SELECT id, username, content, create_date, update_date 
-                FROM sample_db.user_memos 
-                WHERE username = :username 
-                ORDER BY id DESC";
+        // --- 3. メモ取得ロジックの修正 ---
+        $sql = "SELECT id, username, content, event_date, create_date, update_date 
+        FROM sample_db.user_memos 
+        WHERE username = :username 
+        ORDER BY id DESC";
 
         $stmt = $db_ptr->prepare($sql);
         $stmt->execute([':username' => $db_user_id]);
@@ -165,7 +166,7 @@ unset($memo);
                 <div class="col-md-8">
                     <h5 class="mb-1">
                         <i class="fas fa-user-circle text-primary"></i>
-                        <strong><?= htmlspecialchars($session_user['user_display_name'] ?? $_SESSION['username'] ) ?></strong>
+                        <strong><?= htmlspecialchars($session_user['user_display_name'] ?? $_SESSION['username']) ?></strong>
                     </h5>
                     <div class="text-muted small">
                         Email: <code><?= htmlspecialchars($user_email) ?></code> |
@@ -189,19 +190,30 @@ unset($memo);
             <thead>
                 <tr class="table-dark">
                     <th>メモ内容</th>
+                    <th style="width:160px">イベント日</th>
                     <th style="width:160px">作成日</th>
                     <th style="width:160px">最終更新</th>
                 </tr>
             </thead>
             <tbody>
                 <?php foreach ($displayMemos as $memo): ?>
+                    <!-- 修正後 -->
                     <tr>
-                        <td class="memo-content-cell">
-                            <?= htmlspecialchars($memo['safe_content']) ?>
+                        <td data-label="内容">
+                            <?php echo htmlspecialchars($memo['safe_content']); ?>
                         </td>
-                        <td class="text-center small"><?= htmlspecialchars($memo['create_date']) ?></td>
-                        <td class="text-center small">
-                            <?= htmlspecialchars($memo['update_date'] ?? $memo['create_date']) ?>
+
+                        <td data-label="イベント日">
+                            <?php echo htmlspecialchars($memo['event_date'] ?? '---'); ?>
+                        </td>
+
+                        <td data-label="作成日">
+                            <!-- 'time' を 'create_date' に修正 -->
+                            <?php echo htmlspecialchars($memo['create_date']); ?>
+                        </td>
+
+                        <td data-label="最終更新">
+                            <?php echo htmlspecialchars($memo['update_date'] ?? $memo['create_date']); ?>
                         </td>
                     </tr>
                 <?php endforeach; ?>

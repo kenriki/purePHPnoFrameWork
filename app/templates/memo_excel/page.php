@@ -165,7 +165,7 @@ unset($memo);
                 <div class="col-md-8">
                     <h5 class="mb-1">
                         <i class="fas fa-user-circle text-primary"></i>
-                        <strong><?= htmlspecialchars($session_user['user_display_name'] ?? '剣持力') ?></strong>
+                        <strong><?= htmlspecialchars($session_user['user_display_name'] ?? $_SESSION['username'] ) ?></strong>
                     </h5>
                     <div class="text-muted small">
                         Email: <code><?= htmlspecialchars($user_email) ?></code> |

@@ -115,6 +115,7 @@ unset($memo);
         <table id="myMemosTable" class="display cell-border stripe hover">
             <thead>
                 <tr>
+                    <th style="width: 150px;">ユーザ</th>
                     <th>メモ内容</th>
                     <th style="width: 150px;">作成日時</th>
                     <th style="width: 150px;">最終更新</th>
@@ -123,6 +124,9 @@ unset($memo);
             <tbody>
                 <?php foreach ($displayMemos as $memo): ?>
                     <tr>
+                        <td class="memo-content-cell">
+                            <?= htmlspecialchars($memo['username']) ?>
+                        </td>
                         <td class="memo-content-cell">
                             <?= htmlspecialchars($memo['safe_content']) ?>
                         </td>

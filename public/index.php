@@ -28,7 +28,7 @@ if (isset($_SESSION['user_id'])) {
 
         // Google連携状態の確認 (トークンの有無)
         $stmtToken = $db->prepare("SELECT user_name FROM google_tokens WHERE user_name = ?");
-        $userName = $_SESSION['user_id'] ?? 'kenmochi';
+        $userName = $_SESSION['user_id'] ?? 'guest';
         $stmtToken->execute([$userName]);
         if ($stmtToken->fetch()) {
             $isGoogleLinked = true;

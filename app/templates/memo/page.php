@@ -436,9 +436,16 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
 
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <div style="display: flex; gap: 10px;">
-                    <button type="submit" id="save-btn"
-                        style="padding: 12px 25px; background: #007bff; color: #fff; border: none; border-radius: 5px; font-weight: bold; cursor: pointer;">💾
-                        保存して更新</button>
+                    <!-- 保存ボタン付近への実装例 -->
+                    <?php if (isset($isGoogleAuthenticated) && $isGoogleAuthenticated === true): ?>
+                        <div style="margin-bottom: 10px;">
+                            <label>
+                                <input type="checkbox" name="google_sync" value="1">
+                                Googleカレンダーに同期
+                            </label>
+                        </div>
+                    <?php endif; ?>
+                    <button type="submit" id="save-btn" class="btn btn-primary">💾 保存して更新</button>
                     <button type="submit" name="pdf_export" formtarget="_blank"
                         style="padding: 12px 15px; background: #6c757d; color: #fff; border: none; border-radius: 5px; cursor: pointer;">PDF出力</button>
                 </div>

@@ -91,14 +91,24 @@ class MemoController
         $id = $_GET['id'] ?? null;
         $target_date = $_GET['date'] ?? null;
 
-        // --- アクション分岐 ---
+        // --- Google認証状態の判定 (login_id カラムを使用)[cite: 1, 3] ---
+        $db = getDB();
+        $isGoogleAuthenticated = false;
+        try {
+            if (!empty($this->user)) {
+                $stmtAuth = $db->prepare("SELECT 1 FROM google_tokens WHERE login_id = ? AND access_token IS NOT NULL AND access_token != '' LIMIT 1");
+                $stmtAuth->execute([$this->user]);
+                $isGoogleAuthenticated = $stmtAuth->fetchColumn() > 0;
+            }
+        } catch (PDOException $e) {
+            $isGoogleAuthenticated = false;
+        }
 
         // 24時間共有URL発行処理
         if ($action === 'generate_share_url') {
             $this->generate_share_url();
             return;
         }
-
         if ($action === 'view_share') {
             $this->view_share();
             return;
@@ -155,12 +165,14 @@ class MemoController
             }
 
             $event_date = $_POST['event_date'] ?? null;
+            // Google同期フラグの取得[cite: 1, 2]
+            $isSyncRequested = $isGoogleAuthenticated && isset($_POST['google_sync']) && $_POST['google_sync'] == "1";
 
-            $this->saveMemo($memo_id, $content, $event_date);
+            $this->saveMemo($memo_id, $content, $event_date, $isSyncRequested);
             $this->redirect("list", "saved");
         }
 
-        // 表示用データの構築 (GET)
+        // 表示データの取得 (GET)
         $memos = ($action === 'list') ? $this->getMemoList($target_date) : [];
         $content = "";
         $memo = null;
@@ -190,7 +202,6 @@ class MemoController
             $stmt = $db->prepare($sql);
             $stmt->execute($params);
             $memo = $stmt->fetch(PDO::FETCH_ASSOC);
-
             if ($memo) {
                 // 復号処理（暗号化データと旧来の平文を自動判別）
                 $content = $this->decryptContent($memo['content']);
@@ -213,8 +224,10 @@ class MemoController
             'user' => $this->user,
             'currentUserUsage' => $this->getUserStorageUsage($this->user),
             'target_date' => $target_date,
-            'message' => $_GET['message'] ?? ""
+            'message' => $_GET['message'] ?? "",
+            'isGoogleAuthenticated' => $isGoogleAuthenticated
         ];
+
     }
 
     /**
@@ -313,13 +326,12 @@ class MemoController
     /**
      * メモの新規保存・更新
      */
-    private function saveMemo($id, $content, $event_date = null)
+    private function saveMemo($id, $content, $event_date = null, $isSyncRequested = false)
     {
         $db = getDB();
         $isNew = empty($id);
-        if ($isNew) {
-            $id = $this->generateNextId();
-        }
+        if ($isNew)
+            $id = bin2hex(random_bytes(4));
 
         $saveUser = $this->user;
         if ($saveUser === 'guest' && !empty($_POST['guest_name'])) {
@@ -334,11 +346,7 @@ class MemoController
             $event_date .= ' ' . date('H:i:s');
         }
 
-        // --- 画像アップロード処理 ---
-        $imagePath = null;
-        if (!empty($_FILES['memo_image']['tmp_name'])) {
-            $imagePath = $this->uploadImage($_FILES['memo_image']);
-        }
+        $imagePath = !empty($_FILES['memo_image']['tmp_name']) ? $this->uploadImage($_FILES['memo_image']) : null;
 
         // --- 暗号化 ---
         $ivLength = openssl_cipher_iv_length($this->cipher_method);
@@ -352,62 +360,32 @@ class MemoController
         // --- DB更新処理 ---
         try {
             if ($isNew) {
-                // 新規作成時
-                $sql = "INSERT INTO user_memos (
-                id, 
-                username, 
-                content, 
-                image_path, 
-                event_date, 
-                create_date, 
-                update_date
-            ) VALUES (?, ?, ?, ?, ?, NOW(), NOW())";
-
-                $stmt = $db->prepare($sql);
-                $success = $stmt->execute([$id, $saveUser, $saveData, $imagePath, $event_date]);
+                $sql = "INSERT INTO user_memos (id, username, content, image_path, event_date, create_date, update_date) VALUES (?, ?, ?, ?, ?, NOW(), NOW())";
+                $success = $db->prepare($sql)->execute([$id, $saveUser, $saveData, $imagePath, $event_date]);
             } else {
-                // 更新時
-                $sql = "UPDATE user_memos SET 
-                    content = ?, 
-                    event_date = ?, 
-                    update_date = NOW()";
+                $sql = "UPDATE user_memos SET content = ?, event_date = ?, update_date = NOW()";
                 $params = [$saveData, $event_date];
-
                 if ($imagePath) {
                     $sql .= ", image_path = ?";
                     $params[] = $imagePath;
                 }
-
                 $sql .= " WHERE id = ? AND username = ?";
                 $params[] = $id;
                 $params[] = $saveUser;
-
                 $success = $db->prepare($sql)->execute($params);
             }
 
-            // --- Googleカレンダー同期 (DB保存が成功した場合のみ実行) ---
-            if ($success) {
-                // 外部ファイルやクラスとして定義されている前提
+            // Googleカレンダー同期実行
+            if ($success && $isSyncRequested === true) {
                 try {
-                    // $this->db は getDB() で取得したインスタンスを使用
                     $sync = new GoogleCalendarSync($db);
-
-                    // カレンダーに表示するタイトル（冒頭10文字）
                     $title = "★" . mb_substr($content, 0, 10);
-
-                    // 同期実行 (Google側の形式に合わせて日付部分のみ抽出)
-                    $targetDate = substr($event_date, 0, 10);
-                    $sync->sync($saveUser, $title, $content, $targetDate);
-
+                    $sync->sync($saveUser, $title, $content, substr($event_date, 0, 10));
                 } catch (Exception $e) {
-                    // カレンダー同期に失敗しても、メモ保存自体は完了しているため
-                    // エラーをログに吐いて処理を続行（ユーザーにはメモ保存完了を返す）
-                    error_log("Google Calendar Sync Failed: " . $e->getMessage());
+                    error_log("Sync Failed: " . $e->getMessage());
                 }
             }
-
             return $success;
-
         } catch (PDOException $e) {
             error_log("DB Save Failed: " . $e->getMessage());
             return false;
@@ -483,7 +461,6 @@ class MemoController
 
             // 2. GoogleCalendarSyncのインスタンス化とデータ取得
             $sync = new GoogleCalendarSync($db);
-            // $username は "kenmochi" であることを確認済み
             $googleEvents = $sync->getEventsForFullCalendar($username, $start, $end);
 
             // デバッグログ: 何件取得できたかを確認

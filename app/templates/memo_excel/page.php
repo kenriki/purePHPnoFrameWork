@@ -24,10 +24,11 @@ $user_email = $session_user['email'] ?? $_SESSION['email'] ?? '未取得';
 if ($db_ptr instanceof PDO && $db_user_id) {
     try {
         // sample_db.user_memos から取得
-        $sql = "SELECT id, username, content, create_date, update_date 
-                FROM sample_db.user_memos 
-                WHERE username = :username 
-                ORDER BY id DESC";
+        // --- 3. メモ取得ロジックの修正 ---
+        $sql = "SELECT id, username, content, event_date, create_date, update_date 
+        FROM sample_db.user_memos 
+        WHERE username = :username 
+        ORDER BY id DESC";
 
         $stmt = $db_ptr->prepare($sql);
         $stmt->execute([':username' => $db_user_id]);
@@ -48,11 +49,73 @@ foreach ($displayMemos as &$memo) {
 unset($memo);
 ?>
 
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <!-- DataTables & Buttons CSS -->
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.min.css">
 <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.3.6/css/buttons.dataTables.min.css">
 
 <style>
+    /* テーブル全体の基本設定 */
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+        /* これで幅を固定してはみ出しを防ぐ */
+    }
+
+    td {
+        word-wrap: break-word;
+        /* 長い文章を強制改行 */
+    }
+
+    /* スマホ用の設定（画面幅が768px以下の時） */
+    @media screen and (max-width: 768px) {
+
+        /* テーブルを普通のブロック要素に変える */
+        table,
+        thead,
+        tbody,
+        th,
+        td,
+        tr {
+            display: block;
+        }
+
+        /* ヘッダー（メモ内容、作成日などの見出し）を隠す */
+        thead tr {
+            position: absolute;
+            top: -9999px;
+            left: -9999px;
+        }
+
+        tr {
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            padding: 10px;
+            background: #fff;
+        }
+
+        td {
+            border: none;
+            position: relative;
+            padding-left: 40% !important;
+            /* 左側にラベル用のスペースを作る */
+            text-align: left;
+        }
+
+        /* 疑似要素で「ラベル」を表示する */
+        td::before {
+            content: attr(data-label);
+            /* HTMLのdata-label属性を読み取る */
+            position: absolute;
+            left: 10px;
+            width: 35%;
+            font-weight: bold;
+            color: #666;
+        }
+    }
+
     .memo-content-cell {
         text-align: left !important;
         white-space: pre-wrap !important;
@@ -103,7 +166,7 @@ unset($memo);
                 <div class="col-md-8">
                     <h5 class="mb-1">
                         <i class="fas fa-user-circle text-primary"></i>
-                        <strong><?= htmlspecialchars($session_user['user_display_name'] ?? '剣持力') ?></strong>
+                        <strong><?= htmlspecialchars($session_user['user_display_name'] ?? $_SESSION['username']) ?></strong>
                     </h5>
                     <div class="text-muted small">
                         Email: <code><?= htmlspecialchars($user_email) ?></code> |
@@ -126,20 +189,31 @@ unset($memo);
         <table id="memoTable" class="display cell-border stripe hover" style="width:100%">
             <thead>
                 <tr class="table-dark">
-                    <th>メモ内容 (復号済み)</th>
+                    <th>メモ内容</th>
+                    <th style="width:160px">イベント日</th>
                     <th style="width:160px">作成日</th>
                     <th style="width:160px">最終更新</th>
                 </tr>
             </thead>
             <tbody>
                 <?php foreach ($displayMemos as $memo): ?>
+                    <!-- 修正後 -->
                     <tr>
-                        <td class="memo-content-cell">
-                            <?= htmlspecialchars($memo['safe_content']) ?>
+                        <td data-label="内容">
+                            <?php echo htmlspecialchars($memo['safe_content']); ?>
                         </td>
-                        <td class="text-center small"><?= htmlspecialchars($memo['create_date']) ?></td>
-                        <td class="text-center small">
-                            <?= htmlspecialchars($memo['update_date'] ?? $memo['create_date']) ?>
+
+                        <td data-label="イベント日">
+                            <?php echo htmlspecialchars($memo['event_date'] ?? '---'); ?>
+                        </td>
+
+                        <td data-label="作成日">
+                            <!-- 'time' を 'create_date' に修正 -->
+                            <?php echo htmlspecialchars($memo['create_date']); ?>
+                        </td>
+
+                        <td data-label="最終更新">
+                            <?php echo htmlspecialchars($memo['update_date'] ?? $memo['create_date']); ?>
                         </td>
                     </tr>
                 <?php endforeach; ?>

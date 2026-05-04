@@ -33,7 +33,7 @@ class PageController
              * 2. 次に通常のログインユーザー名 ($_SESSION['username'])
              * 3. いずれも無ければ 'guest' (これまでのデフォルト)
              */
-            $displayName = $_SESSION['user_display_name'] ?? $_SESSION['username'] ?? 'kenmochi';
+            $displayName = $_SESSION['user_display_name'] ?? $_SESSION['username'] ?? 'guest';
             $internalUser = $_SESSION['username'] ?? 'guest'; // DBクエリ用などの内部識別名
 
             if ($pageId === 'home') {
@@ -59,7 +59,7 @@ class PageController
                 }
 
                 // JSONのタイトルを「挨拶＋表示名」で上書き
-                // Google認証していればGoogleの名前、していなければ kenmochi 等が表示されます
+                // Google認証していればGoogleの名前、していなければ guest 等が表示されます
                 $page['title'] = "{$greeting} {$displayName} さん";
 
                 // $page 配列に 'dashboard' キーとしてデータを追加
@@ -72,13 +72,22 @@ class PageController
                 $page['allMemos'] = $memoCtrl->getAllMemosForAdmin();
             }
 
-            if ($pageId === 'memo_list') {
-                // 自身の showMemoList メソッドを呼び出してデータを取得
-                $memoData = $this->showMemoList();
-                // 取得した myMemos を $page 配列に注入
-                $myMemos = $memoData['myMemos'];
-                $page['title'] = $memoData['title'];
-                $page['myMemos'] = $myMemos; // テンプレート側で使用できるように注入
+            // if ($pageId === 'memo_list') {
+            //     // 自身の showMemoList メソッドを呼び出してデータを取得
+            //     $memoData = $this->showMemoList();
+            //     // 取得した myMemos を $page 配列に注入
+            //     $myMemos = $memoData['myMemos'];
+            //     $page['title'] = $memoData['title'];
+            //     $page['myMemos'] = $myMemos; // テンプレート側で使用できるように注入
+            // }
+            // index.php の 404判定部分
+            if ($pageId === 'memo_list') { // 無効にしたいページ
+                header("HTTP/1.0 404 Not Found");
+                $page = [
+                    'title' => '404 Not Found',
+                    'content' => '指定されたページ（memo_list）は現在ご利用いただけません。'
+                ];
+                // この後、include 'app/templates/page.php'; が走るようにする
             }
 
             if ($pageId === 'diga_list') {
@@ -162,7 +171,7 @@ class PageController
         $db = getDB();
 
         // セッションキーを確認
-        $username = $_SESSION['username'] ?? $_SESSION['user'] ?? 'kenmochi';
+        $username = $_SESSION['username'] ?? $_SESSION['user'] ?? 'guest';
 
         // SQL実行
         $stmt = $db->prepare("SELECT content, create_date, update_date FROM user_memos WHERE username = ? ORDER BY create_date DESC");

@@ -72,13 +72,22 @@ class PageController
                 $page['allMemos'] = $memoCtrl->getAllMemosForAdmin();
             }
 
-            if ($pageId === 'memo_list') {
-                // 自身の showMemoList メソッドを呼び出してデータを取得
-                $memoData = $this->showMemoList();
-                // 取得した myMemos を $page 配列に注入
-                $myMemos = $memoData['myMemos'];
-                $page['title'] = $memoData['title'];
-                $page['myMemos'] = $myMemos; // テンプレート側で使用できるように注入
+            // if ($pageId === 'memo_list') {
+            //     // 自身の showMemoList メソッドを呼び出してデータを取得
+            //     $memoData = $this->showMemoList();
+            //     // 取得した myMemos を $page 配列に注入
+            //     $myMemos = $memoData['myMemos'];
+            //     $page['title'] = $memoData['title'];
+            //     $page['myMemos'] = $myMemos; // テンプレート側で使用できるように注入
+            // }
+            // index.php の 404判定部分
+            if ($pageId === 'memo_list') { // 無効にしたいページ
+                header("HTTP/1.0 404 Not Found");
+                $page = [
+                    'title' => '404 Not Found',
+                    'content' => '指定されたページ（memo_list）は現在ご利用いただけません。'
+                ];
+                // この後、include 'app/templates/page.php'; が走るようにする
             }
 
             if ($pageId === 'diga_list') {

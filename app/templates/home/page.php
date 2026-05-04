@@ -22,10 +22,15 @@ $initialDate = isset($_GET['date']) ? $_GET['date'] : date('Y-m-d');
 $uDir = $controller->getSafeDirName($controller->user);
 
 // ダッシュボード用データの安全な初期化
+// $page が配列でない、あるいは文字列なら空配列で上書きする
+if (!is_array($page)) {
+    $page = []; 
+}
+
 if (!isset($page['dashboard'])) {
     $page['dashboard'] = [
         'events' => [],
-        'chart' => [],
+        'chart'  => [],
         'pinned' => []
     ];
 }

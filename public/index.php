@@ -11,6 +11,9 @@ require_once __DIR__ . '/../app/dbconfig.php';
 require_once __DIR__ . '/../app/router.php';
 
 // 2. ページパラメータの取得
+// index.php の冒頭
+$pageId = $_GET['page'] ?? 'home'; // URLパラメータから取得、なければhome
+$page = []; // 空の配列で初期化しておく
 $page = $_GET['page'] ?? 'home';
 $action = $_GET['action'] ?? '';
 
@@ -108,10 +111,18 @@ if ($page === 'memo_list') {
     $controller = new PageController();
     $pageData = $controller->showMemoList();
 
-    $pageId = 'memo_list';
+    //$pageId = 'memo_list';
+    // index.php 117行目付近
+    $templatePath = "../app/templates/{$pageId}/page.php";
+
+    // もし 404（memo_listなど）の場合は、共通の page.php を使うように強制する
+    if ($pageId === 'memo_list' || !file_exists($templatePath)) {
+        $templatePath = "../app/templates/home/page.php"; // あるいは共通の page.php
+    }
+
 
     include __DIR__ . '/../app/templates/layout/header.php';
-    include __DIR__ . '/../app/templates/memo_list/page.php';
+    include($templatePath);
     include __DIR__ . '/../app/templates/layout/footer.php';
     exit;
 }

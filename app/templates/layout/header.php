@@ -83,11 +83,11 @@ if (session_status() === PHP_SESSION_NONE) {
                                     $shouldShow = true;
                                 }
                             }
-                            elseif (strpos($origTitle, 'メモ一覧') !== false) {
-                                if ($userRole === 'admin') {
-                                    $shouldShow = true;
-                                }
-                            }
+                            // elseif (strpos($origTitle, 'メモ一覧') !== false) {
+                            //     if ($userRole === 'admin') {
+                            //         $shouldShow = true;
+                            //     }
+                            // }
                             // C. それ以外（パスワード再設定、アンケート等）は $shouldShow が false のままなので表示されません
                 
                             if ($shouldShow): ?>

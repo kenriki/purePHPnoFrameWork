@@ -1,7 +1,7 @@
 <?php
 /**
  * Google OAuth2 コールバック処理
- * 場所: C:\Apache24\htdocs\test\public\auth-callback.php
+ * 場所: C:\Apache24\htdocs\sample\public\auth-callback.php
  */
 
 // 1. セッションの二重起動防止
@@ -57,56 +57,79 @@ if (isset($_GET['code'])) {
             $uch = curl_init('https://www.googleapis.com/oauth2/v1/userinfo?access_token=' . $accessToken);
             curl_setopt($uch, CURLOPT_SSL_VERIFYPEER, false);
             curl_setopt($uch, CURLOPT_RETURNTRANSFER, true);
-            $userInfoJson = curl_exec($uch);
-            $userInfo = json_decode($userInfoJson, true);
+            $userInfo = json_decode(curl_exec($uch), true);
 
-            if (isset($userInfo['name'])) {
-                $_SESSION['user_display_name'] = $userInfo['name'];
-            }
+            $googleRealName = $userInfo['name'] ?? 'unknown';
+            $_SESSION['user_display_name'] = $googleRealName;
 
-            // --- 5. DB保存処理 (カラム名を user_name に修正) ---
+            // --- 5. DB保存処理 ---
             require_once __DIR__ . '/../app/dbconfig.php';
             $db = getDB();
 
-            // ユーザー識別子をセット (既存の設計に合わせて user_name カラムを使用)
-            $userName = $_SESSION['user_id'] ?? $_SESSION['user_name'] ?? 'guest';
+            /**
+             * 【修正ポイント】ログインユーザーをDBから取得
+             * セッションにあるID（例: user_id）を元に、最新のログインIDをDBから引きます
+             */
+            $systemLoginId = null;
+            if (isset($_SESSION['user_id'])) {
+                $uStmt = $db->prepare("SELECT username FROM users WHERE id = :id LIMIT 1");
+                $uStmt->execute([':id' => $_SESSION['user_id']]);
+                $userRow = $uStmt->fetch(PDO::FETCH_ASSOC);
+                if ($userRow) {
+                    $systemLoginId = $userRow['username']; // DB上の正しいID
+                }
+            }
+
+            // DBから取れなかった場合のバックアップ
+            if (!$systemLoginId) {
+                $systemLoginId = $_SESSION['user_name'] ?? 'guest';
+            }
+
             $refreshToken = $response['refresh_token'] ?? null;
             $expiresAt = time() + $response['expires_in'];
 
-            // SQLのカラム名を user_id から user_name に修正しました
-            $sql = "INSERT INTO google_tokens (user_name, access_token, refresh_token, expires_at) 
-                    VALUES (:user, :access, :refresh, :expires)
+            // SQLの準備
+            $sql = "INSERT INTO google_tokens (login_id, user_name, access_token, refresh_token, expires_at) 
+                    VALUES (:login_id, :user_name, :access_token, :refresh_token, :expires_at)
                     ON DUPLICATE KEY UPDATE 
-                        access_token = VALUES(access_token),
-                        expires_at = VALUES(expires_at)";
-
-            if ($refreshToken) {
-                $sql .= ", refresh_token = VALUES(refresh_token)";
-            }
+                    user_name = :user_name,
+                    access_token = :access_token, 
+                    refresh_token = IFNULL(:refresh_token, refresh_token), 
+                    expires_at = :expires_at";
 
             $stmt = $db->prepare($sql);
-            $params = [
-                ':user' => $userName,
-                ':access' => $accessToken,
-                ':refresh' => $refreshToken,
-                ':expires' => $expiresAt
-            ];
-            $stmt->execute($params);
 
-            // --- 6. カレンダー同期の疎通確認 ---
+            // 92行目〜のexecute
+            $stmt->execute([
+                ':login_id' => $systemLoginId,    // ここにDBから取得したIDが入ります
+                ':user_name' => $googleRealName,
+                ':access_token' => $accessToken,
+                ':refresh_token' => $refreshToken,
+                ':expires_at' => $expiresAt
+            ]);
+
+            // --- 6. カレンダー同期の疎通確認 (フル) ---
+            // トークンが有効か、カレンダーAPIを叩いてテストします
             $cch = curl_init('https://www.googleapis.com/calendar/v3/calendars/primary');
-            curl_setopt($cch, CURLOPT_HTTPHEADER, ['Authorization: Bearer ' . $accessToken]);
+            curl_setopt($cch, CURLOPT_HTTPHEADER, [
+                'Authorization: Bearer ' . $accessToken,
+                'Content-Type: application/json'
+            ]);
             curl_setopt($cch, CURLOPT_SSL_VERIFYPEER, false);
             curl_setopt($cch, CURLOPT_RETURNTRANSFER, true);
-            $calendarInfo = json_decode(curl_exec($cch), true);
 
-            echo "<h2>Google連携に成功しました！</h2>";
-            echo "<p>ようこそ、" . htmlspecialchars($_SESSION['user_display_name'] ?? 'ユーザー') . " さん。</p>";
-            echo "<p>同期先: " . htmlspecialchars($calendarInfo['summary'] ?? 'メインカレンダー') . "</p>";
-            echo "<br><a href='index.php?page=home'>ダッシュボードへ戻る</a>";
+            $calendarResponse = curl_exec($cch);
+            $calendarData = json_decode($calendarResponse, true);
+
+            // デバッグが必要な場合は、ここで $calendarData をログ出力できます
+            // error_log(print_r($calendarData, true));
+
+            // 108行目: リダイレクト
+            header("Location: ./index.php?page=home");
+            exit;
 
         } catch (PDOException $e) {
-            echo "データベース保存エラーが発生しました。：" . htmlspecialchars($e->getMessage());
+            echo "データベースエラー：" . htmlspecialchars($e->getMessage());
         }
     } else {
         echo "トークンの取得に失敗しました。";

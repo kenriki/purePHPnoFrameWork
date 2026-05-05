@@ -136,15 +136,29 @@ try {
 } catch (Exception $e) {
     // エラーメッセージが長すぎる場合は先頭100文字程度に制限する
     $shortMsg = mb_strimwidth($e->getMessage(), 0, 200, "...");
+    // 例：エラーコードに応じたメッセージ設定
+    $errorCode = 'RATE_LIMIT'; // 実際にはAPIのレスポンスから取得
+
+    switch ($errorCode) {
+        case 'RATE_LIMIT':
+            $msg = "API側が混み合っているか、リクエスト制限に達しました。5分ほど空けてから再度お試しください。連休前後は混み合う可能性があります。";
+            break;
+        case 'OVERLOAD':
+            $msg = "現在サーバーが大変混み合っています。AIが順番待ちをしていますので、少し時間を置いてからお試しください。";
+            break;
+        case 'TOKEN_EXHAUSTED':
+            $msg = "今月の利用枠、または1回の入力上限に達しました。少し内容を削るか、明日以降に再度お試しください。";
+            break;
+        default:
+            $msg = "予期せぬエラーが発生しました。時間を置いてから再度お試しください。";
+    }
+
     echo json_encode([
         'candidates' => [
             [
                 'content' => [
-                    // 'parts' => [
-                    //     ['text' => "【システムエラー】" . $shortMsg]
-                    // ]
                     'parts' => [
-                        ['text' => "申し訳ございません。５分程度開けて実行してください"]
+                        ['text' => $msg]
                     ]
                 ]
             ]

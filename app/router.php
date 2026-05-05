@@ -1,5 +1,8 @@
 <?php
-
+// セッションがまだ開始されてなければ開始
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 // コントローラーの読み込み
 require_once __DIR__ . '/controllers/PageController.php';
 foreach (glob(__DIR__ . '/controllers/*Controller.php') as $filename) {

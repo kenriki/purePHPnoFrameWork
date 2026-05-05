@@ -45,7 +45,7 @@
             <span class="badge bg-secondary"><?= htmlspecialchars($_SERVER['SERVER_NAME'] ?? 'localhost') ?></span>
         </div>
 
-        <div class="card mb-4 shadow-sm">
+        <!-- <div class="card mb-4 shadow-sm">
             <div class="card-header bg-primary text-white">新規API追加</div>
             <div class="card-body">
                 <form method="POST">
@@ -75,6 +75,53 @@
                     </div>
                 </form>
             </div>
+        </div> -->
+
+        <!-- 新規API追加フォーム -->
+        <div class="card mb-4 shadow-sm">
+            <div class="card-header bg-primary text-white">新規API追加</div>
+            <div class="card-body">
+                <form method="POST">
+                    <input type="hidden" name="action" value="add">
+                    <div class="row g-3">
+                        <div class="col-md-2">
+                            <label class="form-label">Method</label>
+                            <select name="method" class="form-select">
+                                <option value="GET">GET</option>
+                                <option value="POST">POST</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Endpoint</label>
+                            <input name="endpoint" class="form-control" placeholder="例: status" required
+                                pattern="[a-zA-Z0-9_-]+">
+                            <div class="form-text">?page=api&api=xxx になります</div>
+                        </div>
+                        <div class="col-md-7">
+                            <label class="form-label">Response JSON</label>
+                            <textarea name="response_json" class="form-control" rows="3"
+                                placeholder='{"message":"ok","time":"{{time}}"}' required></textarea>
+                            <div class="form-text">置換したい場所を <code>{{id}}</code> のように記述します</div>
+                        </div>
+                        <!-- 追加：パラメータと動的設定 -->
+                        <div class="col-md-6">
+                            <label class="form-label">Request Parameters (カンマ区切り)</label>
+                            <input name="request_params" class="form-control" placeholder="id, name, type">
+                            <div class="form-text">テスト実行時に入力欄として表示されます</div>
+                        </div>
+                        <div class="col-md-4 d-flex align-items-center mt-4">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="is_dynamic" value="1"
+                                    id="flexSwitchCheckDefault">
+                                <label class="form-check-label" for="flexSwitchCheckDefault">リクエスト値で動的に置換する</label>
+                            </div>
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end">
+                            <button class="btn btn-primary w-100">追加</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
         </div>
 
         <div class="card shadow-sm">
@@ -84,8 +131,8 @@
                     <thead class="table-light">
                         <tr>
                             <th style="width:100px">Method</th>
-                            <th>Endpoint</th>
-                            <th>Response</th>
+                            <th>Endpoint / Params</th> <!-- カラム名を少し変更 -->
+                            <th>Response JSON</th>
                             <th style="width:120px">テスト</th>
                             <th style="width:80px"></th>
                         </tr>
@@ -107,8 +154,6 @@
                                     $json = json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
                                 }
                                 $len = mb_strlen($api['response_json']);
-                                $baseUrl = ($_SERVER['REQUEST_SCHEME'] ?? 'https') . '://' . $_SERVER['HTTP_HOST'];
-                                $apiUrl = $baseUrl . '/?page=api&api=' . urlencode($api['endpoint']);
                                 ?>
                                 <tr>
                                     <td>
@@ -117,29 +162,33 @@
                                         </span>
                                     </td>
                                     <td>
-                                        <code>?page=api&api=<?= htmlspecialchars($api['endpoint']) ?></code>
+                                        <code><?= htmlspecialchars($api['endpoint']) ?></code>
+                                        <!-- 動的モードかどうかの表示を追加 -->
+                                        <?php if (!empty($api['request_params'])): ?>
+                                            <div class="small text-muted mt-1">
+                                                Params: <span
+                                                    class="badge bg-light text-dark border"><?= htmlspecialchars($api['request_params']) ?></span>
+                                            </div>
+                                        <?php endif; ?>
+                                        <?php if ($api['is_dynamic']): ?>
+                                            <span class="badge bg-info text-dark" style="font-size: 0.7rem;">Dynamic Mode</span>
+                                        <?php endif; ?>
                                     </td>
                                     <td>
                                         <details>
                                             <summary class="text-primary" style="cursor:pointer;user-select:none;">
-                                                JSONを表示 / <?= number_format($len) ?> 文字
+                                                表示 (<?= number_format($len) ?> 文字)
                                             </summary>
                                             <pre class="mt-2 mb-0 p-2 bg-light border rounded small text-wrap"
-                                                style="max-height:300px;overflow:auto;"><code><?= htmlspecialchars($json) ?></code></pre>
+                                                style="max-height:200px;overflow:auto;"><code><?= htmlspecialchars($json) ?></code></pre>
                                         </details>
                                     </td>
                                     <td>
-                                        <?php if ($api['method'] === 'GET'): ?>
-                                            <a href="?page=api&api=<?= urlencode($api['endpoint']) ?>" target="_blank"
-                                                class="btn btn-sm btn-outline-success">
-                                                GET実行
-                                            </a>
-                                        <?php else: ?>
-                                            <button type="button" class="btn btn-sm btn-outline-primary"
-                                                onclick="postApi('<?= htmlspecialchars($api['endpoint']) ?>', '<?= htmlspecialchars($apiUrl) ?>')">
-                                                POST実行
-                                            </button>
-                                        <?php endif; ?>
+                                        <!-- ここが重要：新しい openTestModal を呼ぶように統一 -->
+                                        <button type="button" class="btn btn-sm btn-outline-dark w-100"
+                                            onclick="openTestModal('<?= htmlspecialchars($api['endpoint']) ?>', '<?= htmlspecialchars($api['method']) ?>', '<?= htmlspecialchars($api['request_params'] ?? '') ?>')">
+                                            実行
+                                        </button>
                                     </td>
                                     <td>
                                         <form method="POST"
@@ -154,6 +203,33 @@
                         <?php endif; ?>
                     </tbody>
                 </table>
+            </div>
+        </div>
+
+
+        <!-- 1. テスト実行用モーダルのHTML（これがないと画面が出ません） -->
+        <div class="modal fade" id="testModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content shadow-lg">
+                    <div class="modal-header bg-dark text-white">
+                        <h5 class="modal-title" id="modalTitle">APIテスト</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                            aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="testForm">
+                            <div id="paramInputs">
+                                <!-- ここにパラメータ入力欄が自動生成されます -->
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100 mt-3">実行</button>
+                        </form>
+                        <div class="mt-4">
+                            <label class="form-label fw-bold">Response:</label>
+                            <pre id="testResult" class="p-3 bg-dark text-info rounded small"
+                                style="min-height: 100px; max-height: 400px; overflow: auto;">結果がここに表示されます...</pre>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -221,15 +297,15 @@ curl_close($ch);
 echo $result;</pre>
                 </div>
 
-                <div class="alert alert-warning mt-3 mb-0">
+                <!-- <div class="alert alert-warning mt-3 mb-0">
                     <strong>注意:</strong> 今のAPIは固定JSONしか返さないので、送ったPOSTデータは無視されます。
                     データを受け取って処理したい場合は <code>ApiController.php</code> を改造してください。
-                </div>
+                </div> -->
             </div>
         </div>
 
         <div class="text-muted text-center mt-4 small">
-            現場PC: <?= htmlspecialchars(gethostname()) ?> |
+            PC: <?= htmlspecialchars(gethostname()) ?> |
             PHP <?= PHP_VERSION ?>
         </div>
     </div>
@@ -278,6 +354,66 @@ echo $result;</pre>
             });
         }
     </script>
+    <!-- 2. ボタンを押した時の動き（これがないとボタンが反応しません） -->
+    <script>
+        function openTestModal(endpoint, method, paramsAttr) {
+            const container = document.getElementById('paramInputs');
+            const resultBox = document.getElementById('testResult');
+            document.getElementById('modalTitle').innerText = method + ' / ' + endpoint;
+
+            container.innerHTML = '';
+            resultBox.innerText = '結果がここに表示されます...';
+
+            // パラメータ入力欄の生成
+            if (paramsAttr && paramsAttr.trim() !== "") {
+                paramsAttr.split(',').forEach(p => {
+                    const name = p.trim();
+                    if (!name) return;
+                    container.innerHTML += `
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">${name}</label>
+                    <input type="text" name="${name}" class="form-control" placeholder="${name}の値を入力">
+                </div>`;
+                });
+            } else {
+                container.innerHTML = '<p class="text-muted small">パラメータはありません</p>';
+            }
+
+            // モーダルを表示
+            const modalElement = document.getElementById('testModal');
+            const testModal = new bootstrap.Modal(modalElement);
+            testModal.show();
+
+            // 送信処理
+            document.getElementById('testForm').onsubmit = async (e) => {
+                e.preventDefault();
+                resultBox.innerText = '通信中...';
+
+                const formData = new FormData(e.target);
+                // あなたの環境に合わせてURLを調整してください
+                const apiUrl = `index.php?page=api&api=${endpoint}`;
+
+                try {
+                    let response;
+                    if (method === 'GET') {
+                        const qs = new URLSearchParams(formData).toString();
+                        response = await fetch(`${apiUrl}&${qs}`);
+                    } else {
+                        response = await fetch(apiUrl, {
+                            method: 'POST',
+                            body: formData
+                        });
+                    }
+                    const data = await response.json();
+                    resultBox.innerText = JSON.stringify(data, null, 2);
+                } catch (error) {
+                    resultBox.innerText = 'エラー: ' + error;
+                }
+            };
+        }
+    </script>
+    <!-- 修正後：正しいBootstrap 5のJS読み込み -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 
 </html>

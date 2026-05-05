@@ -38,6 +38,12 @@ if (!isset($page['dashboard'])) {
 // .env からクライアントIDを取得（環境に合わせてどちらかを使用）
 $clientId = $_ENV['GOOGLE_CLIENT_ID'] ?? getenv('GOOGLE_CLIENT_ID');
 $redirectUri = 'https://desktop-mnoqic1.tail7aa158.ts.net/index.php?page=google_callback';
+// プロトコルとホスト名を取得
+$protocol = "https"; 
+$host = $_SERVER['HTTP_HOST'];
+$scriptPath = $_SERVER['SCRIPT_NAME']; 
+
+$redirectUri = $protocol . "://" . $host . $scriptPath . "?page=google_callback";
 
 // 名前（profile）とメールアドレス（email）のスコープを追加
 $scopes = [

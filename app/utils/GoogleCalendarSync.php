@@ -54,13 +54,17 @@ class GoogleCalendarSync
             return [];
 
         // 指定日の開始(00:00:00)と終了(23:59:59)をRFC3339形式で作成
-        $timeMin = urlencode($timeMin . 'T00:00:00Z');
-        $timeMax = urlencode($timeMax . 'T23:59:59Z');
+        //$timeMin = urlencode($timeMin . 'T00:00:00Z');
+        //$timeMax = urlencode($timeMax . 'T23:59:59Z');
+        $encodedMin = urlencode($timeMin);
+        $encodedMax = urlencode($timeMax);
 
-        $url = "https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin={$timeMin}&timeMax={$timeMax}&singleEvents=true&orderBy=startTime";
+        //$url = "https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin={$timeMin}&timeMax={$timeMax}&singleEvents=true&orderBy=startTime";
+        $url = "https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin={$encodedMin}&timeMax={$encodedMax}&singleEvents=true&orderBy=startTime";
 
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // Windows環境での証明書エラー対策
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'Authorization: Bearer ' . $accessToken,
             'Content-Type: application/json'
@@ -80,11 +84,17 @@ class GoogleCalendarSync
 
         $events = [];
         foreach ($data['items'] as $item) {
+            // $events[] = [
+            //     'id' => $item['id'],
+            //     'summary' => $item['summary'] ?? '(無題)',
+            //     'start' => $item['start']['dateTime'] ?? $item['start']['date'],
+            //     'end' => $item['end']['dateTime'] ?? $item['end']['date']
+            // ];
             $events[] = [
                 'id' => $item['id'],
                 'summary' => $item['summary'] ?? '(無題)',
-                'start' => $item['start']['dateTime'] ?? $item['start']['date'],
-                'end' => $item['end']['dateTime'] ?? $item['end']['date']
+                'start' => $item['start'], // ここは配列のまま渡す（MemoController側の $gEvent['start']['date'] 等の参照に合わせる）
+                'end' => $item['end']
             ];
         }
         return $events;
@@ -114,7 +124,10 @@ class GoogleCalendarSync
         $newAccess = $response['access_token'];
         $expiresAt = time() + $response['expires_in'];
 
-        $stmt = $this->db->prepare("UPDATE google_tokens SET access_token = ?, expires_at = ? WHERE user_name = ?");
+        // $stmt = $this->db->prepare("UPDATE google_tokens SET access_token = ?, expires_at = ? WHERE user_name = ?");
+        // $stmt->execute([$newAccess, $expiresAt, $userName]);
+        // refresh メソッド内のここをチェック
+        $stmt = $this->db->prepare("UPDATE google_tokens SET access_token = ?, expires_at = ? WHERE login_id = ?"); // user_name ではなく login_id
         $stmt->execute([$newAccess, $expiresAt, $userName]);
 
         return $newAccess;
@@ -175,51 +188,48 @@ class GoogleCalendarSync
         }
 
         // 2. Google API用の日付形式 (RFC3339) に整形
-        // FullCalendarから渡される $start, $end をタイムゾーン付きの形式に変換
-        $timeMin = urlencode($start . 'T00:00:00Z');
-        $timeMax = urlencode($end . 'T23:59:59Z');
+        // 【修正】strpos判定をやめ、10文字（YYYY-MM-DD）なら日本時間を付与するロジックに変更
+        $timeMin = (strlen($start) === 10) ? $start . 'T00:00:00+09:00' : $start;
+        $timeMax = (strlen($end) === 10) ? $end . 'T23:59:59+09:00' : $end;
 
-        // 3. Google Calendar API エンドポイント構築
-        $url = "https://www.googleapis.com/calendar/v3/calendars/primary/events?" . http_build_query([
-            'timeMin' => $start . 'T00:00:00Z',
-            'timeMax' => $end . 'T23:59:59Z',
-            'singleEvents' => 'true',
+        $params = [
+            'timeMin' => $timeMin,
+            'timeMax' => $timeMax,
+            'singleEvents' => 'true', // これがないと未来の繰り返し予定が展開されません
             'orderBy' => 'startTime',
-        ]);
+            'maxResults'   => 2500, // ★ ここを追加。最大2500件まで一回で取得できます
+        ];
 
-        // 4. cURLによるリクエスト実行
+        // http_build_query で安全にエンコード
+        $url = "https://www.googleapis.com/calendar/v3/calendars/primary/events?" . http_build_query($params);
+
+        // 4. cURL実行
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // SSL証明書エラー対策
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'Authorization: Bearer ' . $accessToken,
             'Content-Type: application/json'
         ]);
 
         $result = curl_exec($ch);
+        //var_dump("URL: " . $url);
 
-        // 5. 通信エラーのチェック
-        if ($result === false) {
-            $error = curl_error($ch);
-            error_log("Google API cURL Error: {$error}");
+        // 【追加】エラー時のHTTPステータスとレスポンスをログに出力（切り分け用）
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        if ($httpCode !== 200) {
+            error_log("Google API Error (HTTP $httpCode): " . $result);
             return [];
         }
 
-        // 6. レスポンスの解析
         $data = json_decode($result, true);
-
-        // デバッグ用ログ：取得データを確認したい場合に有効化してください
-        // error_log('Google API Response for ' . $userName . ': ' . print_r($data, true));
-
         if (!isset($data['items']) || !is_array($data['items'])) {
-            error_log("Google API Error: 'items' not found in response. " . ($data['error']['message'] ?? 'Unknown error'));
             return [];
         }
 
-        // 7. FullCalendar形式へのマッピング処理
+        // 7. FullCalendar形式へのマッピング
         $events = [];
         foreach ($data['items'] as $item) {
-            // 開始日時の取得（時間指定があれば dateTime、終日なら date）
             $eventStart = $item['start']['dateTime'] ?? $item['start']['date'] ?? null;
             $eventEnd = $item['end']['dateTime'] ?? $item['end']['date'] ?? null;
 
@@ -228,18 +238,19 @@ class GoogleCalendarSync
 
             $events[] = [
                 'id' => $item['id'],
-                'title' => $item['summary'] ?? '(無題)', // Googleの 'summary' をマッピング
+                'title' => $item['summary'] ?? '(無題)',
                 'start' => $eventStart,
                 'end' => $eventEnd,
                 'url' => $item['htmlLink'] ?? '#',
-                'description' => $item['description'] ?? '', // メモの内容など
-                'color' => '#4285f4', // Googleカレンダー風のブルー
-                'allDay' => isset($item['start']['date']) // 'date' のみの場合は終日予定として扱う
+                'description' => $item['description'] ?? '',
+                'color' => '#4285f4',
+                'allDay' => isset($item['start']['date'])
             ];
         }
 
         return $events;
     }
+
     /**
      * Googleカレンダーに予定を追加する
      */

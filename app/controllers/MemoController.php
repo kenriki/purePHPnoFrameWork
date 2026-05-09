@@ -304,8 +304,10 @@ class MemoController
                 $sync = new GoogleCalendarSync($db); // コンストラクタに合わせて調整
 
                 // 取得範囲を「指定された日の属する月」の全期間に設定
-                $timeMin = date('Y-m-01T00:00:00Z', strtotime($target_date));
-                $timeMax = date('Y-m-tT23:59:59Z', strtotime($target_date));
+                // $timeMin = date('Y-m-01T00:00:00Z', strtotime($target_date));
+                // $timeMax = date('Y-m-tT23:59:59Z', strtotime($target_date));
+                $timeMin = date('Y-m-01T00:00:00+09:00', strtotime($target_date));
+                $timeMax = date('Y-m-tT23:59:59+09:00', strtotime($target_date));
 
                 // 引数を3つ渡す（$username, $timeMin, $timeMax）
                 $googleEvents = $sync->getEvents($this->user, $timeMin, $timeMax);
@@ -327,6 +329,10 @@ class MemoController
                             'source' => 'google'
                         ];
                     }
+                    // 最後に配列全体を日付でソートし直す
+                    usort($rows, function ($a, $b) {
+                        return strcmp($b['event_date'], $a['event_date']);
+                    });
                 }
             } catch (Exception $e) {
                 error_log("Google Calendar Fetch Failed: " . $e->getMessage());

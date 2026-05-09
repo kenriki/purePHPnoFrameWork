@@ -127,6 +127,29 @@ if ($page === 'memo_list') {
     exit;
 }
 
+if ($page === 'admin') {
+    $pageId = 'admin';
+    require_once __DIR__ . '/../app/controllers/AdminController.php';
+
+    $controller = new AdminController();
+    $data = $controller->handleRequest();
+
+    // 必要なら共通変数を渡す
+    $data['isGoogleLinked'] = $isGoogleLinked ?? false;
+    extract($data);
+
+    include __DIR__ . '/../app/templates/admin/page.php';
+    exit;
+
+} elseif ($page === 'api') {
+    require_once __DIR__ . '/../app/controllers/ApiController.php';
+
+    $apiPath = $_GET['api'] ?? '';
+    $controller = new ApiController();
+    $controller->handleRequest($apiPath); // APIはJSON返すだけなのでexitは中でやる
+    exit;
+}
+
 /**
  * 10. 既存のルーティングの実行（HOMEなど）
  */

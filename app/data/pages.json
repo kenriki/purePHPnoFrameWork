@@ -316,5 +316,18 @@
                 "file": "auth-callback.php"
             }
         ]
+    },
+    "admin": {
+        "title": "API管理画面",
+        "sections": [
+            {
+                "type": "text",
+                "content": "現場PC用 REST API を追加・管理します"
+            },
+            {
+                "type": "php",
+                "file": "adminPage.php"
+            }
+        ]
     }
 }

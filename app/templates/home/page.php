@@ -24,13 +24,13 @@ $uDir = $controller->getSafeDirName($controller->user);
 // ダッシュボード用データの安全な初期化
 // $page が配列でない、あるいは文字列なら空配列で上書きする
 if (!is_array($page)) {
-    $page = []; 
+    $page = [];
 }
 
 if (!isset($page['dashboard'])) {
     $page['dashboard'] = [
         'events' => [],
-        'chart'  => [],
+        'chart' => [],
         'pinned' => []
     ];
 }
@@ -39,9 +39,9 @@ if (!isset($page['dashboard'])) {
 $clientId = $_ENV['GOOGLE_CLIENT_ID'] ?? getenv('GOOGLE_CLIENT_ID');
 $redirectUri = 'https://desktop-mnoqic1.tail7aa158.ts.net/index.php?page=google_callback';
 // プロトコルとホスト名を取得
-$protocol = "https"; 
+$protocol = "https";
 $host = $_SERVER['HTTP_HOST'];
-$scriptPath = $_SERVER['SCRIPT_NAME']; 
+$scriptPath = $_SERVER['SCRIPT_NAME'];
 
 $redirectUri = $protocol . "://" . $host . $scriptPath . "?page=google_callback";
 
@@ -1133,16 +1133,18 @@ $authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" . http_build_query([
             const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || "申し訳ございません。適切な回答が見つかりませんでした。";
 
             // 2. 正常終了：丁寧に一文字ずつ表示
-            responseArea.innerText = "";
-            let i = 0;
-            const typing = setInterval(() => {
-                responseArea.innerText += aiText[i];
-                i++;
-                if (i >= aiText.length) {
-                    clearInterval(typing);
-                    resetUI(input, originalPlaceholder);
-                }
-            }, 20);
+            //responseArea.i    nnerText = "";
+            // let i = 0;
+            // const typing = setInterval(() => {
+            //     responseArea.innerText += aiText[i];
+            //     i++;
+            //     if (i >= aiText.length) {
+            //         clearInterval(typing);
+            //         resetUI(input, originalPlaceholder);
+            //     }
+            // }, 20);
+            responseArea.innerText = aiText;
+            resetUI(input, originalPlaceholder);
 
         } catch (error) {
             console.error("Bot Error:", error);

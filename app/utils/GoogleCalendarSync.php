@@ -197,7 +197,7 @@ class GoogleCalendarSync
             'timeMax' => $timeMax,
             'singleEvents' => 'true', // これがないと未来の繰り返し予定が展開されません
             'orderBy' => 'startTime',
-            'maxResults'   => 2500, // ★ ここを追加。最大2500件まで一回で取得できます
+            'maxResults' => 2500, // ★ ここを追加。最大2500件まで一回で取得できます
         ];
 
         // http_build_query で安全にエンコード
@@ -287,5 +287,21 @@ class GoogleCalendarSync
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
         return ($httpCode === 200 || $httpCode === 201);
+    }
+    public function getEventsAsText($userName, $days = 7)
+    {
+        $start = date('Y-m-d');
+        $end = date('Y-m-d', strtotime("+$days days"));
+
+        $events = $this->getEventsForFullCalendar($userName, $start, $end);
+
+        if (empty($events))
+            return "直近の予定はありません。";
+
+        $text = "【直近の予定】\n";
+        foreach ($events as $e) {
+            $text .= "- " . $e['start'] . " : " . $e['title'] . "\n";
+        }
+        return $text;
     }
 }

@@ -475,8 +475,8 @@ class MemoController
             //$end = $_GET['end'] ?? date('Y-m-t');
 
             // もし「去年まで遡って一気に取得したい」場合は以下のように固定も可能
-            $start = date('Y-01-01', strtotime('-1 year'));
-            $end = date('Y-12-31', strtotime('+1 year'));
+            $start = date('Y-01-01', strtotime('-10 year'));
+            $end = date('Y-12-31', strtotime('+10 year'));
 
             // 2. GoogleCalendarSyncのインスタンス化とデータ取得
             $sync = new GoogleCalendarSync($db);

@@ -448,6 +448,8 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
                     <button type="submit" id="save-btn" class="btn btn-primary">💾 保存して更新</button>
                     <button type="submit" name="pdf_export" formtarget="_blank"
                         style="padding: 12px 15px; background: #6c757d; color: #fff; border: none; border-radius: 5px; cursor: pointer;">PDF出力</button>
+                    <button type="button" id="excel-btn-trigger" name="excel_download" formtarget="_blank"
+                        style="padding: 12px 15px; background: #28a745; color: #fff; border: none; border-radius: 5px; cursor: pointer;">Excel出力</button>
                 </div>
                 <?php if (!empty($current_id)): ?>
                     <button type="submit" name="delete" onclick="return confirm('削除してもよろしいですか？')"
@@ -549,6 +551,32 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
 </div>
 
 <script>
+    /**
+     * Excelボタンが押された時だけ、formtargetとactionをセットして強制送信する
+     */
+
+    document.getElementById('excel-btn-trigger').addEventListener('click', function () {
+        const form = document.getElementById('memo-form');
+
+        // 現在の設定をバックアップ
+        const originalAction = form.action;
+        const originalTarget = form.target;
+
+        // Excel出力専用の設定を一時的にセット
+        form.action = "index.php?page=memo&action=excel_download";
+        form.target = "_blank";
+
+        // 既存のフォームにあるJSバリデーション等を無視して強制送信
+        // これにより、event.preventDefault() の影響を受けずにPHPへ飛びます
+        HTMLFormElement.prototype.submit.call(form);
+
+        // 送信後、元の「保存用」の設定に戻しておく
+        setTimeout(() => {
+            form.action = originalAction;
+            form.target = originalTarget;
+        }, 500);
+    });
+
     /**
      * サーバー側の物理ファイルとDBレコード(image_path)を即座に削除する
      */

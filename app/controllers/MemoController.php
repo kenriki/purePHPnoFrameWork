@@ -154,6 +154,19 @@ class MemoController
             return;
         }
 
+        // POSTリクエストかつ、Excel出力ボタンが押された場合
+        //if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['excel_download'])) {
+        if (isset($_GET['action']) && $_GET['action'] === 'excel_download') {
+            // メソッドを呼び出し、終わったら即座に exit する
+            $this->generateExcel(
+                $_POST['id'] ?? '',
+                $_POST['content'] ?? '',
+                date('Y-m-d H:i:s'),
+                $_POST['image_path'] ?? ''
+            );
+            return;
+        }
+
         // 保存・削除 (POST)
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $content = $_POST['content'] ?? '';
@@ -1256,6 +1269,70 @@ class MemoController
         } catch (Exception $e) {
             // デバッグ時はここを error_log($e->getMessage()); にすると確実です
             return [];
+        }
+    }
+    /**
+     * Pythonスクリプトを呼び出してExcelを生成・出力する
+     */
+    public function generateExcel($id, $content, $create_date, $image_path = '')
+    {
+        // 1. PHPのエラー表示とバッファを完全に黙らせる
+        error_reporting(0);
+        ini_set('display_errors', 0);
+        while (ob_get_level()) { ob_end_clean(); }
+
+        // 2. 一時ファイルのパス設定
+        $tmp_dir = sys_get_temp_dir();
+        $tmp_json = tempnam($tmp_dir, 'json_');
+        $tmp_excel = $tmp_dir . DIRECTORY_SEPARATOR . 'memo_' . uniqid() . '.xlsx';
+
+        // 3. 入力データ作成
+        $safeDir = isset($this->safeDirName) ? $this->safeDirName : 'default';
+        $full_image_path = (!empty($image_path)) ? realpath(__DIR__ . "/../app/data/user_memos/{$safeDir}/images/{$image_path}") : '';
+
+        $data = [
+            'content' => $content,
+            'created_at' => $create_date,
+            'image_path' => $full_image_path
+        ];
+        file_put_contents($tmp_json, json_encode($data, JSON_UNESCAPED_UNICODE));
+
+        // 4. Python実行（保存先パスを第2引数として渡す）
+        $python_path = '"C:\Program Files\Python314\python.exe"';
+        $script_path = realpath(__DIR__ . "/../scripts/python_excel_gen.py");
+        $command = sprintf('%s %s %s %s 2>&1', 
+            $python_path, 
+            escapeshellarg($script_path), 
+            escapeshellarg($tmp_json), 
+            escapeshellarg($tmp_excel)
+        );
+
+        shell_exec($command);
+
+        // 5. 生成されたファイルの存在チェックと出力
+        if (file_exists($tmp_excel) && filesize($tmp_excel) > 0) {
+            $filename = "memo_" . date('Ymd_His') . ".xlsx";
+
+            // ブラウザ出力を開始
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment; filename="' . $filename . '"');
+            header('Content-Length: ' . filesize($tmp_excel));
+            header('Cache-Control: max-age=0');
+            header('Pragma: public');
+
+            // ファイルを直接読み込んで出力（メモリ節約とゴミ混入防止）
+            readfile($tmp_excel);
+            
+            // 後片付け
+            @unlink($tmp_json);
+            @unlink($tmp_excel);
+            exit;
+        } else {
+            // 失敗時
+            @unlink($tmp_json);
+            header('Content-Type: text/html; charset=UTF-8');
+            echo "Excelファイルの生成に失敗しました。Python環境または権限を確認してください。";
+            exit;
         }
     }
 }

@@ -1,4 +1,5 @@
 <?php
+ob_start(); // 冒頭に追加
 // セッションがまだ開始されてなければ開始
 if (session_status() === PHP_SESSION_NONE) {
     session_start();

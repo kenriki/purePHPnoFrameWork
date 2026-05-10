@@ -15,11 +15,17 @@ $isGoogleLinked = (isset($_SESSION['google_access_token']) && !empty($_SESSION['
 <head>
     <meta charset="UTF-8">
     <title><?= htmlspecialchars($page['title'] ?? 'システム') ?></title>
-    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="robots" content="noindex, nofollow">
     <link rel="stylesheet" href="/assets/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
+        html,
+        body {
+            /* ピンチ操作（拡大縮小）やダブルタップによるズームを禁止 */
+            touch-action: pan-x pan-y;
+        }
+
         /* 既存の基本スタイル */
         table {
             border-collapse: collapse;
@@ -148,6 +154,37 @@ $isGoogleLinked = (isset($_SESSION['google_access_token']) && !empty($_SESSION['
         /* コンテンツの表示制御 */
         #real-content {
             display: none;
+        }
+
+        /* --- スワイプジェスチャー（戻る・進む）と引っ張って更新を禁止 --- */
+        html,
+        body {
+            /* 左右のスワイプ戻り、上下の引っ張って更新を物理的に無効化 */
+            overscroll-behavior: none;
+
+            /* アプリ感を出すため、長押しによるテキスト選択やメニューを禁止（任意） */
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        body {
+            /* 上下のスクロール自体は許可する設定 */
+            overflow-y: auto;
+            /* iOSでスクロールを滑らかにする設定 */
+            -webkit-overflow-scrolling: touch;
+
+            /* 画面の高さ一杯を確保 */
+            margin: 0;
+            height: 100%;
+        }
+
+        /* 入力フォームなどは操作できるように除外設定 */
+        input,
+        textarea,
+        [contenteditable="true"] {
+            -webkit-user-select: text;
+            user-select: text;
         }
     </style>
 </head>

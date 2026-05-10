@@ -14,6 +14,7 @@ if (session_status() === PHP_SESSION_NONE) {
     <link rel="stylesheet" href="/assets/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
+        /* 既存の基本スタイル */
         table {
             border-collapse: collapse;
             width: 100%;
@@ -45,68 +46,112 @@ if (session_status() === PHP_SESSION_NONE) {
             font-weight: bold;
         }
 
-        /* --- ローディング画面のスタイル --- */
-        #loading-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(255, 255, 255, 0.9);
-            z-index: 9999;
-            display: flex;
-            /* 初期状態は表示（JSで消す） */
-            justify-content: center;
-            align-items: center;
+        /* --- スケルトンスクリーンの高度なスタイル --- */
+        #skeleton-screen {
+            padding: 20px;
+            background: #f9fafb;
         }
 
-        .spinner-container {
-            text-align: center;
+        .skeleton {
+            background-color: #e5e7eb;
+            background-image: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0));
+            background-size: 200px 100%;
+            background-repeat: no-repeat;
+            border-radius: 8px;
+            display: block;
+            animation: skeleton-shimmer 1.5s infinite;
         }
 
-        .spinner {
-            width: 50px;
-            height: 50px;
-            border: 5px solid #f3f3f3;
-            border-top: 5px solid #3498db;
-            /* パズドラ風の青色 */
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
-        }
-
-        @keyframes spin {
+        @keyframes skeleton-shimmer {
             0% {
-                transform: rotate(0deg);
+                background-position: -200px 0;
             }
 
             100% {
-                transform: rotate(360deg);
+                background-position: calc(200px + 100%) 0;
             }
         }
 
-        .small {
-            font-size: 12px;
-            color: #777;
-            margin-top: 5px;
+        /* ダッシュボードを模したスケルトン配置 */
+        .sk-header {
+            height: 30px;
+            width: 180px;
+            margin-bottom: 25px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .sk-icon {
+            height: 24px;
+            width: 24px;
+            border-radius: 4px;
+        }
+
+        .sk-card {
+            height: 250px;
+            width: 100%;
+            margin-bottom: 20px;
+            border: 1px solid #e5e7eb;
+            background: #fff;
+        }
+
+        .sk-button {
+            height: 45px;
+            width: 100%;
+            margin-bottom: 15px;
+            border-radius: 8px;
+        }
+
+        .sk-line {
+            height: 15px;
+            width: 90%;
+            margin-bottom: 10px;
+        }
+
+        /* 進捗メッセージ */
+        .loading-status-container {
+            text-align: center;
+            margin-top: 20px;
+            padding: 15px;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .loading-main-text {
+            font-weight: bold;
+            color: #111827;
+            margin-bottom: 5px;
+            font-size: 16px;
+        }
+
+        .loading-sub-text {
+            color: #6b7280;
+            font-size: 13px;
+        }
+
+        /* エラー発生時用メッセージ */
+        #loading-error-msg {
+            display: none;
+            color: #ef4444;
+            margin-top: 15px;
+            font-size: 13px;
+        }
+
+        /* コンテンツの表示制御 */
+        #real-content {
+            display: none;
         }
     </style>
 </head>
 
 <body>
-    <div id="loading-overlay">
-        <div class="spinner-container">
-            <div class="spinner"></div>
-            <p style="margin:0; font-weight:bold; color:#333;">Please wait loading...</p>
-            <p class="small">※初回やキャッシュ削除後は時間がかかる場合があります</p>
-        </div>
-    </div>
-
     <header>
         <h1 style="font-size: 1rem; color: #888; margin: 0;">My System</h1>
-
         <h2 class="greeting-title"><?= htmlspecialchars($page['title'] ?? '') ?></h2>
     </header>
+
     <main>
         <?php if (isset($_SESSION['user_id'])): ?>
             <nav class="scroll-nav">
@@ -118,18 +163,12 @@ if (session_status() === PHP_SESSION_NONE) {
 
                     if ($menuData):
                         foreach ($menuData as $id => $content):
-                            // 判定には JSON から読み込んだ元のタイトルを使用する
                             $origTitle = $content['title'] ?? '';
-
-                            // --- 表示判定ロジックの修正（ホワイトリスト方式） ---
                             $shouldShow = false;
 
-                            // A. ホーム（IDで判定）または「メモ」という名前のページは全員に表示
-                            if (
-                                $id === 'home'
-                                || $origTitle === 'メモ'
-                                || $origTitle === 'メモ(Excelダウンロード)'
-                            ) {
+                            if ($id === 'home' || $origTitle === 'メモ' || $origTitle === 'メモ(Excelダウンロード)') {
+                                $shouldShow = true;
+                            } elseif (strpos($origTitle, 'サンプル') !== false && $userRole === 'admin') {
                                 $shouldShow = true;
                             }
                             // B. タイトルに「サンプル」が含まれるページは admin のみ表示
@@ -156,7 +195,6 @@ if (session_status() === PHP_SESSION_NONE) {
                         endforeach;
                     endif;
                     ?>
-
                     <li class="logout-item">
                         <a href="/index.php?page=logout" style="color: #ff4d4d; font-weight: bold;">
                             <i class="fa-solid fa-right-from-bracket"></i>
@@ -168,34 +206,86 @@ if (session_status() === PHP_SESSION_NONE) {
             </nav>
         <?php endif; ?>
 
-        <script>
-            document.addEventListener("DOMContentLoaded", () => {
-                const overlay = document.getElementById('loading-overlay');
+        <div id="skeleton-screen">
+            <div class="sk-header">
+                <div class="skeleton sk-icon"></div>
+                <div class="skeleton" style="height:20px; width:120px;"></div>
+            </div>
 
-                // 1. ページ読み込み完了時に非表示にする
-                // 少しだけ余裕（300ms）を持たせるとスムーズに見えます
-                setTimeout(() => {
-                    overlay.style.display = 'none';
-                }, 300);
+            <div class="skeleton sk-card"></div>
 
-                // 2. ページ遷移（リンククリック時）に再表示する
-                window.addEventListener('beforeunload', () => {
-                    overlay.style.display = 'flex';
-                });
+            <div class="skeleton sk-button"></div>
 
-                // ナビゲーションのスクロール制御（元のロジックを維持）
-                const nav = document.querySelector(".scroll-nav ul");
-                const leftBtn = document.querySelector(".nav-arrow.left");
-                const rightBtn = document.querySelector(".nav-arrow.right");
+            <div class="skeleton sk-line"></div>
+            <div class="skeleton sk-line" style="width: 70%;"></div>
 
-                if (nav && leftBtn && rightBtn) {
-                    const scrollAmount = 150;
-                    leftBtn.addEventListener("click", () => {
-                        nav.scrollBy({ left: -scrollAmount, behavior: "smooth" });
-                    });
-                    rightBtn.addEventListener("click", () => {
-                        nav.scrollBy({ left: scrollAmount, behavior: "smooth" });
-                    });
+            <div class="loading-status-container">
+                <div class="loading-main-text">Please wait loading...</div>
+                <div id="loading-step-text" class="loading-sub-text">Googleカレンダーと同期しています...</div>
+                <div id="loading-error-msg">
+                    処理に時間がかかっています。<br>
+                    <a href="index.php?page=home" style="text-decoration:underline;">こちらをクリックして再試行</a>してください。
+                </div>
+            </div>
+        </div>
+
+        <div id="real-content">
+        </div>
+    </main>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const skeleton = document.getElementById('skeleton-screen');
+            const content = document.getElementById('real-content');
+            const stepText = document.getElementById('loading-step-text');
+            const errorMsg = document.getElementById('loading-error-msg');
+
+            // 1. メッセージを動的に切り替えて「動いてる感」を出す
+            const steps = [
+                "Googleカレンダーと同期しています...",
+                "データベースを更新しています...",
+                "表示データを準備しています...",
+                "まもなく完了します..."
+            ];
+            let stepIdx = 0;
+            const stepInterval = setInterval(() => {
+                if (stepIdx < steps.length - 1) {
+                    stepIdx++;
+                    stepText.innerText = steps[stepIdx];
                 }
+            }, 3000);
+
+            // 2. 10秒経っても終わらない場合のエラー表示
+            const errorTimer = setTimeout(() => {
+                if (skeleton.style.display !== 'none') {
+                    errorMsg.style.display = 'block';
+                }
+            }, 10000);
+
+            // 3. 読み込み完了時の処理
+            window.addEventListener('load', () => {
+                setTimeout(() => {
+                    clearInterval(stepInterval);
+                    clearTimeout(errorTimer);
+                    if (skeleton) skeleton.style.display = 'none';
+                    if (content) content.style.display = 'block';
+                }, 500);
             });
-        </script>
+
+            // 4. ページ遷移時に再表示
+            window.addEventListener('beforeunload', () => {
+                if (skeleton) skeleton.style.display = 'block';
+                if (content) content.style.display = 'none';
+            });
+
+            // ナビスクロール
+            const nav = document.querySelector(".scroll-nav ul");
+            const leftBtn = document.querySelector(".nav-arrow.left");
+            const rightBtn = document.querySelector(".nav-arrow.right");
+            if (nav && leftBtn && rightBtn) {
+                const scrollAmount = 150;
+                leftBtn.addEventListener("click", () => { nav.scrollBy({ left: -scrollAmount, behavior: "smooth" }); });
+                rightBtn.addEventListener("click", () => { nav.scrollBy({ left: scrollAmount, behavior: "smooth" }); });
+            }
+        });
+    </script>

@@ -2,6 +2,12 @@
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
+
+/**
+ * Google連携状態の判定
+ * セッションやDB等、実際の環境の認証チェック変数に置き換えてください
+ */
+$isGoogleLinked = (isset($_SESSION['google_access_token']) && !empty($_SESSION['google_access_token'])) ? 'true' : 'false';
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -147,6 +153,11 @@ if (session_status() === PHP_SESSION_NONE) {
 </head>
 
 <body>
+    <script>
+        // PHPから認証状態をJSに渡す
+        const IS_GOOGLE_LINKED = <?= $isGoogleLinked ?>;
+    </script>
+
     <header>
         <h1 style="font-size: 1rem; color: #888; margin: 0;">My System</h1>
         <h2 class="greeting-title"><?= htmlspecialchars($page['title'] ?? '') ?></h2>
@@ -221,7 +232,7 @@ if (session_status() === PHP_SESSION_NONE) {
 
             <div class="loading-status-container">
                 <div class="loading-main-text">Please wait loading...</div>
-                <div id="loading-step-text" class="loading-sub-text">Googleカレンダーと同期しています...</div>
+                <div id="loading-step-text" class="loading-sub-text">準備しています...</div>
                 <div id="loading-error-msg">
                     処理に時間がかかっています。<br>
                     <a href="index.php?page=home" style="text-decoration:underline;">こちらをクリックして再試行</a>してください。
@@ -240,22 +251,35 @@ if (session_status() === PHP_SESSION_NONE) {
             const stepText = document.getElementById('loading-step-text');
             const errorMsg = document.getElementById('loading-error-msg');
 
-            // 1. メッセージを動的に切り替えて「動いてる感」を出す
-            const steps = [
+            // --- メッセージの動的設定 ---
+            const stepsLinked = [
                 "Googleカレンダーと同期しています...",
-                "データベースを更新しています...",
+                "最新のメモを読み込み中...",
                 "表示データを準備しています...",
                 "まもなく完了します..."
             ];
+            const stepsNotLinked = [
+                "認証状態を確認しています...",
+                "システムデータを読み込み中...",
+                "表示データを準備しています...",
+                "まもなく完了します..."
+            ];
+
+            // 認証状態で使う配列を切り替え
+            const activeSteps = IS_GOOGLE_LINKED ? stepsLinked : stepsNotLinked;
+
+            // 初期表示
+            stepText.innerText = activeSteps[0];
+
             let stepIdx = 0;
             const stepInterval = setInterval(() => {
-                if (stepIdx < steps.length - 1) {
+                if (stepIdx < activeSteps.length - 1) {
                     stepIdx++;
-                    stepText.innerText = steps[stepIdx];
+                    stepText.innerText = activeSteps[stepIdx];
                 }
             }, 3000);
 
-            // 2. 10秒経っても終わらない場合のエラー表示
+            // 10秒経っても終わらない場合のエラー表示
             const errorTimer = setTimeout(() => {
                 if (skeleton.style.display !== 'none') {
                     errorMsg.style.display = 'block';

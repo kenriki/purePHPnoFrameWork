@@ -38,6 +38,7 @@ if (isset($_GET['code'])) {
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30); 
     curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
         'code' => $_GET['code'],
         'client_id' => $clientId,
@@ -57,6 +58,7 @@ if (isset($_GET['code'])) {
             $uch = curl_init('https://www.googleapis.com/oauth2/v1/userinfo?access_token=' . $accessToken);
             curl_setopt($uch, CURLOPT_SSL_VERIFYPEER, false);
             curl_setopt($uch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($uch, CURLOPT_TIMEOUT, 30);
             $userInfo = json_decode(curl_exec($uch), true);
 
             $googleRealName = $userInfo['name'] ?? 'unknown';
@@ -117,6 +119,7 @@ if (isset($_GET['code'])) {
             ]);
             curl_setopt($cch, CURLOPT_SSL_VERIFYPEER, false);
             curl_setopt($cch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($cch, CURLOPT_TIMEOUT, 30); // 「30秒」という設定は、一般的なAPI通信においてはかなり余裕を持たせた、粘り強い設定
 
             $calendarResponse = curl_exec($cch);
             $calendarData = json_decode($calendarResponse, true);

@@ -1,7 +1,7 @@
 <?php
 /**
  * ======================================================================================
- * 共通ヘッダー (header.php) - レイアウト修正版
+ * 共通ヘッダー (header.php) - クラスエラー対策＆ローディング同期修正版
  * ======================================================================================
  */
 
@@ -10,14 +10,40 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// 2. 認証チェック
+// 2. 認証・同期チェック
 $isLoggedIn = !empty($_SESSION['user_id']);
-$isGoogleLinked = (isset($_SESSION['google_access_token']) && !empty($_SESSION['google_access_token']));
+$isGoogleLinked = false;
 
-/**
- * 注意：カレンダー同期ロジックは本来 sync_calendar.php 側で完結させるべきですが、
- * ヘッダー読み込み時にサーバー側でも判定が必要な場合を考慮し、変数の整理のみ行います。
- */
+if ($isLoggedIn) {
+    try {
+        $pdo = getDB();
+
+        // 【解決】現在の app/templates/layout から 2つ上がって app/utils を指定
+        $syncClassPath = dirname(__DIR__, 2) . '/utils/GoogleCalendarSync.php';
+
+        if (file_exists($syncClassPath)) {
+            require_once $syncClassPath;
+
+            // 完全修飾名でクラスの存在を確認
+            if (class_exists('\app\utils\GoogleCalendarSync')) {
+                $checkSync = new \app\utils\GoogleCalendarSync($pdo);
+
+                // 【解決】login_idがNULLの場合に備え、usernameも参照するフォールバック
+                $targetUser = $_SESSION['login_id'] ?? ($_SESSION['username'] ?? '');
+
+                $token = $checkSync->getAccessToken($targetUser);
+                $isGoogleLinked = ($token !== false);
+            } else {
+                error_log("Namespace Error: Class \app\utils\GoogleCalendarSync not found.");
+            }
+        } else {
+            // パスが合っているかログで確認可能にする
+            error_log("File Not Found: " . $syncClassPath);
+        }
+    } catch (\Exception $e) {
+        error_log("Header Sync Error: " . $e->getMessage());
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -25,14 +51,46 @@ $isGoogleLinked = (isset($_SESSION['google_access_token']) && !empty($_SESSION['
 <head>
     <meta charset="UTF-8">
     <title><?= htmlspecialchars($page['title'] ?? 'システム') ?></title>
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="robots" content="noindex, nofollow">
 
     <link rel="stylesheet" href="/assets/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 
+    <?php
+    global $isTest;
+    if (isset($isTest) && $isTest === true):
+        ?>
+        <style>
+            html,
+            body {
+                touch-action: pan-x pan-y;
+            }
+
+            body {
+                border-top: 8px solid #ff4500 !important;
+                background-color: #fdf5e6 !important;
+            }
+
+            .test-env-banner {
+                background-color: #ff4500;
+                color: white;
+                text-align: center;
+                font-weight: bold;
+                font-size: 12px;
+                padding: 3px 0;
+                position: fixed;
+                top: 0;
+                width: 100%;
+                z-index: 10000;
+            }
+        </style>
+        <div class="test-env-banner">TEST ENVIRONMENT - テスト検証用</div>
+    <?php endif; ?>
+
     <style>
-        /* --- 1. 基本レイアウトの修正 --- */
+        /* --- 基本レイアウト --- */
         html,
         body {
             margin: 0;
@@ -51,15 +109,7 @@ $isGoogleLinked = (isset($_SESSION['google_access_token']) && !empty($_SESSION['
             flex-direction: column;
         }
 
-        /* フォーム入力時は操作可能にする */
-        input,
-        textarea,
-        [contenteditable="true"] {
-            user-select: text;
-            -webkit-user-select: text;
-        }
-
-        /* --- 2. スケルトンスクリーン（オーバーレイ方式） --- */
+        /* --- スケルトン＆くるくるローディング --- */
         #skeleton-screen {
             position: fixed;
             /* 画面全体を覆う */
@@ -74,6 +124,7 @@ $isGoogleLinked = (isset($_SESSION['google_access_token']) && !empty($_SESSION['
             box-sizing: border-box;
             display: flex;
             flex-direction: column;
+            transition: opacity 0.4s ease;
         }
 
         .skeleton {
@@ -118,27 +169,32 @@ $isGoogleLinked = (isset($_SESSION['google_access_token']) && !empty($_SESSION['
             background: #fff;
         }
 
-        .sk-button {
-            height: 45px;
-            width: 100%;
-            margin-bottom: 15px;
-            border-radius: 8px;
+        .loading-center-area {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
         }
 
-        .sk-line {
-            height: 15px;
-            width: 90%;
-            margin-bottom: 10px;
+        .spinner-icon {
+            font-size: 3.5rem;
+            color: #4f46e5;
+            animation: fa-spin 1.5s infinite linear;
         }
 
         .loading-status-container {
             text-align: center;
-            margin-top: auto;
             margin-bottom: 40px;
             padding: 20px;
             background: #fff;
             border-radius: 12px;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 400px;
+            margin-left: auto;
+            margin-right: auto;
         }
 
         #loading-error-msg {
@@ -148,7 +204,7 @@ $isGoogleLinked = (isset($_SESSION['google_access_token']) && !empty($_SESSION['
             font-size: 13px;
         }
 
-        /* --- 3. UIコンポーネント --- */
+        /* --- UIパーツ --- */
         header {
             padding: 15px 20px;
             background: #fff;
@@ -213,7 +269,6 @@ $isGoogleLinked = (isset($_SESSION['google_access_token']) && !empty($_SESSION['
             padding: 0 5px;
         }
 
-        /* コンテンツエリア */
         main {
             flex-grow: 1;
             position: relative;
@@ -221,15 +276,9 @@ $isGoogleLinked = (isset($_SESSION['google_access_token']) && !empty($_SESSION['
         }
 
         #real-content {
+            visibility: hidden;
             display: none;
             width: 100%;
-        }
-
-        /* カレンダー用微調整：コンテナを突き抜けないように */
-        .fc {
-            background: #fff;
-            padding: 10px;
-            border-radius: 8px;
         }
     </style>
 </head>
@@ -238,6 +287,7 @@ $isGoogleLinked = (isset($_SESSION['google_access_token']) && !empty($_SESSION['
     <script>
         // PHPからJSへ認証状態を安全に渡す
         const IS_GOOGLE_LINKED = <?= $isGoogleLinked ? 'true' : 'false' ?>;
+        const IS_LOGGED_IN = <?= $isLoggedIn ? 'true' : 'false' ?>;
     </script>
 
     <div id="skeleton-screen">
@@ -245,17 +295,18 @@ $isGoogleLinked = (isset($_SESSION['google_access_token']) && !empty($_SESSION['
             <div class="skeleton sk-icon"></div>
             <div class="skeleton" style="height:20px; width:120px;"></div>
         </div>
-        <div class="skeleton sk-card"></div>
-        <div class="skeleton sk-button"></div>
-        <div class="skeleton sk-line"></div>
-        <div class="skeleton sk-line" style="width: 70%;"></div>
+
+        <div class="loading-center-area">
+            <i class="fa-solid fa-circle-notch spinner-icon"></i>
+            <div class="skeleton sk-card"></div>
+        </div>
 
         <div class="loading-status-container">
-            <div class="loading-main-text" style="font-weight:bold; font-size:16px;">Please wait...</div>
-            <div id="loading-step-text" style="color:#6b7280; font-size:13px;">準備しています...</div>
+            <div class="loading-main-text" style="font-weight:bold; font-size:16px;">System Loading</div>
+            <div id="loading-step-text" style="color:#6b7280; font-size:13px;">データ準備しています...</div>
             <div id="loading-error-msg">
-                処理に時間がかかっています。<br>
-                <a href="index.php?page=home" style="text-decoration:underline; color:#4f46e5;">再試行する</a>
+                読み込みに時間がかかっています。<br>
+                <a href="/index.php" style="text-decoration:underline; color:#4f46e5;">トップへ戻る</a>
             </div>
         </div>
     </div>
@@ -290,91 +341,81 @@ $isGoogleLinked = (isset($_SESSION['google_access_token']) && !empty($_SESSION['
 
     <main>
         <div id="real-content">
-            <script>
-                document.addEventListener("DOMContentLoaded", () => {
+        </div>
+
+        <script>
+            (function () {
+                const initLoading = () => {
                     const skeleton = document.getElementById('skeleton-screen');
                     const content = document.getElementById('real-content');
-                    const stepText = document.getElementById('loading-step-text');
-                    const errorMsg = document.getElementById('loading-error-msg');
+                    // ID名が 'loading-msg' であることを確認
+                    const msg = document.getElementById('loading-msg');
 
-                    // --- 1. メッセージの動的アニメーション ---
-                    const stepsLinked = [
-                        "Googleカレンダーと同期しています...",
-                        "最新の情報を取得中...",
-                        "表示データを準備しています...",
-                        "まもなく完了します..."
-                    ];
-                    const stepsNotLinked = [
-                        "認証状態を確認しています...",
-                        "システムデータを読み込み中...",
-                        "表示データを準備しています...",
-                        "まもなく完了します..."
-                    ];
-
-                    const activeSteps = IS_GOOGLE_LINKED ? stepsLinked : stepsNotLinked;
-                    if (stepText) stepText.innerText = activeSteps[0];
-
-                    let stepIdx = 0;
-                    const stepInterval = setInterval(() => {
-                        if (stepText && stepIdx < activeSteps.length - 1) {
-                            stepIdx++;
-                            stepText.innerText = activeSteps[stepIdx];
+                    // --- 1. 同期処理 ---
+                    if (IS_GOOGLE_LINKED) {
+                        // msg が存在する場合のみ text を書き換える (TypeError 対策)
+                        if (msg) {
+                            msg.innerText = "Googleカレンダー同期中...";
                         }
-                    }, 2500);
 
-                    // カレンダー同期リクエスト
-                    if (IS_GOOGLE_LINKED && !sessionStorage.getItem('calendar_synced')) {
-                        fetch('sync_calendar.php', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                        fetch('sync_calendar.php', {
+                            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                        })
                             .then(r => r.json())
                             .then(data => {
-                                if (data.status === 'success') {
-                                    console.log('Sync Success:', data.count);
-                                    sessionStorage.setItem('calendar_synced', 'true');
-                                    if (typeof mainCalendar !== 'undefined' && mainCalendar) {
-                                        mainCalendar.refetchEvents();
-                                    }
-                                }
+                                console.log("Sync success:", data);
                             })
-                            .catch(error => console.error('Sync Error:', error));
+                            .catch(e => console.error("Sync failed:", e))
+                            .finally(() => {
+                                showMainContent();
+                            });
+                    } else {
+                        showMainContent();
                     }
 
-                    // 10秒でエラー表示
-                    const errorTimer = setTimeout(() => {
-                        if (skeleton && skeleton.style.display !== 'none') {
-                            if (errorMsg) errorMsg.style.display = 'block';
-                        }
-                    }, 10000);
-
-                    // --- 4. 読み込み完了時の処理 ---
-                    window.addEventListener('load', () => {
-                        setTimeout(() => {
-                            clearInterval(stepInterval);
-                            clearTimeout(errorTimer);
-                            skeleton.style.opacity = '0'; // フェードアウト
-                            skeleton.style.transition = 'opacity 0.3s ease';
+                    // --- 2. 表示切り替え ---
+                    function showMainContent() {
+                        const proceed = () => {
                             setTimeout(() => {
-                                skeleton.style.display = 'none';
-                                content.style.display = 'block';
-                                // カレンダーのサイズ再計算（これ重要）
-                                if (typeof mainCalendar !== 'undefined') mainCalendar.updateSize();
-                            }, 300);
-                        }, 500);
-                    });
+                                if (skeleton) {
+                                    skeleton.style.opacity = '0';
+                                    setTimeout(() => {
+                                        skeleton.style.display = 'none';
+                                        if (content) {
+                                            content.style.visibility = 'visible';
+                                            content.style.display = 'block';
+                                        }
+                                        // カレンダー再描画
+                                        if (typeof mainCalendar !== 'undefined' && mainCalendar !== null) {
+                                            mainCalendar.refetchEvents();
+                                            mainCalendar.updateSize();
+                                        }
+                                    }, 400);
+                                }
+                            }, 500);
+                        };
 
-                    // --- 5. ページ遷移時に再表示 (UX向上) ---
-                    window.addEventListener('beforeunload', () => {
-                        if (skeleton) skeleton.style.display = 'block';
-                        if (content) content.style.display = 'none';
-                    });
+                        if (document.readyState === 'complete') {
+                            proceed();
+                        } else {
+                            window.addEventListener('load', proceed);
+                        }
+                    }
 
-                    // --- 6. ナビゲーションスクロール制御 ---
-                    const nav = document.querySelector(".scroll-nav ul");
+                    // --- 3. ナビスクロール ---
+                    const navUl = document.querySelector(".scroll-nav ul");
                     const leftBtn = document.querySelector(".nav-arrow.left");
                     const rightBtn = document.querySelector(".nav-arrow.right");
-                    if (nav && leftBtn && rightBtn) {
-                        const scrollAmount = 150;
-                        leftBtn.addEventListener("click", () => { nav.scrollBy({ left: -scrollAmount, behavior: "smooth" }); });
-                        rightBtn.addEventListener("click", () => { nav.scrollBy({ left: scrollAmount, behavior: "smooth" }); });
+                    if (navUl && leftBtn && rightBtn) {
+                        leftBtn.onclick = () => navUl.scrollBy({ left: -150, behavior: "smooth" });
+                        rightBtn.onclick = () => navUl.scrollBy({ left: 150, behavior: "smooth" });
                     }
-                });
-            </script>
+                };
+
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', initLoading);
+                } else {
+                    initLoading();
+                }
+            })();
+        </script>

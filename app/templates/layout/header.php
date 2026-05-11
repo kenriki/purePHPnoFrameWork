@@ -52,6 +52,30 @@ if ($isLoggedIn) {
             overflow-x: hidden;
         }
 
+        /* --- 引っ張り更新を完全に禁止 --- */
+        html,
+        body {
+            height: 100%;
+            overflow: hidden;
+            /* 全体の揺れを防止 */
+            overscroll-behavior-y: none;
+            /* Chrome/Safariの引張リロードを禁止 */
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            width: 100%;
+        }
+
+        /* --- コンテンツエリアのみスクロールを許可 --- */
+        main {
+            flex: 1;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
         /* --- 390行(real-content)を最初から全開にする --- */
         #real-content {
             display: block !important;
@@ -174,6 +198,34 @@ if ($isLoggedIn) {
 
     <script>
         // 余計な処理はせず、ページが読み込まれたらカレンダーのサイズを1回だけ整える
+        window.addEventListener('load', function () {
+            if (window.mainCalendar) {
+                window.mainCalendar.updateSize();
+            }
+
+            // ナビスクロール
+            const navUl = document.querySelector(".scroll-nav ul");
+            const leftBtn = document.querySelector(".nav-arrow.left");
+            const rightBtn = document.querySelector(".nav-arrow.right");
+            if (navUl && leftBtn && rightBtn) {
+                leftBtn.onclick = () => navUl.scrollBy({ left: -150, behavior: "smooth" });
+                rightBtn.onclick = () => navUl.scrollBy({ left: 150, behavior: "smooth" });
+            }
+        });
+
+        // 1. エラー防止用：古いローディングスクリプトが参照する変数を空で定義しておく
+        var skeleton = { style: {} };
+        var content = { style: {} };
+        var stepText = { innerText: "" };
+        var bar = { style: {} };
+
+        // 2. 引っ張りリロードをJSレベルで最終防御
+        document.addEventListener('touchmove', function (e) {
+            if (e.target.closest('main')) return; // メインエリアのスクロールは許可
+            e.preventDefault();
+        }, { passive: false });
+
+        // 3. 読み込み時の処理
         window.addEventListener('load', function () {
             if (window.mainCalendar) {
                 window.mainCalendar.updateSize();

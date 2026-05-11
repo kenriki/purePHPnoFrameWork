@@ -969,6 +969,13 @@ $authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" . http_build_query([
                 },
                 dateClick: function (info) {
                     window.location.href = `index.php?page=memo&action=new&date=${info.dateStr}`;
+                },
+                loading: function (isLoading) {
+                    if (!isLoading) {
+                        if (typeof window.notifyCalendarRendered === 'function') {
+                            window.notifyCalendarRendered();
+                        }
+                    }
                 }
             });
             cal.render();

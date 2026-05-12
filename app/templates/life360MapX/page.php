@@ -17,7 +17,8 @@ try {
     $pdo = getDB();
     // user_idを主キーにして、番号ごとに独立したデータを持つようにする
     $pdo->exec("CREATE TABLE IF NOT EXISTS user_locations (
-        user_id VARCHAR(50) PRIMARY KEY,
+        phone_number VARCHAR(50) PRIMARY KEY,
+        user_name VARCHAR(50),
         latitude DECIMAL(10, 8),
         longitude DECIMAL(11, 8),
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -28,15 +29,17 @@ try {
 
 // 位置情報の受信とマスタ更新
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['lat'])) {
-    $stmt = $pdo->prepare("INSERT INTO user_locations (user_id, latitude, longitude) VALUES (?, ?, ?) 
-                           ON DUPLICATE KEY UPDATE latitude=VALUES(latitude), longitude=VALUES(longitude)");
-    $stmt->execute([$_POST['uid'], $_POST['lat'], $_POST['lng']]);
+    // user_name も一緒に保存・更新するように修正
+    $stmt = $pdo->prepare("INSERT INTO user_locations (phone_number, user_name, latitude, longitude) VALUES (?, ?, ?, ?) 
+                           ON DUPLICATE KEY UPDATE user_name=VALUES(user_name), latitude=VALUES(latitude), longitude=VALUES(longitude)");
+    $stmt->execute([$_POST['uid'], $_POST['u_name'], $_POST['lat'], $_POST['lng']]);
     header('Content-Type: application/json');
     exit(json_encode(['status' => 'ok']));
 }
 
 // 地図表示時にDB内の全ユーザーを取得する
-$stmt = $pdo->query("SELECT * FROM user_locations");
+// 取得時は user_name をそのまま取得
+$stmt = $pdo->query("SELECT phone_number, user_name, latitude, longitude, updated_at FROM user_locations");
 $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
@@ -53,11 +56,16 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     <div id="panel_content">
         <div id="setup_section" style="margin-bottom: 15px;">
-            <label style="font-size: 12px; font-weight: bold; display: block; margin-bottom: 5px;">自分の電話番号で登録:</label>
-            <input type="tel" id="tel_input" placeholder="080XXXXXXXX"
-                style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; margin-bottom: 8px; box-sizing: border-box; font-size: 16px;">
+            <label style="font-size: 11px; color: #666;">電話番号（ログイン用）:</label>
+            <input type="tel" id="tel_input" placeholder="数字入力のみ"
+                style="width: 100%; padding: 10px; margin-bottom: 8px; font-size: 16px;">
+
+            <label style="font-size: 11px; color: #666;">表示名（ニックネーム）:</label>
+            <input type="text" id="name_input" placeholder="例：渋谷太郎"
+                style="width: 100%; padding: 10px; margin-bottom: 8px; font-size: 16px;">
+
             <button onclick="startSharing()"
-                style="width: 100%; background: #28a745; color: white; border: none; padding: 12px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px;">位置共有を開始</button>
+                style="width: 100%; background: #28a745; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: bold;">位置共有を開始</button>
         </div>
 
         <div id="active_section" style="display: none;">
@@ -79,6 +87,17 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <button onclick="shareLocation('fb')"
                     style="background: #1877F2; color: white; border: none; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 14px;"><i
                         class="fab fa-facebook-f"></i> Facebook</button>
+            </div>
+
+            <!-- setup_section の後、または active_section 内に追加 -->
+            <div id="search_section" style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;">
+                <label style="font-size: 12px; font-weight: bold; display: block; margin-bottom: 5px;">相手を探す:</label>
+                <div style="display: flex; gap: 5px;">
+                    <input type="tel" id="search_tel" placeholder="相手の番号"
+                        style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 6px;">
+                    <button onclick="searchUser()"
+                        style="background: #007bff; color: white; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer;">検索</button>
+                </div>
             </div>
 
             <hr style="margin: 12px 0; border: 0; border-top: 1px solid #eee;">
@@ -104,14 +123,99 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
         showActiveMode(myId);
     }
 
+    function searchUser() {
+        const targetId = document.getElementById('search_tel').value.trim();
+
+        // 1. すでに地図に表示されているか確認
+        if (markers[targetId]) {
+            focusMarker(targetId);
+        }
+        // 2. 地図にない場合、DBから取得したリスト(initialUsers)から探す
+        else {
+            const foundUser = initialUsers.find(u => u.phone_number === targetId);
+            if (foundUser) {
+                // 見つかったらマーカーを作成して表示
+                addOrUpdateMarker(foundUser.phone_number, foundUser.latitude, foundUser.longitude, foundUser.user_name, foundUser.updated_at);
+                focusMarker(targetId);
+            } else {
+                alert("その番号のユーザーは見つかりません。");
+            }
+        }
+    }
+
+    // ズームしてポップアップを開く共通処理
+    function focusMarker(uid) {
+        const marker = markers[uid];
+        map.setView(marker.getLatLng(), 17);
+        marker.openPopup();
+    }
+
+    /**
+     * 時間の差分を「〜分前」のような形式に変換する関数
+     */
+    function timeAgo(dateString) {
+        if (!dateString) return "不明";
+        const now = new Date();
+        const past = new Date(dateString);
+        const diffInSec = Math.floor((now - past) / 1000);
+
+        if (isNaN(diffInSec)) return "不明";
+        if (diffInSec < 60) return "今すぐ";
+        if (diffInSec < 3600) return Math.floor(diffInSec / 60) + "分前";
+        if (diffInSec < 86400) return Math.floor(diffInSec / 3600) + "時間前";
+        return Math.floor(diffInSec / 86400) + "日前";
+    }
+
+    // 1. 登録・識別管理
     function startSharing() {
-        const input = document.getElementById('tel_input').value.trim();
-        if (input.length < 8) {
-            alert("正しい番号を入力してください");
+        const tel = document.getElementById('tel_input').value.trim();
+        const name = document.getElementById('name_input').value.trim();
+        if (tel.length < 8 || name === "") {
+            alert("番号と名前を正しく入力してください");
             return;
         }
-        localStorage.setItem('my_map_id', input);
-        location.reload();
+        localStorage.setItem('my_map_id', tel);
+        localStorage.setItem('my_map_name', name); // 名前も保存
+        myId = tel;
+        showActiveMode(name); // 画面表示を名前に
+        updateMyLocation(true);
+    }
+
+    // 5. 位置更新ロジック (引数 moveMap を追加)
+    // function updateMyLocation(moveMap = false) {
+    //     if (!navigator.geolocation || !myId) return;
+
+    //     navigator.geolocation.getCurrentPosition(pos => {
+    //         const lat = pos.coords.latitude;
+    //         const lng = pos.coords.longitude;
+
+    //         // マーカーを更新
+    //         addOrUpdateMarker(myId, lat, lng);
+    //         document.getElementById('gps_status').innerText = "最終更新: " + new Date().toLocaleTimeString();
+
+    //         // 地図を自分の位置に移動（開始時や初回のみ有効）
+    //         if (moveMap) {
+    //             map.setView([lat, lng], 16);
+    //         }
+
+    //         // サーバー（DB）へ送信
+    //         const fd = new FormData();
+    //         fd.append('uid', myId);
+    //         fd.append('lat', lat);
+    //         fd.append('lng', lng);
+    //         fetch(window.location.href, { method: 'POST', body: fd });
+    //     }, (err) => {
+    //         console.error("位置情報の取得に失敗:", err);
+    //         alert("位置情報の取得を許可してください。");
+    //     }, { enableHighAccuracy: true });
+    // }
+
+    // 初期ロード時の処理
+    if (myId) {
+        showActiveMode(myId);
+        // ページを開いた時も、自分の位置がわかったらそこに飛ばす
+        updateMyLocation(true);
+        setInterval(() => updateMyLocation(false), 30000); // 30秒ごとの更新時は地図を動かさない
     }
 
     function showActiveMode(id) {
@@ -134,23 +238,65 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     // 3. 地図初期化
-    const map = L.map('map', { zoomControl: false }).setView([35.522, 139.473], 14); // 町田・すずかけ台付近を初期値に
+    const map = L.map('map', { zoomControl: false }).setView([36.2, 138.2], 5);
     L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { attribution: '© Google Maps' }).addTo(map);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+    // --- 追加：ページ読み込み時に現在地へジャンプする機能 ---
+    function jumpToCurrentLocation() {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(pos => {
+                const lat = pos.coords.latitude;
+                const lng = pos.coords.longitude;
+                // ズームレベル15で自分の現在地に移動
+                map.setView([lat, lng], 15);
+            }, (err) => {
+                console.warn("現在地の取得に失敗しました:", err);
+                // 失敗時はデフォルトに飛ばす
+                map.setView([0.522, 0.473], 14);
+            }, { enableHighAccuracy: true });
+        }
+    }
+
+    // 実行
+    jumpToCurrentLocation();
+
+    // --- 5. 位置更新ロジック (既存のものを微調整) ---
+    // function updateMyLocation() {
+    //     if (!navigator.geolocation || !myId) return;
+    //     navigator.geolocation.getCurrentPosition(pos => {
+    //         const lat = pos.coords.latitude;
+    //         const lng = pos.coords.longitude;
+
+    //         addOrUpdateMarker(myId, lat, lng);
+    //         document.getElementById('gps_status').innerText = "最終更新: " + new Date().toLocaleTimeString();
+
+    //         const fd = new FormData();
+    //         fd.append('uid', myId);
+    //         fd.append('lat', lat);
+    //         fd.append('lng', lng);
+    //         fetch(window.location.href, { method: 'POST', body: fd });
+
+    //         // 初回更新時のみ地図の中心を自分にする場合はここに追加ロジックを書けます
+    //     }, null, { enableHighAccuracy: true });
+    // }
 
     const markers = {};
     const redIcon = new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
     const blueIcon = new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
 
-    function addOrUpdateMarker(uid, lat, lng) {
+    // 3. マーカー表示関数の引数に名前を追加
+    function addOrUpdateMarker(uid, lat, lng, u_name, time) {
+        const displayTitle = u_name || uid; // 名前があれば名前、なければ番号
         const isMe = (uid === myId);
+        const ago = `⏳ ${timeAgo(time)}`;
+
         if (markers[uid]) {
             markers[uid].setLatLng([lat, lng]);
+            markers[uid].setPopupContent(`<b>${displayTitle}${isMe ? " (自分)" : ""}</b><br><small>${ago}</small>`);
         } else {
-            // 自分は青、他人は赤で区別
             markers[uid] = L.marker([lat, lng], { icon: isMe ? blueIcon : redIcon }).addTo(map)
-                .bindPopup("<b>" + uid + (isMe ? " (自分)" : "") + "</b>");
-            if (isMe) markers[uid].openPopup();
+                .bindPopup(`<b>${displayTitle}</b><br><small>${ago}</small>`);
         }
     }
 
@@ -192,26 +338,31 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
     minBtn.addEventListener('touchstart', (e) => { e.stopPropagation(); togglePanel(); }, { passive: false });
 
     // 5. 位置更新ロジック (マスタ登録・送信)
-    function updateMyLocation() {
+    function updateMyLocation(moveMap = false) {
         if (!navigator.geolocation || !myId) return;
+        const myName = localStorage.getItem('my_map_name');
+
         navigator.geolocation.getCurrentPosition(pos => {
             const lat = pos.coords.latitude;
             const lng = pos.coords.longitude;
 
-            addOrUpdateMarker(myId, lat, lng);
-            document.getElementById('gps_status').innerText = "最終更新: " + new Date().toLocaleTimeString();
+            // マーカー表示に名前を使用
+            addOrUpdateMarker(myId, lat, lng, myName, new Date().toISOString());
 
             const fd = new FormData();
-            fd.append('uid', myId); // localStorageに保存した自分の番号を送信
+            fd.append('uid', myId);
+            fd.append('u_name', myName); // 名前を送信！
             fd.append('lat', lat);
             fd.append('lng', lng);
             fetch(window.location.href, { method: 'POST', body: fd });
+
+            if (moveMap) map.setView([lat, lng], 16);
         }, null, { enableHighAccuracy: true });
     }
 
-    // 初期ロード時にDB内の全マスタデータを表示
+    /// 初期データは持っておくだけにする（表示はしない）
     const initialUsers = <?php echo json_encode($users); ?>;
-    initialUsers.forEach(u => addOrUpdateMarker(u.user_id, u.latitude, u.longitude));
+    //initialUsers.forEach(u => addOrUpdateMarker(u.phone_number, u.latitude, u.longitude, u.user_name, u.updated_at));
 
     // 30秒ごとに自分の位置をマスタに反映
     if (myId) {

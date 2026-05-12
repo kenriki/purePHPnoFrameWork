@@ -329,5 +329,18 @@
                 "file": "adminPage.php"
             }
         ]
+    },
+    "sampleTest-1": {
+        "title": "サンプルTest1画面",
+        "sections": [
+            {
+                "type": "text",
+                "content": "グラフ画面です"
+            },
+            {
+                "type": "php",
+                "file": "sampleTest-1/api_equipment.php"
+            }
+        ]
     }
 }

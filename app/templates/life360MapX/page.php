@@ -418,7 +418,7 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
         searchInterval = setInterval(() => {
             // 前に作った get_friend_location.php を叩く
             // パラメータ名は uid に合わせています
-            fetch(`get_friend_location.php?uid=${targetId}`)
+            fetch(`index.php?page=get_friend_location&uid=${targetId}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data && data.lat && data.lng) {

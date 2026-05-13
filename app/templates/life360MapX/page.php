@@ -61,7 +61,7 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 style="width: 100%; padding: 10px; margin-bottom: 8px; font-size: 16px;">
 
             <label style="font-size: 11px; color: #666;">表示名（ニックネーム）:</label>
-            <input type="text" id="name_input" placeholder="例：渋谷太郎"
+            <input type="text" id="name_input" placeholder="例：英語のみ対応"
                 style="width: 100%; padding: 10px; margin-bottom: 8px; font-size: 16px;">
 
             <button onclick="startSharing()"
@@ -71,6 +71,8 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
         <div id="active_section" style="display: none;">
             <div style="margin-bottom: 8px;">
                 <strong>共有中: <span id="display_uid" style="color: #007bff;">---</span></strong>
+                <span id="geo_badge"
+                    style="padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: bold; background: #ccc; color: white;">状態確認中</span>
             </div>
             <div id="gps_status" style="font-size: 11px; color: #666; margin-bottom: 10px;">GPS準備中...</div>
 
@@ -123,12 +125,34 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
         showActiveMode(myId);
     }
 
+    // function searchUser() {
+    //     const targetId = document.getElementById('search_tel').value.trim();
+
+    //     // 1. すでに地図に表示されているか確認
+    //     if (markers[targetId]) {
+    //         focusMarker(targetId);
+    //     }
+    //     // 2. 地図にない場合、DBから取得したリスト(initialUsers)から探す
+    //     else {
+    //         const foundUser = initialUsers.find(u => u.phone_number === targetId);
+    //         if (foundUser) {
+    //             // 見つかったらマーカーを作成して表示
+    //             addOrUpdateMarker(foundUser.phone_number, foundUser.latitude, foundUser.longitude, foundUser.user_name, foundUser.updated_at);
+    //             focusMarker(targetId);
+    //         } else {
+    //             alert("その番号のユーザーは見つかりません。");
+    //         }
+    //     }
+    // }
+    // --- 検索関数を「追跡開始」付きにアップデート ---
     function searchUser() {
         const targetId = document.getElementById('search_tel').value.trim();
+        if (!targetId) return;
 
         // 1. すでに地図に表示されているか確認
         if (markers[targetId]) {
             focusMarker(targetId);
+            startFriendTracking(targetId); // ★ここで追跡を開始
         }
         // 2. 地図にない場合、DBから取得したリスト(initialUsers)から探す
         else {
@@ -137,6 +161,7 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 // 見つかったらマーカーを作成して表示
                 addOrUpdateMarker(foundUser.phone_number, foundUser.latitude, foundUser.longitude, foundUser.user_name, foundUser.updated_at);
                 focusMarker(targetId);
+                startFriendTracking(targetId); // ★ここでも追跡を開始
             } else {
                 alert("その番号のユーザーは見つかりません。");
             }
@@ -381,5 +406,76 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
             fb: `https://www.facebook.com/sharer/sharer.php?u=${cleanUrl}`
         };
         window.open(urls[type], '_blank');
+    }
+    // --- 【追加】相手の位置を定期的に取得して更新する処理 ---
+    // 検索した相手がいる場合、その位置を30秒ごとに更新します
+    let searchInterval = null;
+
+    function startFriendTracking(targetId) {
+        // すでにタイマーが動いていたら一度クリア（二重起動防止）
+        if (searchInterval) clearInterval(searchInterval);
+
+        searchInterval = setInterval(() => {
+            // 前に作った get_friend_location.php を叩く
+            // パラメータ名は uid に合わせています
+            fetch(`get_friend_location.php?uid=${targetId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data && data.lat && data.lng) {
+                        // 既存のマーカー表示関数を再利用して位置を更新
+                        // 相手の battery 情報があればそれも反映されるように後で関数を拡張可能です
+                        addOrUpdateMarker(targetId, data.lat, data.lng, data.u_name, data.created_at);
+                        console.log(`相手(${targetId})の位置を自動更新しました。`);
+                    }
+                })
+                .catch(error => console.error('自動更新失敗:', error));
+        }, 30000); // 30秒間隔
+    }
+
+    // 既存の searchUser 関数を拡張：検索成功時に追跡を開始させる
+    const originalSearchUser = searchUser; // 元の関数を退避
+    searchUser = function () {
+        originalSearchUser(); // 元の検索処理を実行
+        const targetId = document.getElementById('search_tel').value.trim();
+        if (targetId) {
+            startFriendTracking(targetId); // 追跡タイマー起動
+        }
+    };
+    // --- 【追加】位置情報の権限状態をチェックして表示を更新する関数 ---
+    async function checkGeoPermission() {
+        const badge = document.getElementById('geo_badge');
+        if (!navigator.permissions) {
+            badge.innerText = "不明";
+            return;
+        }
+
+        try {
+            const result = await navigator.permissions.query({ name: 'geolocation' });
+            const updateBadge = (status) => {
+                if (status === 'granted') {
+                    badge.innerText = "位置情報：ON";
+                    badge.style.background = "#28a745"; // 緑
+                } else if (status === 'prompt') {
+                    badge.innerText = "許可待ち";
+                    badge.style.background = "#ffc107"; // 黄色
+                } else {
+                    badge.innerText = "位置情報：OFF";
+                    badge.style.background = "#dc3545"; // 赤
+                }
+            };
+
+            updateBadge(result.state);
+
+            // 設定が変更されたら自動でバッジも更新されるようにする
+            result.onchange = () => updateBadge(result.state);
+
+        } catch (error) {
+            console.error("権限チェック失敗:", error);
+        }
+    }
+
+    // 初期ロード時と、共有開始時に実行
+    if (myId) {
+        checkGeoPermission();
     }
 </script>

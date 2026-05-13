@@ -156,6 +156,15 @@
             }
         ]
     },
+    "get_friend_location": {
+        "title": "位置取得API",
+        "sections": [
+            {
+                "type": "php",
+                "file": "get_friend_location.php"
+            }
+        ]
+    },
     "diga_list": {
         "title": "diga_listサンプル",
         "sections": [

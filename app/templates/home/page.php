@@ -17,6 +17,45 @@
 
 // --- 1. コントローラーと基本変数の準備 ---
 require_once dirname(__DIR__, 2) . '/controllers/MemoController.php';
+
+// --- カレンダーデータの復号化処理 ---
+$rawEvents = $page['dashboard']['events'] ?? [];
+$decryptedEvents = [];
+
+foreach ($rawEvents as $event) {
+    // タイトル(summary)の復号
+    $title = $event['summary'] ?? '';
+    if (str_starts_with($title, 'base64:')) {
+        $title = $controller->decryptContent($title);
+    }
+
+    // 詳細(description)の復号
+    $desc = $event['description'] ?? '';
+    if (str_starts_with($desc, 'base64:')) {
+        $desc = $controller->decryptContent($desc);
+    }
+
+    // FullCalendarが解釈できる形式に整形
+    // ここで ?? '' を使って未定義エラーを防ぎます
+    $decryptedEvents[] = [
+        'id' => $event['id'] ?? '',
+        'title' => $title ?: '（予定なし）',
+        'start' => $event['start_date'] ?? '', // ここを修正
+        'end' => $event['end_date'] ?? '',   // ここを修正
+        'extendedProps' => [
+            'description' => $desc
+        ],
+        'backgroundColor' => $event['color'] ?? '#4f46e5',
+        'borderColor' => $event['color'] ?? '#4f46e5'
+    ];
+}
+
+// JavaScriptへ渡すためのJSONデータ
+$jsonEvents = json_encode($decryptedEvents);
+// 同期データが存在するかどうかの判定フラグ
+$isSynced = !empty($decryptedEvents);
+$syncTime = $page['dashboard']['sync_status']['last_sync'] ?? ''; // 同期日時があれば取得
+
 $controller = new MemoController();
 $initialDate = isset($_GET['date']) ? $_GET['date'] : date('Y-m-d');
 $uDir = $controller->getSafeDirName($controller->user);
@@ -491,6 +530,19 @@ $authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" . http_build_query([
                 <button class="view-btn" onclick="switchView('year')">年 (12ヶ月)</button>
             </div>
 
+            <div class="d-flex align-items-center mb-2">
+                <h5 class="mb-0">メインカレンダー</h5>
+                <!-- <span id="sync-status-badge"
+                    class="ms-3 badge <?php echo $isSynced ? 'bg-info text-dark' : 'bg-secondary'; ?>">
+                    <?php echo $isSynced ? '● DB保存済みの予定を表示中' : '● 同期データなし'; ?>
+                </span> -->
+                <?php if ($syncTime): ?>
+                    <small class="text-muted ms-2">(最終同期:
+                        <?php echo htmlspecialchars($syncTime); ?>)
+                    </small>
+                <?php endif; ?>
+            </div>
+
             <div id="main-calendar-container">
                 <div id="calendar-main"></div>
             </div>
@@ -715,6 +767,19 @@ $authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" . http_build_query([
     document.addEventListener('DOMContentLoaded', function () {
         const mainEl = document.getElementById('calendar-main');
 
+        // PHP側で準備した復号済みGoogleカレンダーデータをパース
+        const googleEvents = <?php echo $jsonEvents ?? '[]'; ?>;
+        const statusBadge = document.getElementById('sync-status-badge');
+
+        // // 文言の動的書き換え（tokenがないのでDB参照であることを明示）
+        // if (googleEvents && googleEvents.length > 0) {
+        //     statusBadge.textContent = '● DB保存済みの予定を表示中';
+        //     statusBadge.className = 'ms-3 badge bg-info text-dark';
+        // } else {
+        //     statusBadge.textContent = '● 同期データなし';
+        //     statusBadge.className = 'ms-3 badge bg-secondary';
+        // }
+
         // メインカレンダー初期化
         mainCalendar = new FullCalendar.Calendar(mainEl, {
             selectable: true,
@@ -764,7 +829,13 @@ $authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" . http_build_query([
                         };
                     })
                 },
-                // // 2. Googleカレンダーのデータソース（独立して追加）
+                // 2. 復号化されたGoogleカレンダーのデータソース（DBから取得したもの）
+                {
+                    id: 'google-calendar-data',
+                    events: googleEvents,
+                    color: '#34a853' // Googleカレンダーらしい緑色
+                },
+                // // 2-b. GoogleカレンダーのAPIデータソース（コメントアウト維持）
                 // {
                 //     googleCalendarId: CALENDAR_ID,
                 //     className: 'google-event',
@@ -774,11 +845,23 @@ $authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" . http_build_query([
                 holidaySource
             ],
             eventClick: function (info) {
-                // 1. Googleカレンダーの予定（URLを持っている）の場合
-                if (info.event.url) {
-                    info.jsEvent.preventDefault(); // デフォルトの挙動（ページ遷移）を阻止
-                    window.open(info.event.url, '_blank'); // 別タブでGoogleカレンダーを開く
-                    return; // 処理終了
+                // 1. Googleカレンダーの予定（DB経由またはURLを持っている）の場合
+                if (info.event.url || info.event.source.id === 'google-calendar-data') {
+                    info.jsEvent.preventDefault(); // デフォルトの挙動を阻止
+
+                    // 復号済みの詳細（description）があれば表示
+                    const desc = info.event.extendedProps.description;
+                    if (desc) {
+                        alert("【予定】 " + info.event.title + "\n\n【詳細】\n" + desc);
+                    } else {
+                        // URLがある場合は別タブで開く
+                        if (info.event.url) {
+                            window.open(info.event.url, '_blank');
+                        } else {
+                            alert("予定: " + info.event.title);
+                        }
+                    }
+                    return;
                 }
 
                 // 2. 自作メモアプリの予定（IDを持っていて背景イベントではない）の場合
@@ -856,7 +939,13 @@ $authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" . http_build_query([
                             };
                         })
                     },
-                    // 2. Googleカレンダーのデータソース（独立して追加）
+                    // 2. Googleカレンダーのデータソース（年間カレンダー用）
+                    {
+                        id: 'google-calendar-data',
+                        events: googleEvents,
+                        color: '#34a853'
+                    },
+                    // // 2-b. GoogleカレンダーのAPIデータソース（コメントアウト維持）
                     // {
                     //     googleCalendarId: CALENDAR_ID,
                     //     className: 'google-event',
@@ -866,6 +955,13 @@ $authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" . http_build_query([
                     holidaySource
                 ],
                 eventClick: function (info) {
+                    // Googleカレンダーデータの判定
+                    if (info.event.source.id === 'google-calendar-data') {
+                        const desc = info.event.extendedProps.description;
+                        alert("Google予定: " + info.event.title + (desc ? "\n\n" + desc : ""));
+                        info.jsEvent.preventDefault();
+                        return;
+                    }
                     if (info.event.id && info.event.display !== 'background') {
                         window.location.href = `index.php?page=memo&action=edit&id=${info.event.id}`;
                         info.jsEvent.preventDefault();
@@ -873,8 +969,16 @@ $authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" . http_build_query([
                 },
                 dateClick: function (info) {
                     window.location.href = `index.php?page=memo&action=new&date=${info.dateStr}`;
+                },
+                loading: function (isLoading) {
+                    if (!isLoading) {
+                        if (typeof window.notifyCalendarRendered === 'function') {
+                            window.notifyCalendarRendered();
+                        }
+                    }
                 }
             });
+            cal.render();
             yearCalendars.push(cal);
         }
 
@@ -891,6 +995,186 @@ $authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" . http_build_query([
             });
         }
     });
+
+    // document.addEventListener('DOMContentLoaded', function () {
+    //     const mainEl = document.getElementById('calendar-main');
+
+    //     // メインカレンダー初期化
+    //     mainCalendar = new FullCalendar.Calendar(mainEl, {
+    //         selectable: true,
+    //         initialView: 'dayGridMonth',
+    //         locale: 'ja',
+    //         height: 'auto',
+    //         headerToolbar: { left: 'prev,next today', center: 'title', right: '' },
+    //         dayMaxEvents: 3,
+    //         navLinks: true,
+    //         navLinkDayClick: function (date, jsEvent) {
+    //             // 日付を YYYY-MM-DD 形式に変換
+    //             const y = date.getFullYear();
+    //             const m = ('0' + (date.getMonth() + 1)).slice(-2);
+    //             const d = ('0' + date.getDate()).slice(-2);
+    //             const dateStr = `${y}-${m}-${d}`;
+
+    //             // アラートで動作確認
+    //             //alert("新規作成へ移動: " + dateStr);
+
+    //             // 遷移処理
+    //             window.location.href = "index.php?page=memo&action=new&date=" + dateStr;
+    //         },
+    //         eventSources: [
+    //             // 1. 自作メモのデータソース（色判定ロジックを含む）
+    //             {
+    //                 id: 'memo-data',
+    //                 events: (dbData.events || []).map(event => {
+    //                     // 日本時間での「今日」を取得
+    //                     const now = new Date();
+    //                     const today = now.getFullYear() + '-' +
+    //                         ('0' + (now.getMonth() + 1)).slice(-2) + '-' +
+    //                         ('0' + now.getDate()).slice(-2);
+
+    //                     const eventDate = event.start; // メモの日付
+    //                     let color = '#3788d8'; // 過去：青
+
+    //                     if (eventDate === today) {
+    //                         color = '#ff0000'; // 当日：赤
+    //                     } else if (eventDate > today) {
+    //                         color = '#ff9800'; // 未来：橙
+    //                     }
+
+    //                     return {
+    //                         ...event,
+    //                         backgroundColor: color,
+    //                         borderColor: color
+    //                     };
+    //                 })
+    //             },
+    //             // // 2. Googleカレンダーのデータソース（独立して追加）
+    //             // {
+    //             //     googleCalendarId: CALENDAR_ID,
+    //             //     className: 'google-event',
+    //             //     color: '#34a853' // Googleカレンダーの予定だと分かるように緑系にするのが一般的です
+    //             // },
+    //             // 3. 祝日データソース
+    //             holidaySource
+    //         ],
+    //         eventClick: function (info) {
+    //             // 1. Googleカレンダーの予定（URLを持っている）の場合
+    //             if (info.event.url) {
+    //                 info.jsEvent.preventDefault(); // デフォルトの挙動（ページ遷移）を阻止
+    //                 window.open(info.event.url, '_blank'); // 別タブでGoogleカレンダーを開く
+    //                 return; // 処理終了
+    //             }
+
+    //             // 2. 自作メモアプリの予定（IDを持っていて背景イベントではない）の場合
+    //             if (info.event.id && info.event.display !== 'background') {
+    //                 info.jsEvent.preventDefault();
+    //                 window.location.href = `index.php?page=memo&action=edit&id=${info.event.id}`;
+    //             }
+    //         },
+    //         // 日付表示が切り替わった時に動く処理
+    //         datesSet: function (info) {
+    //             // 現在カレンダーが「メイン」で表示している日付を取得
+    //             // info.view.currentStart は表示されている期間（日ビューならその日）の開始日を指します
+    //             const currentDate = info.view.currentStart;
+
+    //             const y = currentDate.getFullYear();
+    //             const m = ('0' + (currentDate.getMonth() + 1)).slice(-2);
+    //             const d = ('0' + currentDate.getDate()).slice(-2);
+    //             const dateStr = `${y}-${m}-${d}`;
+
+    //             // 「新規メモを作成」ボタンのリンクを、カレンダーの日付に合わせて書き換える
+    //             const btn = document.getElementById('btn-new-memo');
+    //             if (btn) {
+    //                 btn.href = `index.php?page=memo&action=new&date=${dateStr}`;
+    //             }
+    //         },
+    //         dateClick: function (info) {
+    //             //alert("クリックした日付: " + info.dateStr);
+    //             window.location.href = "index.php?page=memo&action=new&date=" + info.dateStr;
+    //         },
+    //         moreLinkClick: function (info) {
+    //             const d = info.date;
+    //             const dateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    //             window.location.href = `index.php?page=memo&date=${dateStr}`;
+    //             return false;
+    //         }
+    //     });
+    //     mainCalendar.render();
+
+    //     // 年間カレンダー (12ヶ月分) の初期化
+    //     const currentYear = new Date().getFullYear();
+    //     for (let m = 1; m <= 12; m++) {
+    //         const el = document.getElementById('calendar-year-' + m);
+    //         if (!el) continue;
+
+    //         const cal = new FullCalendar.Calendar(el, {
+    //             initialView: 'dayGridMonth',
+    //             locale: 'ja',
+    //             initialDate: `${currentYear}-${String(m).padStart(2, '0')}-01`,
+    //             headerToolbar: false,
+    //             height: 'auto',
+    //             eventSources: [
+    //                 // 1. 自作メモのデータソース（色判定ロジックを含む）
+    //                 {
+    //                     id: 'memo-data',
+    //                     events: (dbData.events || []).map(event => {
+    //                         // 日本時間での「今日」を取得
+    //                         const now = new Date();
+    //                         const today = now.getFullYear() + '-' +
+    //                             ('0' + (now.getMonth() + 1)).slice(-2) + '-' +
+    //                             ('0' + now.getDate()).slice(-2);
+
+    //                         const eventDate = event.start; // メモの日付
+    //                         let color = '#3788d8'; // 過去：青
+
+    //                         if (eventDate === today) {
+    //                             color = '#ff0000'; // 当日：赤
+    //                         } else if (eventDate > today) {
+    //                             color = '#ff9800'; // 未来：橙
+    //                         }
+
+    //                         return {
+    //                             ...event,
+    //                             backgroundColor: color,
+    //                             borderColor: color
+    //                         };
+    //                     })
+    //                 },
+    //                 // 2. Googleカレンダーのデータソース（独立して追加）
+    //                 // {
+    //                 //     googleCalendarId: CALENDAR_ID,
+    //                 //     className: 'google-event',
+    //                 //     color: '#34a853' // Googleカレンダーの予定だと分かるように緑系にするのが一般的です
+    //                 // },
+    //                 // 3. 祝日データソース
+    //                 holidaySource
+    //             ],
+    //             eventClick: function (info) {
+    //                 if (info.event.id && info.event.display !== 'background') {
+    //                     window.location.href = `index.php?page=memo&action=edit&id=${info.event.id}`;
+    //                     info.jsEvent.preventDefault();
+    //                 }
+    //             },
+    //             dateClick: function (info) {
+    //                 window.location.href = `index.php?page=memo&action=new&date=${info.dateStr}`;
+    //             }
+    //         });
+    //         yearCalendars.push(cal);
+    //     }
+
+    //     // 活動グラフ (Chart.js)
+    //     const ctx = document.getElementById('activityChart');
+    //     if (ctx && dbData.chart && dbData.chart.length > 0) {
+    //         new Chart(ctx, {
+    //             type: 'bar',
+    //             data: {
+    //                 labels: dbData.chart.map(d => d.date.slice(5)),
+    //                 datasets: [{ label: '投稿', data: dbData.chart.map(d => d.count), backgroundColor: '#007bff' }]
+    //             },
+    //             options: { responsive: true, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+    //         });
+    //     }
+    // });
 
     function switchView(type) {
         const mainCont = document.getElementById('main-calendar-container');
@@ -1133,7 +1417,7 @@ $authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" . http_build_query([
             const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || "申し訳ございません。適切な回答が見つかりませんでした。";
 
             // 2. 正常終了：丁寧に一文字ずつ表示
-            //responseArea.i    nnerText = "";
+            //responseArea.innerText = "";
             // let i = 0;
             // const typing = setInterval(() => {
             //     responseArea.innerText += aiText[i];

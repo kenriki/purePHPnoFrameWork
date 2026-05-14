@@ -25,7 +25,7 @@ class GoogleCalendarSync
     /**
      * 有効なトークンを取得（切れていればリフレッシュ）
      */
-    private function getAccessToken($userName)
+    public function getAccessToken($userName)
     {
         // $stmt = $this->db->prepare("SELECT * FROM google_tokens WHERE user_name = ?");
         // login_id で検索するように変更
@@ -191,10 +191,12 @@ class GoogleCalendarSync
         // 【修正】strpos判定をやめ、10文字（YYYY-MM-DD）なら日本時間を付与するロジックに変更
         $timeMin = (strlen($start) === 10) ? $start . 'T00:00:00+09:00' : $start;
         $timeMax = (strlen($end) === 10) ? $end . 'T23:59:59+09:00' : $end;
+        //$start = '2026-04-01T00:00:00Z';
+        //$end = '2026-06-30T23:59:59Z';
 
         $params = [
-            'timeMin' => $timeMin,
-            'timeMax' => $timeMax,
+            'timeMin' => date('c', strtotime($timeMin)), // RFC3339形式 (2026-05-10T00:00:00+09:00)
+            'timeMax' => date('c', strtotime($timeMax)),
             'singleEvents' => 'true', // これがないと未来の繰り返し予定が展開されません
             'orderBy' => 'startTime',
             'maxResults' => 2500, // ★ ここを追加。最大2500件まで一回で取得できます
@@ -202,6 +204,13 @@ class GoogleCalendarSync
 
         // http_build_query で安全にエンコード
         $url = "https://www.googleapis.com/calendar/v3/calendars/primary/events?" . http_build_query($params);
+
+        // $debugUrl = $url . "&access_token=" . $accessToken;
+        // echo "<h3>Debug: Google API Request URL</h3>";
+        // echo "<pre style='background:#eee; padding:10px; word-break:break-all;'>";
+        // echo htmlspecialchars($debugUrl);
+        // echo "</pre>";
+        // echo "<p>↑このURLをコピーして、新しいタブで開いてみてください（認証済みのブラウザならJSONが見えるはずです）</p>";
 
         // 4. cURL実行
         $ch = curl_init($url);

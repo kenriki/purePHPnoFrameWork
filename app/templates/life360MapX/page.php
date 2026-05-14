@@ -30,9 +30,21 @@ try {
 // 位置情報の受信とマスタ更新
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['lat'])) {
     // user_name も一緒に保存・更新するように修正
-    $stmt = $pdo->prepare("INSERT INTO user_locations (phone_number, user_name, latitude, longitude) VALUES (?, ?, ?, ?) 
-                           ON DUPLICATE KEY UPDATE user_name=VALUES(user_name), latitude=VALUES(latitude), longitude=VALUES(longitude)");
-    $stmt->execute([$_POST['uid'], $_POST['u_name'], $_POST['lat'], $_POST['lng']]);
+    $sql = "INSERT INTO user_locations (phone_number, user_name, latitude, longitude) 
+        VALUES (:uid, :u_name, :lat, :lng)
+        ON DUPLICATE KEY UPDATE 
+        user_name = VALUES(user_name), 
+        latitude = VALUES(latitude), 
+        longitude = VALUES(longitude),
+        updated_at = CURRENT_TIMESTAMP";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([
+        ':uid' => $_POST['uid'],
+        ':u_name' => $_POST['u_name'],
+        ':lat' => $_POST['lat'],
+        ':lng' => $_POST['lng']
+    ]);
     header('Content-Type: application/json');
     exit(json_encode(['status' => 'ok']));
 }
@@ -407,75 +419,9 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
         };
         window.open(urls[type], '_blank');
     }
-    // --- 【追加】相手の位置を定期的に取得して更新する処理 ---
-    // 検索した相手がいる場合、その位置を30秒ごとに更新します
-    let searchInterval = null;
 
-    function startFriendTracking(targetId) {
-        // すでにタイマーが動いていたら一度クリア（二重起動防止）
-        if (searchInterval) clearInterval(searchInterval);
-
-        searchInterval = setInterval(() => {
-            // 前に作った get_friend_location.php を叩く
-            // パラメータ名は uid に合わせています
-            fetch(`index.php?page=get_friend_location&uid=${targetId}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data && data.lat && data.lng) {
-                        // 既存のマーカー表示関数を再利用して位置を更新
-                        // 相手の battery 情報があればそれも反映されるように後で関数を拡張可能です
-                        addOrUpdateMarker(targetId, data.lat, data.lng, data.u_name, data.created_at);
-                        console.log(`相手(${targetId})の位置を自動更新しました。`);
-                    }
-                })
-                .catch(error => console.error('自動更新失敗:', error));
-        }, 30000); // 30秒間隔
+    if (typeof startFriendTracking === 'function' && document.getElementById('search_tel')?.value) {
+        startFriendTracking(document.getElementById('search_tel').value);
     }
 
-    // 既存の searchUser 関数を拡張：検索成功時に追跡を開始させる
-    const originalSearchUser = searchUser; // 元の関数を退避
-    searchUser = function () {
-        originalSearchUser(); // 元の検索処理を実行
-        const targetId = document.getElementById('search_tel').value.trim();
-        if (targetId) {
-            startFriendTracking(targetId); // 追跡タイマー起動
-        }
-    };
-    // --- 【追加】位置情報の権限状態をチェックして表示を更新する関数 ---
-    async function checkGeoPermission() {
-        const badge = document.getElementById('geo_badge');
-        if (!navigator.permissions) {
-            badge.innerText = "不明";
-            return;
-        }
-
-        try {
-            const result = await navigator.permissions.query({ name: 'geolocation' });
-            const updateBadge = (status) => {
-                if (status === 'granted') {
-                    badge.innerText = "位置情報：ON";
-                    badge.style.background = "#28a745"; // 緑
-                } else if (status === 'prompt') {
-                    badge.innerText = "許可待ち";
-                    badge.style.background = "#ffc107"; // 黄色
-                } else {
-                    badge.innerText = "位置情報：OFF";
-                    badge.style.background = "#dc3545"; // 赤
-                }
-            };
-
-            updateBadge(result.state);
-
-            // 設定が変更されたら自動でバッジも更新されるようにする
-            result.onchange = () => updateBadge(result.state);
-
-        } catch (error) {
-            console.error("権限チェック失敗:", error);
-        }
-    }
-
-    // 初期ロード時と、共有開始時に実行
-    if (myId) {
-        checkGeoPermission();
-    }
 </script>

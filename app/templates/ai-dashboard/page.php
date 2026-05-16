@@ -765,6 +765,15 @@ if (isset($_GET['action']) && $_GET['action'] === 'download_excel') {
             💡 <strong>続きの追記:</strong> いずれかの区画をクリックして選択状態にし、「続きをください」と入力して送信するとその枠だけに情報が追記されます。
         </p>
     </div>
+    <form action="update_settings.php" method="POST" onsubmit="return confirmApiKeySave()">
+        <label>Gemini API Key:</label>
+        <input type="password" name="api_key" value="<?= htmlspecialchars($user['gemini_api_key'] ?? '') ?>"
+            placeholder="AIza...">
+        <p style="font-size: 0.8rem; color: #666;">
+            ※キーは <a href="https://aistudio.google.com/" target="_blank">Google AI Studio</a> で取得してください。たくさん使いたい人は、自身のキーを登録してください。
+        </p>
+        <button type="submit">設定を保存</button>
+    </form>
 </div>
 <input type="hidden" id="raw_ai_data"
     value="<?php echo htmlspecialchars($_SESSION['latest_ai_response'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
@@ -776,6 +785,14 @@ if (isset($_GET['action']) && $_GET['action'] === 'download_excel') {
             return;
         }
         selectSection(sectionId);
+    }
+
+    function confirmApiKeySave() {
+        // ユーザーに確認を求めるダイアログを表示
+        const result = confirm("Gemini APIキーを変更します。よろしいですか？\n※誤ったキーを登録すると、ダッシュボードのAI分析機能が動作しなくなります。");
+
+        // 「OK」なら true を返して送信、「キャンセル」なら false を返して送信を中止
+        return result;
     }
 
     function selectSection(sectionId) {

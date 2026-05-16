@@ -697,11 +697,11 @@ if (isset($_GET['action']) && $_GET['action'] === 'download_excel') {
 <div class="container">
     <div class="header-panel">
         <h1><i class="fa-solid fa-chart-pie" style="color:#3b82f6;"></i> AI 状況分析ダッシュボード</h1>
-        <!-- <div>
+        <div>
             <button id="btn-export-excel" class="btn btn-success" title="最新のAI分析結果をExcelで出力します">
                 <i class="fas fa-file-excel"></i> 分析結果をExcel出力
             </button>
-        </div> -->
+        </div>
     </div>
 
     <div class="dashboard-grid">
@@ -765,6 +765,15 @@ if (isset($_GET['action']) && $_GET['action'] === 'download_excel') {
             💡 <strong>続きの追記:</strong> いずれかの区画をクリックして選択状態にし、「続きをください」と入力して送信するとその枠だけに情報が追記されます。
         </p>
     </div>
+    <form action="update_settings.php" method="POST" onsubmit="return confirmApiKeySave()">
+        <label>Gemini API Key:</label>
+        <input type="password" name="api_key" value="<?= htmlspecialchars($user['gemini_api_key'] ?? '') ?>"
+            placeholder="AIza...">
+        <p style="font-size: 0.8rem; color: #666;">
+            ※キーは <a href="https://aistudio.google.com/" target="_blank">Google AI Studio</a> で取得してください。たくさん使いたい人は、自身のキーを登録してください。
+        </p>
+        <button type="submit">設定を保存</button>
+    </form>
 </div>
 <input type="hidden" id="raw_ai_data"
     value="<?php echo htmlspecialchars($_SESSION['latest_ai_response'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
@@ -776,6 +785,14 @@ if (isset($_GET['action']) && $_GET['action'] === 'download_excel') {
             return;
         }
         selectSection(sectionId);
+    }
+
+    function confirmApiKeySave() {
+        // ユーザーに確認を求めるダイアログを表示
+        const result = confirm("Gemini APIキーを変更します。よろしいですか？\n※誤ったキーを登録すると、ダッシュボードのAI分析機能が動作しなくなります。");
+
+        // 「OK」なら true を返して送信、「キャンセル」なら false を返して送信を中止
+        return result;
     }
 
     function selectSection(sectionId) {
@@ -936,7 +953,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'download_excel') {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            // 🌟 【ここを追加】テキストの受信が完了したので、描画する前にスピナーを画面から完全に消し去る
+            // 🌟 テキストの受信が完了したので、描画する前にスピナーを画面から完全に消し去る
             const tempSpinner = document.getElementById('temp-tracker-spinner');
             if (tempSpinner) {
                 tempSpinner.remove();
@@ -972,6 +989,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'download_excel') {
 
             // 4分割処理か追記処理かの判定
             if (aiResponse.includes('---') && !targetSection) {
+                // 通常の新規4分割生成時
                 const sections = aiResponse.split(/\s*---\s*/);
                 allElements.forEach((el, index) => {
                     if (el && sections[index]) {
@@ -981,15 +999,45 @@ if (isset($_GET['action']) && $_GET['action'] === 'download_excel') {
                         el.innerHTML = content.trim().replace(/\n/g, '<br>');
                     }
                 });
+
+                // 🔄 吐き出された時点で、隠し要素とlocalStorageに生データを即時保存
+                const rawAiInput = document.getElementById('raw_ai_data');
+                if (rawAiInput) {
+                    rawAiInput.value = aiResponse;
+                }
+                localStorage.setItem('latest_ai_dashboard_response', aiResponse);
+
             } else {
+                // 部分追記処理時
                 const activeEl = document.getElementById(`content-${targetSection}`);
                 if (activeEl) {
-                    // 念のため古いテキストベースのスピナーメッセージが含まれていれば一掃
                     if (activeEl.innerHTML.includes('AIが分析中...')) {
                         activeEl.innerHTML = '';
                     }
                     // [追記] として綺麗に結合
                     activeEl.innerHTML += (activeEl.innerHTML ? '<br><br><strong>[追記]:</strong><br>' : '') + aiResponse.replace(/\n/g, '<br>');
+
+                    // 🔄 部分追記された場合、画面上の現在の各区画テキストを「---」で再結合して、生データ形式でlocalStorage/隠し要素を上書きアップデートする
+                    const cleanSectionText = (text) => {
+                        if (!text) return '';
+                        return String(text)
+                            .replace(/\[追記\]:/g, '')
+                            .trim();
+                    };
+
+                    const updatedP1 = cleanSectionText(p1 ? p1.innerText : '');
+                    const updatedP2 = cleanSectionText(p2 ? p2.innerText : '');
+                    const updatedP3 = cleanSectionText(p3 ? p3.innerText : '');
+                    const updatedP4 = cleanSectionText(p4 ? p4.innerText : '');
+
+                    // 元の4分割パース構造に擬似再構成
+                    const reconstructedRawData = `第1区画: 現状分析と総括\n${updatedP1}\n---\n第2区画: 業務・開発アドバイス\n${updatedP2}\n---\n第3区画: スケジュールと学習戦略\n${updatedP3}\n---\n第4区画: 今日からのアクション\n${updatedP4}`;
+
+                    const rawAiInput = document.getElementById('raw_ai_data');
+                    if (rawAiInput) {
+                        rawAiInput.value = reconstructedRawData;
+                    }
+                    localStorage.setItem('latest_ai_dashboard_response', reconstructedRawData);
                 } else {
                     if (p1) p1.innerHTML = aiResponse.replace(/\n/g, '<br>');
                 }
@@ -999,7 +1047,6 @@ if (isset($_GET['action']) && $_GET['action'] === 'download_excel') {
 
         } catch (error) {
             console.error("Fetch Error:", error);
-            // エラー発生時もスピナーを確実に消去
             const tempSpinner = document.getElementById('temp-tracker-spinner');
             if (tempSpinner) tempSpinner.remove();
 
@@ -1016,6 +1063,36 @@ if (isset($_GET['action']) && $_GET['action'] === 'download_excel') {
     });
 
     document.addEventListener('DOMContentLoaded', function () {
+        // ==========================================================================
+        // 【復元ロジック】ページ読み込み時にlocalStorageから直前のデータを復元
+        // ==========================================================================
+        const savedAiData = localStorage.getItem('latest_ai_dashboard_response');
+        if (savedAiData) {
+            const rawAiInput = document.getElementById('raw_ai_data');
+            if (rawAiInput) {
+                rawAiInput.value = savedAiData;
+            }
+
+            const sections = savedAiData.split(/\s*---\s*/);
+            const cleanSectionText = (text) => {
+                if (!text) return '';
+                return String(text)
+                    .replace(/^セクション\s*\d+\s*:\s*.*$/mi, '')
+                    .replace(/^第\s*\d+\s*区画\s*:\s*.*$/mi, '')
+                    .trim();
+            };
+
+            for (let i = 1; i <= 4; i++) {
+                const pEl = document.getElementById(`content-p${i}`);
+                if (pEl && sections[i - 1]) {
+                    const cleanText = cleanSectionText(sections[i - 1]);
+                    // 改行コードを <br> にして流し込み
+                    pEl.innerHTML = cleanText.replace(/\n/g, '<br>');
+                }
+            }
+            console.log("ローカルストレージから直前のAI分析データを画面へ復元しました。");
+        }
+
         const exportBtn = document.getElementById('btn-export-excel');
 
         // ==========================================================================
@@ -1094,7 +1171,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'download_excel') {
                     // --- 1行目: メインタイトル ---
                     worksheet.mergeCells('A1:D1');
                     const titleCell = worksheet.getCell('A1');
-                    titleCell.value = 'AI 週次ビジネス分析レポート';
+                    titleCell.value = 'AI 週次ビジネス analysis レポート';
                     titleCell.font = fontTitle;
                     titleCell.fill = fillTitle;
                     titleCell.alignment = alignCenter;
@@ -1178,3 +1255,4 @@ if (isset($_GET['action']) && $_GET['action'] === 'download_excel') {
         }
     });
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>

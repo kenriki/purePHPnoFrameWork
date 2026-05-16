@@ -15,7 +15,19 @@ require_once __DIR__ . '/../app/router.php';
 $pageId = $_GET['page'] ?? 'home'; // URLパラメータから取得、なければhome
 $page = []; // 空の配列で初期化しておく
 $page = $_GET['page'] ?? 'home';
+$api_request = $_GET['api'] ?? '';
+$pageId = $page; // pageIdを初期化
 $action = $_GET['action'] ?? '';
+
+if ($api_request === 'equipment') {
+    require_once __DIR__ . '/../app/api/api_equipment.php';
+    exit;
+}
+if ($action === 'ask') {
+//if (isset($_GET['action']) && $_GET['action'] === 'ask') {
+    require_once __DIR__ . '/../app/templates/ai-dashboard/page.php';
+    exit;
+}
 
 /**
  * 3. ログイン・アクティブ状態の管理とGoogle連携チェック
@@ -148,6 +160,15 @@ if ($page === 'admin') {
     $controller = new ApiController();
     $controller->handleRequest($apiPath); // APIはJSON返すだけなのでexitは中でやる
     exit;
+} elseif ($page === 'sampleTest-1') {
+    // 1. ページIDを設定
+    $pageId = 'sampleTest-1';
+
+    // 2. レイアウトとテンプレートの読み込み（パスの結合を確実に！）
+    include __DIR__ . '/../app/templates/layout/header.php';
+    include __DIR__ . "/../app/templates/{$pageId}/page.php";
+    include __DIR__ . '/../app/templates/layout/footer.php';
+    exit;
 }
 
 /**
@@ -155,3 +176,34 @@ if ($page === 'admin') {
  */
 route($page);
 ?>
+<script>
+    // 1. 画面スリープを防止する機能 (Wake Lock)
+    let wakeLock = null;
+    async function requestWakeLock() {
+        try {
+            if ('wakeLock' in navigator) {
+                wakeLock = await navigator.wakeLock.request('screen');
+                console.log('スリープ防止機能：有効');
+            }
+        } catch (err) {
+            console.log('スリープ防止エラー:', err);
+        }
+    }
+
+    // 2. ページ表示時に実行
+    document.addEventListener('visibilitychange', () => {
+        if (wakeLock !== null && document.visibilityState === 'visible') {
+            requestWakeLock();
+        }
+    });
+
+    // 初回起動時に実行
+    requestWakeLock();
+
+    // 3. サービスワーカーの登録（PWA化に必須）
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js').then(() => {
+            console.log('Service Worker Registered');
+        });
+    }
+</script>

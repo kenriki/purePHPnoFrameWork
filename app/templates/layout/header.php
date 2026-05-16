@@ -211,7 +211,7 @@ if ($isLoggedIn) {
                 foreach ($menuData as $id => $content):
                     $title = $content['title'] ?? '';
                     if (
-                        $id === 'home' || $title === 'メモ' || $title === '地図アプリ'
+                        $id === 'home' || $title === 'メモ' || $title === '地図アプリ' || $title === 'AI分析'
                         || $title === 'メモ(Excelダウンロード)'
                         || (strpos($title, 'サンプル') !== false && ($userRole ?? '') === 'admin')
                     ): ?>

@@ -130,6 +130,19 @@
             }
         ]
     },
+    "ai-tools": {
+        "title": "AI分析",
+        "sections": [
+            {
+                "type": "text",
+                "content": "AI分析します"
+            },
+            {
+                "type": "php",
+                "file": "ai-dashboard/page.php"
+            }
+        ]
+    },
     "sample7": {
         "title": "サンプル7のページ",
         "sections": [

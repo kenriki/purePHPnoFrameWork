@@ -308,6 +308,41 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
             display: none !important;
         }
     }
+
+    /* ─── 検索窓 ─── */
+    .search-box-container {
+        margin-bottom: 15px;
+        position: relative;
+    }
+
+    .search-input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 12px 16px 12px 40px;
+        font-size: 16px;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+        transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .search-input:focus {
+        border-color: #007bff;
+        box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.15);
+        outline: none;
+    }
+
+    .search-icon {
+        position: absolute;
+        left: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #888;
+        font-size: 1.1rem;
+        pointer-events: none;
+    }
+
+    /* ─── 検索窓 ここまで ─── */
 </style>
 <div id="upload-overlay">
     <div class="spinner"></div>
@@ -479,6 +514,11 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
             <?php endif; ?>
         </form>
     <?php else: ?>
+        <!-- 検索窓 -->
+        <div class="search-box-container">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="memo-search" class="search-input" placeholder="キーワードを入力してメモを絞り込み...">
+        </div>
         <div style="background: #fff; border: 1px solid #eee; border-radius: 8px; overflow: hidden;">
             <table class="memo-table" style="width: 100%; border-collapse: collapse;">
                 <thead style="background: #f8f9fa;">
@@ -487,7 +527,7 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
                         <th style="width: 30%; border-bottom: 2px solid #dee2e6; padding: 10px; text-align: right;">作成日</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="memo-list-body">
                     <?php
                     // デバッグ出力は確認できたら消してOKです
                     // var_dump(count($memoList)); 
@@ -507,7 +547,7 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
                                             class="pin-link <?= $isPinned ? 'pin-active' : '' ?>" style="text-decoration: none;">
                                             <?= $isPinned ? '📌' : '📍' ?>
                                         </a>
-                                        <a href="index.php?page=memo&action=edit&id=<?= $memoId ?>"
+                                        <a href="index.php?page=memo&action=edit&id=<?= $memoId ?>" class="memo-title-link" 
                                             style="color: #007bff; text-decoration: none; font-weight: bold; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                                             <?= $titleHtml ?>
                                         </a>
@@ -558,27 +598,31 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
      * Excelボタンが押された時だけ、formtargetとactionをセットして強制送信する
      */
 
-    document.getElementById('excel-btn-trigger').addEventListener('click', function () {
-        const form = document.getElementById('memo-form');
+    const excelBtn = document.getElementById('excel-btn-trigger');
+    if (excelBtn) {
+        excelBtn.addEventListener('click', function () {
+            excelBtn.addEv
+            const form = document.getElementById('memo-form');
 
-        // 現在の設定をバックアップ
-        const originalAction = form.action;
-        const originalTarget = form.target;
+            // 現在の設定をバックアップ
+            const originalAction = form.action;
+            const originalTarget = form.target;
 
-        // Excel出力専用の設定を一時的にセット
-        form.action = "index.php?page=memo&action=excel_download";
-        form.target = "_blank";
+            // Excel出力専用の設定を一時的にセット
+            form.action = "index.php?page=memo&action=excel_download";
+            form.target = "_blank";
 
-        // 既存のフォームにあるJSバリデーション等を無視して強制送信
-        // これにより、event.preventDefault() の影響を受けずにPHPへ飛びます
-        HTMLFormElement.prototype.submit.call(form);
+            // 既存のフォームにあるJSバリデーション等を無視して強制送信
+            // これにより、event.preventDefault() の影響を受けずにPHPへ飛びます
+            HTMLFormElement.prototype.submit.call(form);
 
-        // 送信後、元の「保存用」の設定に戻しておく
-        setTimeout(() => {
-            form.action = originalAction;
-            form.target = originalTarget;
-        }, 500);
-    });
+            // 送信後、元の「保存用」の設定に戻しておく
+            setTimeout(() => {
+                form.action = originalAction;
+                form.target = originalTarget;
+            }, 500);
+        })
+    }
 
     /**
      * サーバー側の物理ファイルとDBレコード(image_path)を即座に削除する
@@ -634,15 +678,55 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
         const overlayBar = document.getElementById('overlay-progress-bar');
         const fileInput = document.getElementById('file-input-gallery');
         const cameraInput = document.getElementById('camera-input');
-		
-		
-		const memoContent = document.getElementById('memo-content');
+
+        // ─── 検索窓 ───
+        const searchInput = document.getElementById('memo-search');
+        const listBody = document.getElementById('memo-list-body');
+
+        if (searchInput && listBody) {
+            const rows = listBody.querySelectorAll('tr:not(#no-memos-row)');
+
+            searchInput.addEventListener('input', function (e) {
+                const query = e.target.value.toLowerCase().trim();
+                let visibleCount = 0;
+
+                rows.forEach(row => {
+                    const titleLink = row.querySelector('.memo-title-link');
+                    const text = titleLink ? titleLink.textContent.toLowerCase() : '';
+
+                    if (text.includes(query)) {
+                        row.style.display = ''; // 一致したら表示
+                        visibleCount++;
+                    } else {
+                        row.style.display = 'none'; // 一致しなければ非表示
+                    }
+                });
+
+                // 検索結果が0件の時のメッセージ制御
+                let noResultRow = document.getElementById('dynamic-no-results');
+                if (visibleCount === 0) {
+                    if (!noResultRow) {
+                        noResultRow = document.createElement('tr');
+                        noResultRow.id = 'dynamic-no-results';
+                        noResultRow.innerHTML = `<td colspan="2" style="text-align:center; color:#999; padding:40px;">該当するメモが見つかりません。</td>`;
+                        listBody.appendChild(noResultRow);
+                    }
+                } else {
+                    if (noResultRow) {
+                        noResultRow.remove();
+                    }
+                }
+            });
+        }
+        // 検索窓ここまで
+
+        const memoContent = document.getElementById('memo-content');
 
         // 画面を開いた時に未送信の下書きデータがあれば復元
         const savedDraft = localStorage.getItem('draft_memo');
         if (savedDraft && !memoContent.value) { // ← ここで!memoContent.value判定があるため、PHP側で初期読み込みされた文字があると復元されない場合がありました
             memoContent.value = savedDraft;
-            alert("未保存の内容が見つかりました。ページ下部にある「保存」をクリックしましょう。");
+            // alert("未保存の内容が見つかりました。ページ下部にある「保存」をクリックしましょう。");
         }
 
         // 1. ファイルバリデーション (PNGのみ)
@@ -722,6 +806,8 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
                             loadingText.innerText = '保存完了しました！';
                             loadingText.style.color = '#28a745'; // 緑色にして成功感を出す
                             loadingText.style.fontWeight = 'bold';
+                            // 保存ボタン（送信）を押したらローカルのデータを削除
+                            localStorage.removeItem('draft_memo');
                         }
 
                         // 3. 0.8秒だけ待ってからリロード

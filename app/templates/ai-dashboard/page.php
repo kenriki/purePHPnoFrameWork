@@ -152,6 +152,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'ask') {
         $isContinuation = (mb_strpos($userQuestion, '続き') !== false || mb_strpos($userQuestion, 'つづき') !== false);
 
         if ($isContinuation && !empty($targetSection)) {
+            // パターン①：セクションの「続き」を求めている場合（既存維持）
             $sectionNames = [
                 'p1' => '第1区画: 現状分析と総括',
                 'p2' => '第2区画: 業務・開発アドバイス',
@@ -162,7 +163,16 @@ if (isset($_GET['action']) && $_GET['action'] === 'ask') {
 
             $prompt = "ユーザー名: {$loginUserName}\n\n--- 直近の対話履歴 ---\n{$historyContext}\n";
             $prompt .= "【最重要指示】\n現在ユーザーはダッシュボードの「{$targetName}」を選択して「続き」を求めています。\nこれまでの文脈を引き継ぎ、この特定の枠に【新しく追加・追記する具体的なアドバイス（3行程度）】のみを出力してください。見出しや「---」などの区切り線、装飾文字（**など）は一切不要です。純粋な文章のみで構築してください。\n\n--- 補足データ ---\n[過去のメモ]\n{$contextText}\n\n[スケジュール]\n{$calendarText}\n";
+
+        } elseif ($userQuestion !== '') {
+            // パターン②：【バグ修正箇所】ユーザーから個別の具体的な質問・指示がある場合（例：「昼ごはん総括ください」）
+            $prompt = "ユーザー名: {$loginUserName}\n質問・指示: 「{$userQuestion}」\n\n--- 直近の対話履歴 ---\n{$historyContext}\n";
+            $prompt .= "【最重要指示】上記の「質問・指示」内容と履歴を踏まえ、ユーザーの要求に対してピンポイントかつ的確に回答を作成してください。\n";
+            $prompt .= "※注意：この指示に対する回答では、既存の4つのセクション（現状分析、業務アドバイス等）に分割したり「---」で区切ったりする必要は一切ありません。個別の質問への直接的な回答として自然な文章（箇条書き等も可）で構築してください。\n\n";
+            $prompt .= "--- 補足データ（必要に応じて参照してください） ---\n[過去のメモ]\n{$contextText}\n\n[スケジュール情報]\n{$calendarText}\n";
+
         } else {
+            // パターン③：チャット入力が空（初期ロード時など）の場合の自動4象限分析（既存維持）
             $prompt = "ユーザー名: {$loginUserName}\n質問: 「{$userQuestion}」\n\n--- 直近の対話履歴 ---\n{$historyContext}\n";
             $prompt .= "【最重要指示】上記の質問内容と履歴を踏まえ、以下の4つのセクションについて、要点だけを「3行程度の簡潔な箇条書き」で回答を作成してください。各セクションの間には、必ず「---」という区切り行を1行だけ挟んでください。装飾文字（**など）は使用禁止です。\n\nセクション1: 現状分析と総括 (冒頭に「こんにちは、{$loginUserName}さん！」を含める)\n---\nセクション2: 業務・開発アドバイス\n---\nセクション3: スケジュールと学習戦略\n---\nセクション4: 今日からのアクション\n\n--- 補足データ ---\n[過去のメモ]\n{$contextText}\n\n[スケジュール情報]\n{$calendarText}\n";
         }
@@ -320,7 +330,6 @@ if (isset($_GET['action']) && $_GET['action'] === 'ask_backup') {
                 $sanitizedMemos[] = "・" . $trimmed;
             }
         }
-
         $contextText = !empty($sanitizedMemos) ? implode("\n", $sanitizedMemos) : "過去のメモなし";
 
         // 9. Googleカレンダー予定の取得
@@ -345,8 +354,8 @@ if (isset($_GET['action']) && $_GET['action'] === 'ask_backup') {
         // 10. 通常側と完全に同一のロジックでプロンプトを構築
         $isContinuation = (mb_strpos($userQuestion, '続き') !== false || mb_strpos($userQuestion, 'つづき') !== false || $targetSection !== null);
 
-        // JavaScript側から特定の区分（p1〜p4）の指定、または current_content（選択中テキスト）が来ている場合
         if ($isContinuation && (!empty($targetSection) || $currentContent !== '')) {
+            // パターン①：ダッシュボード内区画の「続き」や追記修正（既存維持）
             $sectionNames = [
                 'p1' => '第1区画: 現状分析と総括',
                 'p2' => '第2区画: 業務・開発アドバイス',
@@ -363,6 +372,14 @@ if (isset($_GET['action']) && $_GET['action'] === 'ask_backup') {
             }
 
             $prompt .= "【最重要指示】\n現在ユーザーはダッシュボードの「{$targetName}」を選択して、追記や修正、あるいは「続き」を求めています。\nこれまでの対話履歴および提示された既存メモテキストの文脈を100%引き継ぎ、この特定の枠に【新しく追加・追記する具体的なアドバイス（3行程度）】のみを出力してください。見出しや「---」などの区切り線、装飾文字（**など）は一切不要です。純粋な文章のみで構築してください。プライベートなファイルへのアクセス権限等に関するシステム的なお断り・挨拶文は一切含めないでください。\n\n--- 補足データ ---\n[過去のメモ履歴]\n{$contextText}\n\n[スケジュール]\n{$calendarText}\n";
+
+        } elseif ($userQuestion !== '') {
+            // パターン②：【バグ修正箇所】ユーザーから個別の質問や具体的な指示がある場合（例：「昼ごはん総括ください」）
+            $prompt = "ユーザー名: {$loginUserName}\n質問・指示: 「{$userQuestion}」\n\n--- 直近の対話履歴 ---\n{$historyContext}\n";
+            $prompt .= "【最重要指示】上記の「質問・指示」内容と履歴を踏まえ、ユーザーの要求に対してピンポイントかつ的確に回答を作成してください。\n";
+            $prompt .= "※注意：この指示に対する回答では、既存の4つのセクション（現状分析、業務アドバイス等）に分割したり「---」で区切ったりする必要は一切ありません。個別の質問への直接的な回答として自然な文章（箇条書き等も可）で構築してください。\n\n";
+            $prompt .= "--- 補足データ（必要に応じて参照してください） ---\n[過去のメモ履歴]\n{$contextText}\n\n[スケジュール情報]\n{$calendarText}\n";
+
         } else {
             // 新規の4分割生成時のプロンプト
             $prompt = "ユーザー名: {$loginUserName}\n質問: 「{$userQuestion}」\n\n--- 直近の対話履歴 ---\n{$historyContext}\n";
@@ -770,7 +787,8 @@ if (isset($_GET['action']) && $_GET['action'] === 'download_excel') {
         <input type="password" name="api_key" value="<?= htmlspecialchars($user['gemini_api_key'] ?? '') ?>"
             placeholder="AIza...">
         <p style="font-size: 0.8rem; color: #666;">
-            ※キーは <a href="https://aistudio.google.com/" target="_blank">Google AI Studio</a> で取得してください。たくさん使いたい人は、自身のキーを登録してください。
+            ※キーは <a href="https://aistudio.google.com/" target="_blank">Google AI Studio</a> で取得してください。Gemini
+            無料枠は制限があります。デフォルト状態では管理者の権限を利用しています。たくさん使いたい人は、自身のキーを登録してください。
         </p>
         <button type="submit">設定を保存</button>
     </form>

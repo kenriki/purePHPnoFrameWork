@@ -346,6 +346,9 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
         <?php endif; ?>
     </div>
 
+    <h4 id="download-warning" style="color:red;font-size:9px; display:none;">
+        ※ダウンロード機能について、現在、スマホアプリとして「ホーム画面に追加」からアプリをインストールした場合は、デフォルトでは、PDF、Excelダウンロードができないです。スマホの設定から本アプリを選び、デフォルトで開くを選び、ブラウザ内を選択することでダウンロード可能です。
+    </h4>
     <div style="margin-top: 30px; padding-top: 15px; border-top: 1px solid #eee;">
         <a href="index.php?page=home" style="text-decoration: none; color: #007bff; font-weight: bold;">🏠 ホーム画面へ戻る</a>
     </div>
@@ -616,12 +619,31 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
     document.addEventListener('DOMContentLoaded', function () {
         console.log("JS Loaded"); // デバッグ用：コンソールにこれが出るか確認
 
+        const ua = navigator.userAgent.toLowerCase();
+        const isMobile = /iphone|ipad|ipod|android/.test(ua);
+        const isStandalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
+
+        // 「スマホ」かつ「ホーム画面から起動（PWA/スタンドアロン）」の場合のみ表示
+        if (isMobile && isStandalone) {
+            document.getElementById('download-warning').style.display = 'block';
+        }
+
         const form = document.getElementById('memo-form');
         const saveBtn = document.getElementById('save-btn');
         const overlay = document.getElementById('upload-overlay');
         const overlayBar = document.getElementById('overlay-progress-bar');
         const fileInput = document.getElementById('file-input-gallery');
         const cameraInput = document.getElementById('camera-input');
+		
+		
+		const memoContent = document.getElementById('memo-content');
+
+        // 画面を開いた時に未送信の下書きデータがあれば復元
+        const savedDraft = localStorage.getItem('draft_memo');
+        if (savedDraft && !memoContent.value) { // ← ここで!memoContent.value判定があるため、PHP側で初期読み込みされた文字があると復元されない場合がありました
+            memoContent.value = savedDraft;
+            alert("未保存の内容が見つかりました。ページ下部にある「保存」をクリックしましょう。");
+        }
 
         // 1. ファイルバリデーション (PNGのみ)
         // if (fileInput) {
@@ -776,6 +798,12 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
         const aiScanInput = document.getElementById('ai-scan-input');
         const memoContent = document.getElementById('memo-content');
 
+        if (memoContent) {
+            memoContent.addEventListener('input', function (e) {
+                localStorage.setItem('draft_memo', e.target.value);
+            });
+        }
+
         if (aiScanInput && memoContent) {
             aiScanInput.addEventListener('change', async function (e) {
                 const file = e.target.files[0];
@@ -849,5 +877,56 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
                 }
             });
         }
+    });
+
+    /**
+     * セッションを維持したままファイルをダウンロードする関数
+     */
+    async function secureDownload(event, fileName) {
+        const isPWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+        if (!isPWA) return; // PWAでなければ通常動作
+
+        event.preventDefault();
+        const url = event.currentTarget.href;
+        const btn = event.currentTarget;
+        const originalContent = btn.innerHTML;
+
+        try {
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 生成中...';
+            btn.style.pointerEvents = 'none';
+
+            // credentials: 'include' によりログインCookieを強制送信
+            const response = await fetch(url, { credentials: 'include' });
+            if (!response.ok) throw new Error('サーバーエラー');
+
+            const blob = await response.blob();
+            if (blob.size < 500) throw new Error('データが空です（セッション切れの可能性）');
+
+            const blobUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+
+            setTimeout(() => {
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(blobUrl);
+            }, 1000);
+
+        } catch (err) {
+            alert('ダウンロードに失敗しました: ' + err.message);
+        } finally {
+            btn.innerHTML = originalContent;
+            btn.style.pointerEvents = 'auto';
+        }
+    }
+
+    // 既存のボタンにイベントを適用（Excel/PDF）
+    document.querySelectorAll('a[href*="action=export"]').forEach(a => {
+        a.addEventListener('click', (e) => secureDownload(e, 'memo_export.xlsx'));
+    });
+    document.querySelectorAll('a[href*="action=pdf"]').forEach(a => {
+        a.addEventListener('click', (e) => secureDownload(e, 'memo.pdf'));
     });
 </script>

@@ -355,7 +355,7 @@ if (isset($_GET['action'])) {
         }
     }
 
-    // 🚀【新機能】対象の窓の会話履歴をクリアする処理
+    // 対象の窓の会話履歴をクリアする処理
     function clearPaneLog(event, paneId) {
         event.stopPropagation(); // 区画クリック（コピー＆選択）の暴発を防ぐ
 

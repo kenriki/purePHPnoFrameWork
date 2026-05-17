@@ -19,41 +19,6 @@ if (isset($_GET['action'])) {
     $pdo = getDB();
 
     // ------------------------------------------------------------------
-    // 【履歴登録（保存）処理】が入ってきた場合（GET/POSTの両方に対応して確実に実行）
-    // ------------------------------------------------------------------
-    if ($_GET['action'] === 'save') {
-        try {
-            // セッションから現在ログイン中のユーザーIDを取得
-            $currentUserId = $_SESSION['user_id'] ?? null;
-
-            // Rawデータ（JSON型POST）からの読み込みを試行
-            $jsonInput = file_get_contents('php://input');
-            $rawParams = json_decode($jsonInput, true) ?? [];
-
-            // GETパラメータ、POSTパラメータ、Rawパラメータのいずれからでも回収できるようにハイブリッド化
-            $content = $rawParams['content'] ?? $_POST['content'] ?? $_GET['content'] ?? '';
-            $paneTitle = $rawParams['pane_title'] ?? $_POST['pane_title'] ?? $_GET['pane_title'] ?? 'Gemini 窓';
-
-            if (empty(trim($content))) {
-                throw new Exception("保存するチャット履歴がありません。");
-            }
-
-            // chat_histories テーブルへのインサート
-            $stmtSave = $pdo->prepare("INSERT INTO chat_histories (user_id, title, contents, created_at) VALUES (?, ?, ?, NOW())");
-            $stmtSave->execute([
-                $currentUserId,
-                $paneTitle . " の保存ログ",
-                $content
-            ]);
-
-            echo json_encode(['success' => true, 'message' => 'データベースへの登録が完了しました！'], JSON_UNESCAPED_UNICODE);
-        } catch (\Throwable $e) {
-            echo json_encode(['success' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
-        }
-        exit;
-    }
-
-    // ------------------------------------------------------------------
     // 【AIへの質問（ask）処理】が入ってきた場合
     // ------------------------------------------------------------------
     if ($_GET['action'] === 'ask' && isset($_GET['provider']) && isset($_GET['prompt'])) {
@@ -76,9 +41,8 @@ if (isset($_GET['action'])) {
             }
 
             // ------------------------------------------------------------------
-            // 🔥【超強化】最新トレンド・業務知識・特撮専用の厳格なシステム命令インジェクション
+            // 最新トレンド・業務知識・特撮専用の厳格なシステム命令インジェクション
             // ------------------------------------------------------------------
-            // 対象キーワード：特撮、政治、IT、トレンド、生産管理・業務系
             if (preg_match('/(仮面ライダー|ガヴ|ゼッツ|ヴァレン|特撮|コナン|ドラマ|政治|選挙|トレンド|最新|IT|技術|開発|生産管理|在庫|工程|サプライチェーン|ERP|MES)/iu', $finalPrompt)) {
                 $systemInstruction = "\n\n" .
                     "==================================================\n" .
@@ -227,8 +191,9 @@ if (isset($_GET['action'])) {
         font-weight: bold;
     }
 
-    .save-btn {
-        background: #28a745;
+    /* 変更：登録ボタンからクリアボタン（グレー / レッド系）へデザインを調整 */
+    .clear-btn {
+        background: #6c757d;
         color: white;
         border: none;
         padding: 4px 10px;
@@ -239,8 +204,9 @@ if (isset($_GET['action'])) {
         transition: background 0.2s;
     }
 
-    .save-btn:hover {
-        background: #218838;
+    .clear-btn:hover {
+        background: #dc3545;
+        /* ホバー時に赤色にしてクリア感を出す */
     }
 
     .chat-history {
@@ -295,24 +261,28 @@ if (isset($_GET['action'])) {
     <div class="pane selected" id="pane-1" onclick="selectPane(this)">
         <div class="pane-header">
             <span class="pane-title">Gemini 窓 1</span>
-       </div>
+            <button class="clear-btn" onclick="clearPaneLog(event, 'pane-1')">クリア</button>
+        </div>
         <div class="chat-history"></div>
     </div>
     <div class="pane" id="pane-2" onclick="selectPane(this)">
         <div class="pane-header">
             <span class="pane-title">Gemini 窓 2</span>
+            <button class="clear-btn" onclick="clearPaneLog(event, 'pane-2')">クリア</button>
         </div>
         <div class="chat-history"></div>
     </div>
     <div class="pane" id="pane-3" onclick="selectPane(this)">
         <div class="pane-header">
             <span class="pane-title">Gemini 窓 3</span>
+            <button class="clear-btn" onclick="clearPaneLog(event, 'pane-3')">クリア</button>
         </div>
         <div class="chat-history"></div>
     </div>
     <div class="pane" id="pane-4" onclick="selectPane(this)">
         <div class="pane-header">
             <span class="pane-title">Gemini 窓 4</span>
+            <button class="clear-btn" onclick="clearPaneLog(event, 'pane-4')">クリア</button>
         </div>
         <div class="chat-history"></div>
     </div>
@@ -324,19 +294,89 @@ if (isset($_GET['action'])) {
 </div>
 
 <script>
-    const paneConversations = {
+    // メモリ上のオブジェクト
+    let paneConversations = {
         'pane-1': '',
         'pane-2': '',
         'pane-3': '',
         'pane-4': ''
     };
 
-    function selectPane(paneElement) {
+    // 初期化処理：ロード時にローカルストレージからデータを復元
+    window.addEventListener('DOMContentLoaded', () => {
+        const savedData = localStorage.getItem('gemini_dashboard_panes');
+        if (savedData) {
+            try {
+                paneConversations = JSON.parse(savedData);
+                Object.keys(paneConversations).forEach(paneId => {
+                    const paneEl = document.getElementById(paneId);
+                    if (paneEl) {
+                        const historyEl = paneEl.querySelector('.chat-history');
+                        if (historyEl && paneConversations[paneId]) {
+                            historyEl.textContent = paneConversations[paneId];
+                        }
+                    }
+                });
+            } catch (e) {
+                console.error("LocalStorageデータのパースに失敗しました", e);
+            }
+        }
+    });
+
+    // 区画クリックで選択 ＆ クリップボード自動コピー
+    async function selectPane(paneElement) {
         document.querySelectorAll('.pane').forEach(el => {
             el.classList.remove('selected');
         });
         paneElement.classList.add('selected');
         document.getElementById('prompt-input').focus();
+
+        const paneId = paneElement.id;
+        const textToCopy = paneConversations[paneId];
+
+        if (textToCopy && textToCopy.trim() !== "") {
+            try {
+                await navigator.clipboard.writeText(textToCopy);
+
+                const header = paneElement.querySelector('.pane-header');
+                const originalBg = header.style.background;
+                const originalColor = header.style.color;
+
+                header.style.background = '#d4edda'; // 淡いグリーン
+                header.style.color = '#155724';
+
+                setTimeout(() => {
+                    header.style.background = originalBg;
+                    header.style.color = originalColor;
+                }, 400);
+            } catch (err) {
+                console.error('クリップボードコピーに失敗しました:', err);
+            }
+        }
+    }
+
+    // 🚀【新機能】対象の窓の会話履歴をクリアする処理
+    function clearPaneLog(event, paneId) {
+        event.stopPropagation(); // 区画クリック（コピー＆選択）の暴発を防ぐ
+
+        const paneEl = document.getElementById(paneId);
+        const titleText = paneEl.querySelector('.pane-title').innerText;
+
+        if (!confirm(`${titleText} の現在の回答内容をクリアしますか？`)) {
+            return;
+        }
+
+        // 1. メモリ上のデータを空にする
+        paneConversations[paneId] = '';
+
+        // 2. 画面の表示をクリアする
+        const historyEl = paneEl.querySelector('.chat-history');
+        if (historyEl) {
+            historyEl.textContent = '';
+        }
+
+        // 3. ローカルストレージに最新の空状態を即時反映（上書き保存）
+        localStorage.setItem('gemini_dashboard_panes', JSON.stringify(paneConversations));
     }
 
     async function askSelected() {
@@ -386,7 +426,11 @@ if (isset($_GET['action'])) {
             }
 
             historyEl.textContent = finalReplyText;
+
             paneConversations[paneId] = finalReplyText;
+
+            // LocalStorageへ即時自動同期
+            localStorage.setItem('gemini_dashboard_panes', JSON.stringify(paneConversations));
 
             if (data.warning) {
                 const warnDiv = document.createElement('div');

@@ -25,19 +25,26 @@ if (empty($_SESSION['user_id'])) {
 $userId = $_SESSION['user_id'];
 
 try {
-    // 3. getDB() を呼び出し、ユーザーのAPIキーを取得
+    // 3. APIキーの取得（自身のキーを優先し、空なら有効な最初のキーを拝借する）
     $pdo = getDB();
-    //$stmt = $pdo->prepare("SELECT gemini_api_key FROM users WHERE id = ?");
-    $stmt = $pdo->prepare("SELECT gemini_api_key FROM users WHERE id = 2");
-    //$stmt->execute([$userId]);
-    $stmt->execute(); // ログイン中の $userId はバインドせず、そのまま実行
-    $row = $stmt->fetch();
+    $apiKey = '';
 
-    if (!$row || empty($row['gemini_api_key'])) {
-        send_json_error('Not Found', 'データベースにAPIキーが見つかりません。', 404);
+    // まずログイン中ユーザーのキーを確認
+    $stmtKey = $pdo->prepare("SELECT gemini_api_key FROM users WHERE id = ?");
+    $stmtKey->execute([$userId]);
+    $userKeyRow = $stmtKey->fetch();
+    $apiKey = $userKeyRow['gemini_api_key'] ?? '';
+
+    // もし空なら、テーブル内でキーが設定されている最初のユーザーから拝借する（フォールバック）
+    if (empty($apiKey)) {
+        $stmtFallback = $pdo->query("SELECT gemini_api_key FROM users WHERE gemini_api_key IS NOT NULL AND gemini_api_key != '' LIMIT 1");
+        $fallbackRow = $stmtFallback->fetch();
+        $apiKey = $fallbackRow['gemini_api_key'] ?? '';
     }
 
-    $apiKey = $row['gemini_api_key'];
+    if (empty($apiKey)) {
+        send_json_error('Not Found', '有効なGemini APIキーを持つユーザーがデータベース内に見つかりません。', 404);
+    }
 
 } catch (Exception $e) {
     send_json_error('DB Error', 'データベース接続に失敗しました。', 500);

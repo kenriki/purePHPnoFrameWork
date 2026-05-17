@@ -31,16 +31,26 @@ try {
     $userRow = $stmtUser->fetch();
     $loginUserName = $userRow['username'] ?? '';
 
-    // 3. 管理者(ID: 2)のAPIキーを取得 (共通キー)
-    // ※管理者IDが異なる場合はここを調整してください
-    $adminId = 2;
-    $stmtAdmin = $pdo->prepare("SELECT gemini_api_key FROM users WHERE id = ?");
-    $stmtAdmin->execute([$adminId]);
-    $adminRow = $stmtAdmin->fetch(PDO::FETCH_ASSOC);
+    // ==========================================================================
+    // APIキーの取得（自身のキーを優先し、空なら有効な最初のキーを拝借する）
+    // ==========================================================================
+    $apiKey = '';
 
-    $apiKey = $adminRow['gemini_api_key'] ?? '';
+    // まずログイン中ユーザーのキーを確認
+    $stmtKey = $pdo->prepare("SELECT gemini_api_key FROM users WHERE id = ?");
+    $stmtKey->execute([$userId]);
+    $userKeyRow = $stmtKey->fetch(PDO::FETCH_ASSOC);
+    $apiKey = $userKeyRow['gemini_api_key'] ?? '';
+
+    // もし空なら、テーブル内でキーが設定されている最初のユーザーから拝借する（フォールバック）
     if (empty($apiKey)) {
-        throw new Exception("管理者のAPIキーが設定されていません。");
+        $stmtFallback = $pdo->query("SELECT gemini_api_key FROM users WHERE gemini_api_key IS NOT NULL AND gemini_api_key != '' LIMIT 1");
+        $fallbackRow = $stmtFallback->fetch(PDO::FETCH_ASSOC);
+        $apiKey = $fallbackRow['gemini_api_key'] ?? '';
+    }
+
+    if (empty($apiKey)) {
+        throw new Exception("有効なGemini APIキーを持つユーザーがデータベース内に見つかりません。");
     }
 
     // 4. ログインユーザーの直近メモを取得 (コンテキスト用)

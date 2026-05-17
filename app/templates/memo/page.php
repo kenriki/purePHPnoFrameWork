@@ -678,6 +678,66 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
         const overlayBar = document.getElementById('overlay-progress-bar');
         const fileInput = document.getElementById('file-input-gallery');
         const cameraInput = document.getElementById('camera-input');
+		
+		
+		const memoContent = document.getElementById('memo-content');
+
+        // 画面を開いた時に未送信の下書きデータがあれば復元
+        const savedDraft = localStorage.getItem('draft_memo');
+        if (savedDraft && !memoContent.value) { // ← ここで!memoContent.value判定があるため、PHP側で初期読み込みされた文字があると復元されない場合がありました
+            memoContent.value = savedDraft;
+            alert("未保存の内容が見つかりました。ページ下部にある「保存」をクリックしましょう。");
+        }
+
+        // ─── 検索窓 ───
+        const searchInput = document.getElementById('memo-search');
+        const listBody = document.getElementById('memo-list-body');
+
+        if (searchInput && listBody) {
+            const rows = listBody.querySelectorAll('tr:not(#no-memos-row)');
+
+            searchInput.addEventListener('input', function (e) {
+                const query = e.target.value.toLowerCase().trim();
+                let visibleCount = 0;
+
+                rows.forEach(row => {
+                    const titleLink = row.querySelector('.memo-title-link');
+                    const text = titleLink ? titleLink.textContent.toLowerCase() : '';
+
+                    if (text.includes(query)) {
+                        row.style.display = ''; // 一致したら表示
+                        visibleCount++;
+                    } else {
+                        row.style.display = 'none'; // 一致しなければ非表示
+                    }
+                });
+
+                // 検索結果が0件の時のメッセージ制御
+                let noResultRow = document.getElementById('dynamic-no-results');
+                if (visibleCount === 0) {
+                    if (!noResultRow) {
+                        noResultRow = document.createElement('tr');
+                        noResultRow.id = 'dynamic-no-results';
+                        noResultRow.innerHTML = `<td colspan="2" style="text-align:center; color:#999; padding:40px;">該当するメモが見つかりません。</td>`;
+                        listBody.appendChild(noResultRow);
+                    }
+                } else {
+                    if (noResultRow) {
+                        noResultRow.remove();
+                    }
+                }
+            });
+        }
+        // 検索窓ここまで
+
+        const memoContent = document.getElementById('memo-content');
+
+        // 画面を開いた時に未送信の下書きデータがあれば復元
+        const savedDraft = localStorage.getItem('draft_memo');
+        if (savedDraft && !memoContent.value) { // ← ここで!memoContent.value判定があるため、PHP側で初期読み込みされた文字があると復元されない場合がありました
+            memoContent.value = savedDraft;
+            // alert("未保存の内容が見つかりました。ページ下部にある「保存」をクリックしましょう。");
+        }
 
         // ─── 検索窓 ───
         const searchInput = document.getElementById('memo-search');

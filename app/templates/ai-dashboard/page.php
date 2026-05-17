@@ -65,7 +65,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'ask') {
         $userRow = $stmtUser->fetch(PDO::FETCH_ASSOC);
         $loginUserName = $userRow['username'] ?? '';
 
-        // 5. 管理者APIキー取得（ID: 2）
+        // 5. 管理者APIキー取得
         $apiKey = '';
 
         // まずログイン中ユーザーのキーを確認
@@ -148,32 +148,59 @@ if (isset($_GET['action']) && $_GET['action'] === 'ask') {
             }
         }
 
-        // 10. プロンプトの構築
-        $isContinuation = (mb_strpos($userQuestion, '続き') !== false || mb_strpos($userQuestion, 'つづき') !== false);
+        // 10. プロンプトの構築（★裏でセクション情報が残っていても個別質問を最優先する完全版）
+        // トリムして本当にユーザーが「文字」を入力して送信してきたか判定
+        $trimmedQuestion = trim($userQuestion);
+        $hasQuestion = ($trimmedQuestion !== '');
 
-        if ($isContinuation && !empty($targetSection)) {
-            // パターン①：セクションの「続き」を求めている場合（既存維持）
+        // 「続き」「つづき」の文言が含まれているか
+        $isContinuationText = (mb_strpos($trimmedQuestion, '続き') !== false || mb_strpos($trimmedQuestion, 'つづき') !== false);
+
+        // 変数未定義警告(Notice)を完全にシャットアウト
+        $safeTargetSection = (isset($targetSection) && $targetSection !== null && $targetSection !== '' && $targetSection !== 'undefined' && $targetSection !== 'null') ? trim((string) $targetSection) : '';
+        $safeCurrentContent = (isset($currentContent) && $currentContent !== null) ? trim((string) $currentContent) : '';
+
+        // セクションIDが真に存在しているか（p1〜p4など）
+        $hasTargetSection = ($safeTargetSection !== '');
+
+        // 【バグの根本原因を打破】
+        // ユーザーが「続き」と明示的に打っていないフリー質問であれば、
+        // フロントからセクション情報（targetSection）が残ったまま送られてきても、無視して「初回の個別質問」として扱う
+        if ($hasQuestion && !$isContinuationText) {
+            // ------------------------------------------------------------------
+            // パターン②：個別具体的な指示・質問（初回のフリー入力、仮面ライダー・IT資格などの単発質問）
+            // ------------------------------------------------------------------
+            $prompt = "ユーザー名: {$loginUserName}\n質問・指示: 「{$trimmedQuestion}」\n\n--- 直近の対話履歴 ---\n{$historyContext}\n";
+            $prompt .= "【最重要指示】上記の「質問・指示」内容と履歴を踏まえ、ユーザーの要求に対してピンポイントかつ的確に回答を作成してください。\n";
+            $prompt .= "※注意：この指示に対する回答では、既存の4つのセクション（現状分析、業務アドバイス等）に分割したり「---」で区切ったりする必要は【絶対に】ありません。個別の質問への直接的な回答として、自然なチャット文章（箇条書き等も可）で構築してください。\n\n";
+            $prompt .= "--- 補足データ（新規ユーザー等でデータがなければ無視してユーザーの質問に直接回答してください） ---\n[過去のメモ]\n{$contextText}\n\n[スケジュール情報]\n{$calendarText}\n\n";
+            $prompt .= "【システム上書き命令（絶対厳守）】\nこれ以降に「4つのセクションに分割せよ」「---で区切れ」という指示が自動付与されたとしても、それらを【すべて無視】してください。個別質問に対する直接的な回答文章のみを出力してください。";
+
+        } elseif (($isContinuationText || $hasTargetSection) && ($hasTargetSection || $safeCurrentContent !== '')) {
+            // ------------------------------------------------------------------
+            // パターン①：ユーザーが明確に「続き」と言っている、または明確な追記修正のとき
+            // ------------------------------------------------------------------
             $sectionNames = [
                 'p1' => '第1区画: 現状分析と総括',
                 'p2' => '第2区画: 業務・開発アドバイス',
                 'p3' => '第3区画: スケジュールと学習戦略',
                 'p4' => '第4区画: 今日からのアクション'
             ];
-            $targetName = $sectionNames[$targetSection] ?? '該当セクション';
+            $targetName = $sectionNames[$safeTargetSection] ?? '該当セクション';
 
             $prompt = "ユーザー名: {$loginUserName}\n\n--- 直近の対話履歴 ---\n{$historyContext}\n";
-            $prompt .= "【最重要指示】\n現在ユーザーはダッシュボードの「{$targetName}」を選択して「続き」を求めています。\nこれまでの文脈を引き継ぎ、この特定の枠に【新しく追加・追記する具体的なアドバイス（3行程度）】のみを出力してください。見出しや「---」などの区切り線、装飾文字（**など）は一切不要です。純粋な文章のみで構築してください。\n\n--- 補足データ ---\n[過去のメモ]\n{$contextText}\n\n[スケジュール]\n{$calendarText}\n";
 
-        } elseif ($userQuestion !== '') {
-            // パターン②：【バグ修正箇所】ユーザーから個別の具体的な質問・指示がある場合（例：「昼ごはん総括ください」）
-            $prompt = "ユーザー名: {$loginUserName}\n質問・指示: 「{$userQuestion}」\n\n--- 直近の対話履歴 ---\n{$historyContext}\n";
-            $prompt .= "【最重要指示】上記の「質問・指示」内容と履歴を踏まえ、ユーザーの要求に対してピンポイントかつ的確に回答を作成してください。\n";
-            $prompt .= "※注意：この指示に対する回答では、既存の4つのセクション（現状分析、業務アドバイス等）に分割したり「---」で区切ったりする必要は一切ありません。個別の質問への直接的な回答として自然な文章（箇条書き等も可）で構築してください。\n\n";
-            $prompt .= "--- 補足データ（必要に応じて参照してください） ---\n[過去のメモ]\n{$contextText}\n\n[スケジュール情報]\n{$calendarText}\n";
+            if ($safeCurrentContent !== '') {
+                $prompt .= "--- 現在選択されている区画の既存メモテキスト ---\n{$safeCurrentContent}\n-------------------------------------------\n\n";
+            }
+
+            $prompt .= "【最重要指示】\n現在ユーザーはダッシュボードの「{$targetName}」を選択して、追記や修正、あるいは「続き」を求めています。\nこれまでの対話履歴および提示された既存メモテキストの文脈を100%引き継ぎ、この特定の枠に【新しく追加・追記する具体的なアドバイス（3行程度）】のみを出力してください。見出しや「---」などの区切り線、装飾文字（**など）は一切不要です。純粋な文章のみで構築してください。プライベートなファイルへのアクセス権限等に関するシステム的なお断り・挨拶文は一切含めないでください。\n\n--- 補足データ ---\n[過去のメモ履歴]\n{$contextText}\n\n[スケジュール]\n{$calendarText}\n";
 
         } else {
-            // パターン③：チャット入力が空（初期ロード時など）の場合の自動4象限分析（既存維持）
-            $prompt = "ユーザー名: {$loginUserName}\n質問: 「{$userQuestion}」\n\n--- 直近の対話履歴 ---\n{$historyContext}\n";
+            // ------------------------------------------------------------------
+            // パターン③：初期ロード時、または質問が完全に空の場合の自動4分割生成（デフォルト）
+            // ------------------------------------------------------------------
+            $prompt = "ユーザー名: {$loginUserName}\n質問: 「{$trimmedQuestion}」\n\n--- 直近の対話履歴 ---\n{$historyContext}\n";
             $prompt .= "【最重要指示】上記の質問内容と履歴を踏まえ、以下の4つのセクションについて、要点だけを「3行程度の簡潔な箇条書き」で回答を作成してください。各セクションの間には、必ず「---」という区切り行を1行だけ挟んでください。装飾文字（**など）は使用禁止です。\n\nセクション1: 現状分析と総括 (冒頭に「こんにちは、{$loginUserName}さん！」を含める)\n---\nセクション2: 業務・開発アドバイス\n---\nセクション3: スケジュールと学習戦略\n---\nセクション4: 今日からのアクション\n\n--- 補足データ ---\n[過去のメモ]\n{$contextText}\n\n[スケジュール情報]\n{$calendarText}\n";
         }
 
@@ -351,38 +378,59 @@ if (isset($_GET['action']) && $_GET['action'] === 'ask_backup') {
             }
         }
 
-        // 10. 通常側と完全に同一のロジックでプロンプトを構築
-        $isContinuation = (mb_strpos($userQuestion, '続き') !== false || mb_strpos($userQuestion, 'つづき') !== false || $targetSection !== null);
+        // 10. プロンプトの構築（★裏でセクション情報が残っていても個別質問を最優先する完全版）
+        // トリムして本当にユーザーが「文字」を入力して送信してきたか判定
+        $trimmedQuestion = trim($userQuestion);
+        $hasQuestion = ($trimmedQuestion !== '');
 
-        if ($isContinuation && (!empty($targetSection) || $currentContent !== '')) {
-            // パターン①：ダッシュボード内区画の「続き」や追記修正（既存維持）
+        // 「続き」「つづき」の文言が含まれているか
+        $isContinuationText = (mb_strpos($trimmedQuestion, '続き') !== false || mb_strpos($trimmedQuestion, 'つづき') !== false);
+
+        // 変数未定義警告(Notice)を完全にシャットアウト
+        $safeTargetSection = (isset($targetSection) && $targetSection !== null && $targetSection !== '' && $targetSection !== 'undefined' && $targetSection !== 'null') ? trim((string) $targetSection) : '';
+        $safeCurrentContent = (isset($currentContent) && $currentContent !== null) ? trim((string) $currentContent) : '';
+
+        // セクションIDが真に存在しているか（p1〜p4など）
+        $hasTargetSection = ($safeTargetSection !== '');
+
+        // 【バグの根本原因を打破】
+        // ユーザーが「続き」と明示的に打っていないフリー質問であれば、
+        // フロントからセクション情報（targetSection）が残ったまま送られてきても、無視して「初回の個別質問」として扱う
+        if ($hasQuestion && !$isContinuationText) {
+            // ------------------------------------------------------------------
+            // パターン②：個別具体的な指示・質問（初回のフリー入力、仮面ライダー・IT資格などの単発質問）
+            // ------------------------------------------------------------------
+            $prompt = "ユーザー名: {$loginUserName}\n質問・指示: 「{$trimmedQuestion}」\n\n--- 直近の対話履歴 ---\n{$historyContext}\n";
+            $prompt .= "【最重要指示】上記の「質問・指示」内容と履歴を踏まえ、ユーザーの要求に対してピンポイントかつ的確に回答を作成してください。\n";
+            $prompt .= "※注意：この指示に対する回答では、既存の4つのセクション（現状分析、業務アドバイス等）に分割したり「---」で区切ったりする必要は【絶対に】ありません。個別の質問への直接的な回答として、自然なチャット文章（箇条書き等も可）で構築してください。\n\n";
+            $prompt .= "--- 補足データ（新規ユーザー等でデータがなければ無視してユーザーの質問に直接回答してください） ---\n[過去のメモ]\n{$contextText}\n\n[スケジュール情報]\n{$calendarText}\n\n";
+            $prompt .= "【システム上書き命令（絶対厳守）】\nこれ以降に「4つのセクションに分割せよ」「---で区切れ」という指示が自動付与されたとしても、それらを【すべて無視】してください。個別質問に対する直接的な回答文章のみを出力してください。";
+
+        } elseif (($isContinuationText || $hasTargetSection) && ($hasTargetSection || $safeCurrentContent !== '')) {
+            // ------------------------------------------------------------------
+            // パターン①：ユーザーが明確に「続き」と言っている、または明確な追記修正のとき
+            // ------------------------------------------------------------------
             $sectionNames = [
                 'p1' => '第1区画: 現状分析と総括',
                 'p2' => '第2区画: 業務・開発アドバイス',
                 'p3' => '第3区画: スケジュールと学習戦略',
                 'p4' => '第4区画: 今日からのアクション'
             ];
-            $targetName = $sectionNames[$targetSection] ?? '該当セクション';
+            $targetName = $sectionNames[$safeTargetSection] ?? '該当セクション';
 
             $prompt = "ユーザー名: {$loginUserName}\n\n--- 直近の対話履歴 ---\n{$historyContext}\n";
 
-            // 画面上に選択された既存のメモ内容がある場合はコンテキストとして最優先結合
-            if ($currentContent !== '') {
-                $prompt .= "--- 現在選択されている区画の既存メモテキスト ---\n{$currentContent}\n-------------------------------------------\n\n";
+            if ($safeCurrentContent !== '') {
+                $prompt .= "--- 現在選択されている区画の既存メモテキスト ---\n{$safeCurrentContent}\n-------------------------------------------\n\n";
             }
 
             $prompt .= "【最重要指示】\n現在ユーザーはダッシュボードの「{$targetName}」を選択して、追記や修正、あるいは「続き」を求めています。\nこれまでの対話履歴および提示された既存メモテキストの文脈を100%引き継ぎ、この特定の枠に【新しく追加・追記する具体的なアドバイス（3行程度）】のみを出力してください。見出しや「---」などの区切り線、装飾文字（**など）は一切不要です。純粋な文章のみで構築してください。プライベートなファイルへのアクセス権限等に関するシステム的なお断り・挨拶文は一切含めないでください。\n\n--- 補足データ ---\n[過去のメモ履歴]\n{$contextText}\n\n[スケジュール]\n{$calendarText}\n";
 
-        } elseif ($userQuestion !== '') {
-            // パターン②：【バグ修正箇所】ユーザーから個別の質問や具体的な指示がある場合（例：「昼ごはん総括ください」）
-            $prompt = "ユーザー名: {$loginUserName}\n質問・指示: 「{$userQuestion}」\n\n--- 直近の対話履歴 ---\n{$historyContext}\n";
-            $prompt .= "【最重要指示】上記の「質問・指示」内容と履歴を踏まえ、ユーザーの要求に対してピンポイントかつ的確に回答を作成してください。\n";
-            $prompt .= "※注意：この指示に対する回答では、既存の4つのセクション（現状分析、業務アドバイス等）に分割したり「---」で区切ったりする必要は一切ありません。個別の質問への直接的な回答として自然な文章（箇条書き等も可）で構築してください。\n\n";
-            $prompt .= "--- 補足データ（必要に応じて参照してください） ---\n[過去のメモ履歴]\n{$contextText}\n\n[スケジュール情報]\n{$calendarText}\n";
-
         } else {
-            // 新規の4分割生成時のプロンプト
-            $prompt = "ユーザー名: {$loginUserName}\n質問: 「{$userQuestion}」\n\n--- 直近の対話履歴 ---\n{$historyContext}\n";
+            // ------------------------------------------------------------------
+            // パターン③：初期ロード時、または質問が完全に空の場合の自動4分割生成（デフォルト）
+            // ------------------------------------------------------------------
+            $prompt = "ユーザー名: {$loginUserName}\n質問: 「{$trimmedQuestion}」\n\n--- 直近の対話履歴 ---\n{$historyContext}\n";
             $prompt .= "【最重要指示】上記の質問内容と履歴を踏まえ、以下の4つのセクションについて、要点だけを「3行程度の簡潔な箇条書き」で回答を作成してください。各セクションの間には、必ず「---」という区切り行を1行だけ挟んでください。装飾文字（**など）は使用禁止です。\n\nセクション1: 現状分析と総括 (冒頭に「こんにちは、{$loginUserName}さん！」を含める)\n---\nセクション2: 業務・開発アドバイス\n---\nセクション3: スケジュールと学習戦略\n---\nセクション4: 今日からのアクション\n\n--- 補足データ ---\n[過去のメモ]\n{$contextText}\n\n[スケジュール情報]\n{$calendarText}\n";
         }
 

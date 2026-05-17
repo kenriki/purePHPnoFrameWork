@@ -143,6 +143,19 @@
             }
         ]
     },
+    "ai-tools-2": {
+        "title": "AI分析Free",
+        "sections": [
+            {
+                "type": "text",
+                "content": "AI分析します"
+            },
+            {
+                "type": "php",
+                "file": "ai-dashboard-2/page.php"
+            }
+        ]
+    },
     "sample7": {
         "title": "サンプル7のページ",
         "sections": [

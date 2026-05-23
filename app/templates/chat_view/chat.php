@@ -6,7 +6,8 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 // 1. セッションとDB接続の初期化
-if (session_status() === PHP_SESSION_NONE) session_start();
+if (session_status() === PHP_SESSION_NONE)
+    session_start();
 require_once __DIR__ . '/../../dbconfig.php';
 
 // $pdoが未定義の場合の安全な初期化
@@ -90,13 +91,37 @@ if ($receiver_id) {
 $search_keyword = $_GET['search_name'] ?? null;
 $search_results = null;
 
-if ($search_keyword !== null && trim($search_keyword) !== '') {
-    $stmtSearch = $pdo->prepare("SELECT id, {$user_column} AS name FROM users WHERE {$user_column} LIKE :keyword AND id != :my_id");
+// if ($search_keyword !== null && trim($search_keyword) !== '') {
+//     $stmtSearch = $pdo->prepare("SELECT id, {$user_column} AS name FROM users WHERE {$user_column} LIKE :keyword AND id != :my_id");
+//     $stmtSearch->execute([
+//         ':keyword' => '%' . $search_keyword . '%',
+//         ':my_id' => $current_user_id
+//     ]);
+//     $search_results = $stmtSearch->fetchAll(PDO::FETCH_ASSOC);
+// }
+// 1. キーワードを整形（空白削除）
+// 1. キーワードを整形（空白削除）
+$keyword = trim($search_keyword ?? '');
+
+if ($keyword !== '') {
+    // 2. username も email も `=`（完全一致）にする
+    // どちらかがキーワードと完全に一致した場合のみ結果に含めます
+    $sql = "SELECT id, {$user_column} AS name 
+            FROM users 
+            WHERE (username = :keyword OR email = :keyword) 
+            AND id != :my_id";
+
+    $stmtSearch = $pdo->prepare($sql);
+
+    // 3. 完全一致なので、% は一切付与しません
     $stmtSearch->execute([
-        ':keyword' => '%' . $search_keyword . '%',
+        ':keyword' => $keyword,
         ':my_id' => $current_user_id
     ]);
+
     $search_results = $stmtSearch->fetchAll(PDO::FETCH_ASSOC);
+} else {
+    $search_results = [];
 }
 
 if (file_exists(__DIR__ . '/../layout/header.php')) {

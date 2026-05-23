@@ -116,13 +116,16 @@ $authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" . http_build_query([
 // index.phpで取得した未読数
 $unread_count = $GLOBALS['unread_count'] ?? 0;
 $latest_sender_id = null;
+if (!isset($current_user_id) && isset($_SESSION['user_id'])) {
+    $current_user_id = $_SESSION['user_id'];
+}
 
 // 未読がある場合、自動的にその相手のIDを1件取得する
-if ($unread_count > 0 && isset($_SESSION['user_id'])) {
+if ($unread_count > 0 && isset($current_user_id)) {
     try {
         $db = getDB();
         $stmtSender = $db->prepare("SELECT sender_id FROM messages WHERE receiver_id = ? AND is_read = 0 ORDER BY created_at DESC LIMIT 1");
-        $stmtSender->execute([$_SESSION['user_id']]);
+        $stmtSender->execute([$current_user_id]);
         $rowSender = $stmtSender->fetch(PDO::FETCH_ASSOC);
         if ($rowSender) {
             $latest_sender_id = $rowSender['sender_id'];
@@ -137,6 +140,20 @@ $chat_link_url = "index.php?page=chat";
 if ($latest_sender_id !== null) {
     $chat_link_url .= "&receiver_id=" . $latest_sender_id;
 }
+?>
+
+<?php
+// 未読メッセージを抽出（sender情報をJOINして名前も取得）
+$sql = "SELECT m.*, u.username as sender_name 
+        FROM messages m 
+        JOIN users u ON m.sender_id = u.id 
+        WHERE m.receiver_id = :my_id 
+        AND m.is_read = 0 
+        ORDER BY m.created_at DESC";
+
+$stmt = $pdo->prepare($sql);
+$stmt->execute([':my_id' => $current_user_id]);
+$unread_messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 
@@ -619,7 +636,8 @@ if ($latest_sender_id !== null) {
                     <?php echo (int) $unread_count; ?> 件未読
                 </span>
             </div>
-            <a href="<?php echo $chat_link_url; ?>" style="display: inline-block; background: #ffc107; color: #212529; text-decoration: none; padding: 8px 16px; border-radius: 4px; font-weight: bold;">チャットを確認する</a>
+            <a href="<?php echo $chat_link_url; ?>"
+                style="display: inline-block; background: #ffc107; color: #212529; text-decoration: none; padding: 8px 16px; border-radius: 4px; font-weight: bold;">チャットを確認する</a>
         </div>
     <?php endif; ?>
 
@@ -627,9 +645,9 @@ if ($latest_sender_id !== null) {
         <h2>📅 ダッシュボード</h2>
         <div style="font-size: 0.8rem; color: #777;">
             最終同期: <?php echo date('Y/m/d H:i'); ?>
-        <a href="<?php echo $authUrl; ?>" class="btn btn-primary">
-            Googleと同期する
-        </a>
+            <a href="<?php echo $authUrl; ?>" class="btn btn-primary">
+                Googleと同期する
+            </a>
         </div>
         <div>
             <div class="view-selector">
@@ -640,6 +658,43 @@ if ($latest_sender_id !== null) {
             </div>
         </div>
     </header>
+
+    <div class="unread-messages-section"
+        style="margin-top: 20px; border: 1px solid #ccc; padding: 15px; border-radius: 8px;">
+        <h3>新着メッセージ (
+            <?= count($unread_messages) ?>件)
+        </h3>
+
+        <?php if (empty($unread_messages)): ?>
+            <p style="color: #777; padding: 10px;">新しいメッセージはありません。</p>
+        <?php else: ?>
+            <ul style="list-style: none; padding: 0;">
+                <?php foreach ($unread_messages as $msg):
+                    // 1. 各変数を安全に取得（nullの場合は空文字またはデフォルト値をセット）
+                    $senderName = htmlspecialchars($msg['sender_name'] ?? '送信者不明', ENT_QUOTES, 'UTF-8');
+                    $content = $msg['content'] ?? '';
+                    // 2. mb_strimwidthに渡す前に空チェックを入れることでエラーを回避
+                    $shortContent = !empty($content) ? htmlspecialchars(mb_strimwidth($content, 0, 30, '...'), ENT_QUOTES, 'UTF-8') : '(内容なし)';
+                    $createdAt = isset($msg['created_at']) ? date('m/d H:i', strtotime($msg['created_at'])) : '--/--';
+                    $senderId = $msg['sender_id'] ?? '';
+                    ?>
+                    <li style="margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong style="display: block; font-size: 0.9rem;"><?= $senderName ?></strong>
+                                <span style="font-size: 0.85rem; color: #333;"><?= $shortContent ?></span>
+                            </div>
+                            <a href="index.php?page=chat&receiver_id=<?= $senderId ?>"
+                                style="font-size: 0.75rem; background: #007bff; color: #fff; padding: 4px 8px; border-radius: 4px; text-decoration: none;">
+                                チャットへ
+                            </a>
+                        </div>
+                        <small style="color: #999; font-size: 0.75rem;"><?= $createdAt ?></small>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
+        <?php endif; ?>
+    </div>
 
     <div class="dashboard-grid">
 

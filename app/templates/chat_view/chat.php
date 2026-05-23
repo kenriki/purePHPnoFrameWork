@@ -381,6 +381,39 @@ if (file_exists(__DIR__ . '/../layout/header.php')) {
                     placeholder="ユーザー名を入力...">
                 <button type="submit">検索</button>
             </form>
+            <div class="chat-list" style="width: 100%; max-width: 300px; border-right: 1px solid #ccc; padding: 10px;">
+                <h3>トーク一覧</h3>
+                <?php
+                $chat_list = $messageModel->getChatList($current_user_id);
+                foreach ($chat_list as $chat):
+                    $partner_id = ($chat['sender_id'] == $current_user_id) ? $chat['receiver_id'] : $chat['sender_id'];
+                    ?>
+                    <div style="display: flex; align-items: center; border-bottom: 1px solid #eee; padding: 5px 0;">
+                        <a href="index.php?page=chat&receiver_id=<?= $partner_id ?>"
+                            style="flex: 1; min-width: 0; text-decoration: none; color: #333; padding-right: 10px;">
+                            <div style="font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                <?= htmlspecialchars($chat['sender_name']) ?>
+                            </div>
+                            <div
+                                style="font-size: 0.8rem; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                <?= htmlspecialchars(mb_strimwidth($chat['message'], 0, 20, '...')) ?>
+                            </div>
+                            <small
+                                style="font-size: 0.7rem; color: #999;"><?= date('m/d H:i', strtotime($chat['created_at'])) ?></small>
+                        </a>
+
+                        <form action="index.php?page=chat" method="POST" onsubmit="return confirm('このトーク履歴を完全に削除しますか？');"
+                            style="margin: 0; flex-shrink: 0;">
+                            <input type="hidden" name="action" value="delete">
+                            <input type="hidden" name="partner_id" value="<?= $partner_id ?>">
+                            <button type="submit"
+                                style="background: none; border: none; cursor: pointer; color: #ff4d4d; font-size: 1.2rem; padding: 5px;">
+                                🗑️
+                            </button>
+                        </form>
+                    </div>
+                <?php endforeach; ?>
+            </div>
 
             <?php if ($search_results !== null): ?>
                 <ul class="result-list">

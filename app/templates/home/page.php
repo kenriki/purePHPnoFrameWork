@@ -659,19 +659,6 @@ if ($latest_sender_id !== null) {
                 <?php endif; ?>
             </div>
 
-            <div class="d-flex align-items-center mb-2">
-                <h5 class="mb-0">メインカレンダー</h5>
-                <!-- <span id="sync-status-badge"
-                    class="ms-3 badge <?php echo $isSynced ? 'bg-info text-dark' : 'bg-secondary'; ?>">
-                    <?php echo $isSynced ? '● DB保存済みの予定を表示中' : '● 同期データなし'; ?>
-                </span> -->
-                <?php if ($syncTime): ?>
-                    <small class="text-muted ms-2">(最終同期:
-                        <?php echo htmlspecialchars($syncTime); ?>)
-                    </small>
-                <?php endif; ?>
-            </div>
-
             <div id="main-calendar-container">
                 <div id="calendar-main"></div>
             </div>

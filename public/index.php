@@ -55,7 +55,50 @@ if (isset($_SESSION['user_id'])) {
 }
 
 /**
- * 4. Google認証・連携専用ルーティング
+ * =======================================================
+ * 【重要・パス解決版】既存の処理を壊さず、未読チャット件数を安全にカウント
+ * =======================================================
+ */
+$GLOBALS['unread_count'] = 0;
+if (isset($_SESSION['user_id'])) {
+    try {
+        $chat_pdo = getDB();
+
+        // 環境による階層の違いを吸収するため、2パターンのパスをチェックします
+        $path_option1 = __DIR__ . '/../app/models/Message.php';
+        $path_option2 = __DIR__ . '/../models/Message.php';
+        $resolved_path = null;
+
+        if (file_exists($path_option1)) {
+            $resolved_path = $path_option1;
+        } elseif (file_exists($path_option2)) {
+            $resolved_path = $path_option2;
+        }
+
+        // ファイルが正しく見つかった場合のみMessageモデルを生成
+        if ($chat_pdo instanceof PDO && $resolved_path !== null) {
+            require_once $resolved_path;
+            $messageModel = new Message($chat_pdo);
+            $GLOBALS['unread_count'] = $messageModel->getUnreadCount($_SESSION['user_id']);
+        } else {
+            error_log("Message.php class file could not be found in expected paths.");
+        }
+    } catch (Exception $e) {
+        error_log("Chat unread count failed: " . $e->getMessage());
+    }
+}
+
+/**
+ * 4. チャット画面専用のルーティング
+ */
+if ($page === 'chat') {
+    // チャット画面の表示・データ処理
+    include __DIR__ . '/../app/templates/chat_view/chat.php';
+    exit;
+}
+
+/**
+ * 5. Google認証・連携専用ルーティング
  * 連携ボタンから page=google_auth でアクセスされた場合
  */
 if ($page === 'google_auth') {
@@ -65,7 +108,7 @@ if ($page === 'google_auth') {
 }
 
 /**
- * 5. 共有メモ閲覧（ログイン不要）
+ * 6. 共有メモ閲覧（ログイン不要）
  */
 if ($page === 'view_share') {
     require_once __DIR__ . '/../app/controllers/MemoController.php';
@@ -75,7 +118,7 @@ if ($page === 'view_share') {
 }
 
 /**
- * 6. 共有URL生成処理
+ * 7. 共有URL生成処理
  */
 if ($page === 'generate_share_url') {
     require_once __DIR__ . '/../app/controllers/MemoController.php';
@@ -85,7 +128,7 @@ if ($page === 'generate_share_url') {
 }
 
 /**
- * 7. 合言葉（guest_name）のセッション保存処理
+ * 8. 合言葉（guest_name）のセッション保存処理
  */
 if ($page === 'memo' && $action === 'set_guest_name') {
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -96,7 +139,7 @@ if ($page === 'memo' && $action === 'set_guest_name') {
 }
 
 /**
- * 8. 特定のページ（memo）に対するカスタムルーティング
+ * 9. 特定のページ（memo）に対するカスタムルーティング
  */
 if ($page === 'memo') {
     $pageId = 'memo';
@@ -115,7 +158,7 @@ if ($page === 'memo') {
 }
 
 /**
- * 9. マイメモ一覧（memo_list）に対するカスタムルーティング
+ * 10. マイメモ一覧（memo_list）に対するカスタムルーティング
  */
 if ($page === 'memo_list') {
     require_once __DIR__ . '/../app/controllers/PageController.php';
@@ -172,7 +215,7 @@ if ($page === 'admin') {
 }
 
 /**
- * 10. 既存のルーティングの実行（HOMEなど）
+ * 11. 既存のルーティングの実行（HOMEなどのカレンダー表示はすべてここで安全に実行されます）
  */
 route($page);
 ?>

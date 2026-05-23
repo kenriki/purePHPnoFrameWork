@@ -74,6 +74,9 @@ if (!isset($page['dashboard'])) {
     ];
 }
 
+// コントローラー側から引き渡された未読件数（デフォルトは0）
+$unread_count = $unread_count ?? 0;
+
 // .env からクライアントIDを取得（環境に合わせてどちらかを使用）
 $clientId = $_ENV['GOOGLE_CLIENT_ID'] ?? getenv('GOOGLE_CLIENT_ID');
 $redirectUri = 'https://desktop-mnoqic1.tail7aa158.ts.net/index.php?page=google_callback';
@@ -109,6 +112,34 @@ $authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" . http_build_query([
 ]);
 ?>
 
+<?php
+// index.phpで取得した未読数
+$unread_count = $GLOBALS['unread_count'] ?? 0;
+$latest_sender_id = null;
+
+// 未読がある場合、自動的にその相手のIDを1件取得する
+if ($unread_count > 0 && isset($_SESSION['user_id'])) {
+    try {
+        $db = getDB();
+        $stmtSender = $db->prepare("SELECT sender_id FROM messages WHERE receiver_id = ? AND is_read = 0 ORDER BY created_at DESC LIMIT 1");
+        $stmtSender->execute([$_SESSION['user_id']]);
+        $rowSender = $stmtSender->fetch(PDO::FETCH_ASSOC);
+        if ($rowSender) {
+            $latest_sender_id = $rowSender['sender_id'];
+        }
+    } catch (Exception $e) {
+        error_log("Failed to get latest unread sender: " . $e->getMessage());
+    }
+}
+
+// リンク先のURLを動的に生成（相手のIDがあれば含める、無ければ通常のチャット画面）
+$chat_link_url = "index.php?page=chat";
+if ($latest_sender_id !== null) {
+    $chat_link_url .= "&receiver_id=" . $latest_sender_id;
+}
+?>
+
+
 <!-- 外部スクリプトの読み込み（CDN経由） -->
 <!-- 1. FullCalendar本体 -->
 <script src="/assets/js/fullcalendar@6.1.11/index.global.min.js"></script>
@@ -127,7 +158,7 @@ $authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" . http_build_query([
        全体レイアウト
     ========================================== */
     .dashboard-container {
-        padding: 20px;
+        padding: 5px;
         background: #fff;
         max-width: 1200px;
         margin: 0 auto;
@@ -499,6 +530,77 @@ $authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" . http_build_query([
         -webkit-user-select: all;
         /* iOS用 */
     }
+
+    /* 新着メッセージ通知バナーのスタイル */
+    .dashboard-notice-box {
+        margin-bottom: 25px;
+        padding: 15px 20px;
+        background-color: #fff3cd;
+        border: 1px solid #ffeeba;
+        border-radius: 6px;
+        color: #856404;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        animation: fadeIn 0.3s ease-in-out;
+    }
+
+    .notice-text {
+        font-size: 15px;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .notice-badge {
+        background-color: #dc3545;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 12px;
+    }
+
+    .notice-link {
+        background-color: #ffc107;
+        color: #212529;
+        text-decoration: none;
+        padding: 6px 14px;
+        border-radius: 4px;
+        font-size: 13px;
+        font-weight: bold;
+        transition: background 0.2s, transform 0.1s;
+    }
+
+    .notice-link:hover {
+        background-color: #e0a800;
+    }
+
+    .notice-link:active {
+        transform: scale(0.98);
+    }
+
+    /* メインコンテンツエリアの簡易レイアウト */
+    .dashboard-content {
+        background: #fff;
+        padding: 30px;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
 </style>
 <script>
     const GOOGLE_API_KEY = "<?php echo getenv('GOOGLE_CALENDAR_API_KEY'); ?>";
@@ -509,26 +611,40 @@ $authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" . http_build_query([
      ====================================================================================== -->
 <div class="dashboard-container">
 
+    <?php if ($unread_count > 0): ?>
+        <div class="dashboard-notice-box">
+            <div class="notice-text">
+                <span>✉️ 新着のチャットメッセージがあります。</span>
+                <span class="notice-badge">
+                    <?php echo (int) $unread_count; ?> 件未読
+                </span>
+            </div>
+            <a href="<?php echo $chat_link_url; ?>" style="display: inline-block; background: #ffc107; color: #212529; text-decoration: none; padding: 8px 16px; border-radius: 4px; font-weight: bold;">チャットを確認する</a>
+        </div>
+    <?php endif; ?>
+
     <header class="dashboard-header">
         <h2>📅 ダッシュボード</h2>
         <div style="font-size: 0.8rem; color: #777;">
             最終同期: <?php echo date('Y/m/d H:i'); ?>
-        </div>
         <a href="<?php echo $authUrl; ?>" class="btn btn-primary">
             Googleと同期する
         </a>
-    </header>
-
-    <div class="dashboard-grid">
-
-        <!-- 左：メインカレンダー -->
-        <div class="main-content">
+        </div>
+        <div>
             <div class="view-selector">
                 <button class="view-btn active" onclick="switchView('month')">月</button>
                 <button class="view-btn" onclick="switchView('week')">週</button>
                 <button class="view-btn" onclick="switchView('day')">日</button>
                 <button class="view-btn" onclick="switchView('year')">年 (12ヶ月)</button>
             </div>
+        </div>
+    </header>
+
+    <div class="dashboard-grid">
+
+        <!-- 左：メインカレンダー -->
+        <div class="main-content">
 
             <div class="d-flex align-items-center mb-2">
                 <h5 class="mb-0">メインカレンダー</h5>

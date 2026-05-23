@@ -143,16 +143,21 @@
             }
         ]
     },
-    "ai-tools-2": {
-        "title": "AI分析Free",
+    "chat": {
+        "title": "ユーザーチャット",
         "sections": [
             {
-                "type": "text",
-                "content": "AI分析します"
-            },
+                "type": "php",
+                "file": "chat_view/chat.php"
+            }
+        ]
+    },
+    "chat_view": {
+        "title": "ユーザーチャット",
+        "sections": [
             {
                 "type": "php",
-                "file": "ai-dashboard-2/page.php"
+                "file": "chat_view/page.php"
             }
         ]
     },
@@ -166,6 +171,19 @@
             {
                 "type": "php",
                 "file": "sample7.php"
+            }
+        ]
+    },
+    "ocr_handler_sample": {
+        "title": "ocr_handler_sampleのページ",
+        "sections": [
+            {
+                "type": "text",
+                "content": "サンプル検証"
+            },
+            {
+                "type": "php",
+                "file": "ocr_handler_sample/page.php"
             }
         ]
     },

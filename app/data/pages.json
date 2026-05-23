@@ -143,8 +143,21 @@
             }
         ]
     },
+    "ai-tools2": {
+        "title": "AI分析free",
+        "sections": [
+            {
+                "type": "text",
+                "content": "AI分析します"
+            },
+            {
+                "type": "php",
+                "file": "ai-dashboard-2/page.php"
+            }
+        ]
+    },
     "chat": {
-        "title": "ユーザーチャット",
+        "title": "chat",
         "sections": [
             {
                 "type": "php",

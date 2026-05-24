@@ -547,7 +547,7 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
                                             class="pin-link <?= $isPinned ? 'pin-active' : '' ?>" style="text-decoration: none;">
                                             <?= $isPinned ? '📌' : '📍' ?>
                                         </a>
-                                        <a href="index.php?page=memo&action=edit&id=<?= $memoId ?>" class="memo-title-link" 
+                                        <a href="index.php?page=memo&action=edit&id=<?= $memoId ?>" class="memo-title-link"
                                             style="color: #007bff; text-decoration: none; font-weight: bold; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                                             <?= $titleHtml ?>
                                         </a>
@@ -595,46 +595,32 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
 
 <script>
     /**
-     * Excelボタンが押された時だけ、formtargetとactionをセットして強制送信する
+     * Excelボタンの強制送信設定
      */
-
     const excelBtn = document.getElementById('excel-btn-trigger');
     if (excelBtn) {
         excelBtn.addEventListener('click', function () {
-            excelBtn.addEv
             const form = document.getElementById('memo-form');
-
-            // 現在の設定をバックアップ
             const originalAction = form.action;
             const originalTarget = form.target;
-
-            // Excel出力専用の設定を一時的にセット
             form.action = "index.php?page=memo&action=excel_download";
             form.target = "_blank";
-
-            // 既存のフォームにあるJSバリデーション等を無視して強制送信
-            // これにより、event.preventDefault() の影響を受けずにPHPへ飛びます
             HTMLFormElement.prototype.submit.call(form);
-
-            // 送信後、元の「保存用」の設定に戻しておく
             setTimeout(() => {
                 form.action = originalAction;
                 form.target = originalTarget;
             }, 500);
-        })
+        });
     }
 
     /**
-     * サーバー側の物理ファイルとDBレコード(image_path)を即座に削除する
+     * 画像削除処理
      */
     function deleteImageFromServer(memoId) {
         if (!memoId) return;
-        if (!confirm('画像をサーバーから完全に削除しますか？\n（この操作は取り消せません）')) return;
-
+        if (!confirm('画像をサーバーから完全に削除しますか？')) return;
         const formData = new FormData();
         formData.append('id', memoId);
-
-        // サーバーに削除リクエストを送信
         fetch('index.php?page=memo&action=delete_image', {
             method: 'POST',
             body: formData
@@ -642,501 +628,131 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
             .then(response => response.json())
             .then(data => {
                 if (data.status === 'success') {
-                    // 成功したら画面上の画像プレビューを非表示にする
                     const wrapper = document.getElementById('image-wrapper');
-                    if (wrapper) {
-                        wrapper.style.transition = 'opacity 0.3s';
-                        wrapper.style.opacity = '0';
-                        setTimeout(() => wrapper.remove(), 300);
-                    }
+                    if (wrapper) wrapper.remove();
                     alert('画像を削除しました。');
                 } else {
                     alert('削除に失敗しました: ' + (data.message || 'Unknown error'));
                 }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('通信エラーが発生しました。');
             });
     }
 
     document.addEventListener('DOMContentLoaded', function () {
-        console.log("JS Loaded"); // デバッグ用：コンソールにこれが出るか確認
+        console.log("JS Loaded");
 
-        const ua = navigator.userAgent.toLowerCase();
-        const isMobile = /iphone|ipad|ipod|android/.test(ua);
-        const isStandalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
-
-        // 「スマホ」かつ「ホーム画面から起動（PWA/スタンドアロン）」の場合のみ表示
-        if (isMobile && isStandalone) {
-            document.getElementById('download-warning').style.display = 'block';
-        }
-
+        // 要素の取得
+        const memoContent = document.getElementById('memo-content');
         const form = document.getElementById('memo-form');
         const saveBtn = document.getElementById('save-btn');
         const overlay = document.getElementById('upload-overlay');
         const overlayBar = document.getElementById('overlay-progress-bar');
         const fileInput = document.getElementById('file-input-gallery');
-        const cameraInput = document.getElementById('camera-input');
-		
-		
-		const memoContent = document.getElementById('memo-content');
-
-        // 画面を開いた時に未送信の下書きデータがあれば復元
-        const savedDraft = localStorage.getItem('draft_memo');
-        if (savedDraft && !memoContent.value) { // ← ここで!memoContent.value判定があるため、PHP側で初期読み込みされた文字があると復元されない場合がありました
-            memoContent.value = savedDraft;
-            alert("未保存の内容が見つかりました。ページ下部にある「保存」をクリックしましょう。");
-        }
-
-        // ─── 検索窓 ───
+        const cameraInput = document.getElementById('file-input'); // 修正: idを合わせました
         const searchInput = document.getElementById('memo-search');
         const listBody = document.getElementById('memo-list-body');
+        const aiScanInput = document.getElementById('ai-scan-input');
 
+        // 1. PWA警告表示
+        const ua = navigator.userAgent.toLowerCase();
+        const isMobile = /iphone|ipad|ipod|android/.test(ua);
+        const isStandalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
+        if (isMobile && isStandalone && document.getElementById('download-warning')) {
+            document.getElementById('download-warning').style.display = 'block';
+        }
+
+        // 2. 下書き復元
+        const savedDraft = localStorage.getItem('draft_memo');
+        if (savedDraft && memoContent && !memoContent.value) {
+            memoContent.value = savedDraft;
+        }
+
+        // 3. 検索窓の処理
         if (searchInput && listBody) {
-            const rows = listBody.querySelectorAll('tr:not(#no-memos-row)');
-
+            const rows = listBody.querySelectorAll('tr');
             searchInput.addEventListener('input', function (e) {
                 const query = e.target.value.toLowerCase().trim();
                 let visibleCount = 0;
-
                 rows.forEach(row => {
                     const titleLink = row.querySelector('.memo-title-link');
                     const text = titleLink ? titleLink.textContent.toLowerCase() : '';
-
                     if (text.includes(query)) {
-                        row.style.display = ''; // 一致したら表示
+                        row.style.display = '';
                         visibleCount++;
                     } else {
-                        row.style.display = 'none'; // 一致しなければ非表示
+                        row.style.display = 'none';
                     }
                 });
-
-                // 検索結果が0件の時のメッセージ制御
-                let noResultRow = document.getElementById('dynamic-no-results');
-                if (visibleCount === 0) {
-                    if (!noResultRow) {
-                        noResultRow = document.createElement('tr');
-                        noResultRow.id = 'dynamic-no-results';
-                        noResultRow.innerHTML = `<td colspan="2" style="text-align:center; color:#999; padding:40px;">該当するメモが見つかりません。</td>`;
-                        listBody.appendChild(noResultRow);
-                    }
-                } else {
-                    if (noResultRow) {
-                        noResultRow.remove();
-                    }
-                }
             });
         }
-        // 検索窓ここまで
 
-        const memoContent = document.getElementById('memo-content');
-
-        // 画面を開いた時に未送信の下書きデータがあれば復元
-        const savedDraft = localStorage.getItem('draft_memo');
-        if (savedDraft && !memoContent.value) { // ← ここで!memoContent.value判定があるため、PHP側で初期読み込みされた文字があると復元されない場合がありました
-            memoContent.value = savedDraft;
-            // alert("未保存の内容が見つかりました。ページ下部にある「保存」をクリックしましょう。");
-        }
-
-        // ─── 検索窓 ───
-        const searchInput = document.getElementById('memo-search');
-        const listBody = document.getElementById('memo-list-body');
-
-        if (searchInput && listBody) {
-            const rows = listBody.querySelectorAll('tr:not(#no-memos-row)');
-
-            searchInput.addEventListener('input', function (e) {
-                const query = e.target.value.toLowerCase().trim();
-                let visibleCount = 0;
-
-                rows.forEach(row => {
-                    const titleLink = row.querySelector('.memo-title-link');
-                    const text = titleLink ? titleLink.textContent.toLowerCase() : '';
-
-                    if (text.includes(query)) {
-                        row.style.display = ''; // 一致したら表示
-                        visibleCount++;
-                    } else {
-                        row.style.display = 'none'; // 一致しなければ非表示
-                    }
-                });
-
-                // 検索結果が0件の時のメッセージ制御
-                let noResultRow = document.getElementById('dynamic-no-results');
-                if (visibleCount === 0) {
-                    if (!noResultRow) {
-                        noResultRow = document.createElement('tr');
-                        noResultRow.id = 'dynamic-no-results';
-                        noResultRow.innerHTML = `<td colspan="2" style="text-align:center; color:#999; padding:40px;">該当するメモが見つかりません。</td>`;
-                        listBody.appendChild(noResultRow);
-                    }
-                } else {
-                    if (noResultRow) {
-                        noResultRow.remove();
-                    }
-                }
+        // 4. 内容変更時に保存
+        if (memoContent) {
+            memoContent.addEventListener('input', function (e) {
+                localStorage.setItem('draft_memo', e.target.value);
             });
         }
-        // 検索窓ここまで
 
-        const memoContent = document.getElementById('memo-content');
-
-        // 画面を開いた時に未送信の下書きデータがあれば復元
-        const savedDraft = localStorage.getItem('draft_memo');
-        if (savedDraft && !memoContent.value) { // ← ここで!memoContent.value判定があるため、PHP側で初期読み込みされた文字があると復元されない場合がありました
-            memoContent.value = savedDraft;
-            // alert("未保存の内容が見つかりました。ページ下部にある「保存」をクリックしましょう。");
-        }
-
-        // ─── 検索窓 ───
-        const searchInput = document.getElementById('memo-search');
-        const listBody = document.getElementById('memo-list-body');
-
-        if (searchInput && listBody) {
-            const rows = listBody.querySelectorAll('tr:not(#no-memos-row)');
-
-            searchInput.addEventListener('input', function (e) {
-                const query = e.target.value.toLowerCase().trim();
-                let visibleCount = 0;
-
-                rows.forEach(row => {
-                    const titleLink = row.querySelector('.memo-title-link');
-                    const text = titleLink ? titleLink.textContent.toLowerCase() : '';
-
-                    if (text.includes(query)) {
-                        row.style.display = ''; // 一致したら表示
-                        visibleCount++;
-                    } else {
-                        row.style.display = 'none'; // 一致しなければ非表示
-                    }
-                });
-
-                // 検索結果が0件の時のメッセージ制御
-                let noResultRow = document.getElementById('dynamic-no-results');
-                if (visibleCount === 0) {
-                    if (!noResultRow) {
-                        noResultRow = document.createElement('tr');
-                        noResultRow.id = 'dynamic-no-results';
-                        noResultRow.innerHTML = `<td colspan="2" style="text-align:center; color:#999; padding:40px;">該当するメモが見つかりません。</td>`;
-                        listBody.appendChild(noResultRow);
-                    }
-                } else {
-                    if (noResultRow) {
-                        noResultRow.remove();
-                    }
-                }
-            });
-        }
-        // 検索窓ここまで
-
-        const memoContent = document.getElementById('memo-content');
-
-        // 画面を開いた時に未送信の下書きデータがあれば復元
-        const savedDraft = localStorage.getItem('draft_memo');
-        if (savedDraft && !memoContent.value) { // ← ここで!memoContent.value判定があるため、PHP側で初期読み込みされた文字があると復元されない場合がありました
-            memoContent.value = savedDraft;
-            // alert("未保存の内容が見つかりました。ページ下部にある「保存」をクリックしましょう。");
-        }
-
-        // ─── 検索窓 ───
-        const searchInput = document.getElementById('memo-search');
-        const listBody = document.getElementById('memo-list-body');
-
-        if (searchInput && listBody) {
-            const rows = listBody.querySelectorAll('tr:not(#no-memos-row)');
-
-            searchInput.addEventListener('input', function (e) {
-                const query = e.target.value.toLowerCase().trim();
-                let visibleCount = 0;
-
-                rows.forEach(row => {
-                    const titleLink = row.querySelector('.memo-title-link');
-                    const text = titleLink ? titleLink.textContent.toLowerCase() : '';
-
-                    if (text.includes(query)) {
-                        row.style.display = ''; // 一致したら表示
-                        visibleCount++;
-                    } else {
-                        row.style.display = 'none'; // 一致しなければ非表示
-                    }
-                });
-
-                // 検索結果が0件の時のメッセージ制御
-                let noResultRow = document.getElementById('dynamic-no-results');
-                if (visibleCount === 0) {
-                    if (!noResultRow) {
-                        noResultRow = document.createElement('tr');
-                        noResultRow.id = 'dynamic-no-results';
-                        noResultRow.innerHTML = `<td colspan="2" style="text-align:center; color:#999; padding:40px;">該当するメモが見つかりません。</td>`;
-                        listBody.appendChild(noResultRow);
-                    }
-                } else {
-                    if (noResultRow) {
-                        noResultRow.remove();
-                    }
-                }
-            });
-        }
-        // 検索窓ここまで
-
-        const memoContent = document.getElementById('memo-content');
-
-        // 画面を開いた時に未送信の下書きデータがあれば復元
-        const savedDraft = localStorage.getItem('draft_memo');
-        if (savedDraft && !memoContent.value) { // ← ここで!memoContent.value判定があるため、PHP側で初期読み込みされた文字があると復元されない場合がありました
-            memoContent.value = savedDraft;
-            // alert("未保存の内容が見つかりました。ページ下部にある「保存」をクリックしましょう。");
-        }
-
-        // ─── 検索窓 ───
-        const searchInput = document.getElementById('memo-search');
-        const listBody = document.getElementById('memo-list-body');
-
-        if (searchInput && listBody) {
-            const rows = listBody.querySelectorAll('tr:not(#no-memos-row)');
-
-            searchInput.addEventListener('input', function (e) {
-                const query = e.target.value.toLowerCase().trim();
-                let visibleCount = 0;
-
-                rows.forEach(row => {
-                    const titleLink = row.querySelector('.memo-title-link');
-                    const text = titleLink ? titleLink.textContent.toLowerCase() : '';
-
-                    if (text.includes(query)) {
-                        row.style.display = ''; // 一致したら表示
-                        visibleCount++;
-                    } else {
-                        row.style.display = 'none'; // 一致しなければ非表示
-                    }
-                });
-
-                // 検索結果が0件の時のメッセージ制御
-                let noResultRow = document.getElementById('dynamic-no-results');
-                if (visibleCount === 0) {
-                    if (!noResultRow) {
-                        noResultRow = document.createElement('tr');
-                        noResultRow.id = 'dynamic-no-results';
-                        noResultRow.innerHTML = `<td colspan="2" style="text-align:center; color:#999; padding:40px;">該当するメモが見つかりません。</td>`;
-                        listBody.appendChild(noResultRow);
-                    }
-                } else {
-                    if (noResultRow) {
-                        noResultRow.remove();
-                    }
-                }
-            });
-        }
-        // 検索窓ここまで
-
-        const memoContent = document.getElementById('memo-content');
-
-        // 画面を開いた時に未送信の下書きデータがあれば復元
-        const savedDraft = localStorage.getItem('draft_memo');
-        if (savedDraft && !memoContent.value) { // ← ここで!memoContent.value判定があるため、PHP側で初期読み込みされた文字があると復元されない場合がありました
-            memoContent.value = savedDraft;
-            // alert("未保存の内容が見つかりました。ページ下部にある「保存」をクリックしましょう。");
-        }
-
-        // ─── 検索窓 ───
-        const searchInput = document.getElementById('memo-search');
-        const listBody = document.getElementById('memo-list-body');
-
-        if (searchInput && listBody) {
-            const rows = listBody.querySelectorAll('tr:not(#no-memos-row)');
-
-            searchInput.addEventListener('input', function (e) {
-                const query = e.target.value.toLowerCase().trim();
-                let visibleCount = 0;
-
-                rows.forEach(row => {
-                    const titleLink = row.querySelector('.memo-title-link');
-                    const text = titleLink ? titleLink.textContent.toLowerCase() : '';
-
-                    if (text.includes(query)) {
-                        row.style.display = ''; // 一致したら表示
-                        visibleCount++;
-                    } else {
-                        row.style.display = 'none'; // 一致しなければ非表示
-                    }
-                });
-
-                // 検索結果が0件の時のメッセージ制御
-                let noResultRow = document.getElementById('dynamic-no-results');
-                if (visibleCount === 0) {
-                    if (!noResultRow) {
-                        noResultRow = document.createElement('tr');
-                        noResultRow.id = 'dynamic-no-results';
-                        noResultRow.innerHTML = `<td colspan="2" style="text-align:center; color:#999; padding:40px;">該当するメモが見つかりません。</td>`;
-                        listBody.appendChild(noResultRow);
-                    }
-                } else {
-                    if (noResultRow) {
-                        noResultRow.remove();
-                    }
-                }
-            });
-        }
-        // 検索窓ここまで
-
-        const memoContent = document.getElementById('memo-content');
-
-        // 画面を開いた時に未送信の下書きデータがあれば復元
-        const savedDraft = localStorage.getItem('draft_memo');
-        if (savedDraft && !memoContent.value) { // ← ここで!memoContent.value判定があるため、PHP側で初期読み込みされた文字があると復元されない場合がありました
-            memoContent.value = savedDraft;
-            // alert("未保存の内容が見つかりました。ページ下部にある「保存」をクリックしましょう。");
-        }
-
-        // 1. ファイルバリデーション (PNGのみ)
-        // if (fileInput) {
-        //     fileInput.addEventListener('change', function(e) {
-        //         const file = e.target.files[0];
-        //         if (!file) return;
-
-        //         const isPng = file.type === 'image/png';
-        //         const isPngExt = file.name.toLowerCase().endsWith('.png');
-
-        //         if (!isPng || !isPngExt) {
-        //             alert("申し訳ありませんが、現在はJPGやGIF形式には対応しておりません。\nスクリーンショット（PNG形式）の画像を選択してください。");
-        //             this.value = ""; 
-        //         }
-        //     });
-        // }
-
-        // 2. フォーム送信時のプログレスバー
+        // 5. フォーム送信処理
         if (form && saveBtn) {
             form.addEventListener('submit', async function (e) {
-                // PDF出力・削除時は無視
-                if (e.submitter && (e.submitter.name === 'pdf_export' || e.submitter.name === 'delete')) {
-                    return;
-                }
-
-                e.preventDefault(); // fetchを使うため、デフォルトの送信を止める
-
-                console.log("Submit start");
-
-                // --- 1. UIの初期化（二重宣言を削除） ---
+                if (e.submitter && (e.submitter.name === 'pdf_export' || e.submitter.name === 'delete')) return;
+                e.preventDefault();
                 overlay.style.display = 'flex';
                 saveBtn.disabled = true;
 
                 let p = 0;
-                const interval = setInterval(() => {
-                    if (p < 90) p += 5;
-                    if (overlayBar) overlayBar.style.width = p + '%';
-                }, 100);
-
+                const interval = setInterval(() => { if (p < 90) p += 5; if (overlayBar) overlayBar.style.width = p + '%'; }, 100);
                 const formData = new FormData(form);
 
-                // --- 2. 画像のリサイズ処理 ---
-                if (
-                    (fileInput && fileInput.files.length > 0) ||
-                    (cameraInput && cameraInput.files.length > 0)
-                ) {
+                if ((fileInput?.files?.length > 0) || (cameraInput?.files?.length > 0)) {
                     const file = (fileInput?.files?.[0]) || (cameraInput?.files?.[0]);
                     if (file.type.startsWith('image/')) {
                         try {
-                            // ここで待機（await）
                             const resizedImageBlob = await resizeImage(file, 1200, 1200);
-                            // PHP側の $_FILES['memo_image'] で受け取れるようにセット
                             formData.set('memo_image', resizedImageBlob, 'resized_image.png');
-                            console.log('Resized success');
-                        } catch (err) {
-                            console.error('Resize error:', err);
-                        }
+                        } catch (err) { console.error(err); }
                     }
                 }
 
-                // --- 3. 非同期で送信 ---
-                fetch(form.action, {
-                    method: 'POST',
-                    body: formData
-                })
-                    .then(async response => {
-                        if (!response.ok) throw new Error('Network response was not ok');
-
-                        // 1. バーを100%にする
+                fetch(form.action, { method: 'POST', body: formData })
+                    .then(() => {
                         clearInterval(interval);
                         if (overlayBar) overlayBar.style.width = '100%';
-
-                        // 2. ★ここを修正：オーバーレイのテキストを書き換える
-                        const loadingText = overlay.querySelector('div:nth-child(2)');
-                        if (loadingText) {
-                            loadingText.innerText = '保存完了しました！';
-                            loadingText.style.color = '#28a745'; // 緑色にして成功感を出す
-                            loadingText.style.fontWeight = 'bold';
-                            // 保存ボタン（送信）を押したらローカルのデータを削除
-                            localStorage.removeItem('draft_memo');
-                        }
-
-                        // 3. 0.8秒だけ待ってからリロード
-                        setTimeout(() => {
-                            location.reload();
-                        }, 800);
-                    })
+                        localStorage.removeItem('draft_memo');
+                        setTimeout(() => location.reload(), 800);
+                    });
             });
         }
 
-        /**
-         * canvasを使用して画像をリサイズする関数
-         */
+        // 7. 画像リサイズ & モーダル処理
         function resizeImage(file, maxWidth, maxHeight) {
-            return new Promise((resolve, reject) => {
+            return new Promise((resolve) => {
                 const reader = new FileReader();
                 reader.readAsDataURL(file);
                 reader.onload = function (event) {
                     const img = new Image();
                     img.src = event.target.result;
                     img.onload = function () {
-                        let width = img.width;
-                        let height = img.height;
-
-                        // アスペクト比を維持してサイズ計算
-                        if (width > height) {
-                            if (width > maxWidth) {
-                                height *= maxWidth / width;
-                                width = maxWidth;
-                            }
-                        } else {
-                            if (height > maxHeight) {
-                                width *= maxHeight / height;
-                                height = maxHeight;
-                            }
-                        }
-
+                        let w = img.width, h = img.height;
+                        if (w > h) { if (w > maxWidth) { h *= maxWidth / w; w = maxWidth; } }
+                        else { if (h > maxHeight) { w *= maxHeight / h; h = maxHeight; } }
                         const canvas = document.createElement('canvas');
-                        canvas.width = width;
-                        canvas.height = height;
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(img, 0, 0, width, height);
-
-                        // PNG形式でBlobに変換（WebPに変換して送ることも可能）
-                        canvas.toBlob((blob) => {
-                            resolve(blob);
-                        }, 'image/png', 0.8);
+                        canvas.width = w; canvas.height = h;
+                        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                        canvas.toBlob(resolve, 'image/png', 0.8);
                     };
                 };
-                reader.onerror = error => reject(error);
             });
         }
 
-        // 3. モーダル拡大処理 (ここから file 関連の記述を完全に排除)
         const modal = document.getElementById('imageModal');
-        const fullImg = document.getElementById('imgFull');
-
         document.querySelectorAll('.memo-image').forEach(img => {
             img.addEventListener('click', function () {
-                if (fullImg && modal) {
-                    fullImg.src = this.src;
-                    modal.style.display = 'flex';
-                }
+                document.getElementById('imgFull').src = this.src;
+                modal.style.display = 'flex';
             });
         });
-
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && modal) modal.style.display = 'none';
-        });
+        window.addEventListener('keydown', (e) => { if (e.key === 'Escape') modal.style.display = 'none'; });
     });
 </script>
 <script>
@@ -1150,6 +766,7 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
             });
         }
 
+        // 6. AIスキャン処理
         if (aiScanInput && memoContent) {
             aiScanInput.addEventListener('change', async function (e) {
                 const file = e.target.files[0];

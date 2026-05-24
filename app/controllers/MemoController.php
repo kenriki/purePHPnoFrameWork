@@ -477,7 +477,7 @@ class MemoController
             // もし「去年まで遡って一気に取得したい」場合は以下のように固定も可能
             $start = date('Y-01-01', strtotime('-10 year'));
             $end = date('Y-12-31', strtotime('+10 year'));
-            
+
             // 2. GoogleCalendarSyncのインスタンス化とデータ取得
             $sync = new GoogleCalendarSync($db);
             $googleEvents = $sync->getEventsForFullCalendar($username, $start, $end);
@@ -591,6 +591,9 @@ class MemoController
         while (ob_get_level())
             ob_end_clean();
 
+        // PDF生成中に発生する可能性のある軽微なWarningをキャッチするためにバッファ開始
+        ob_start();
+
         require_once 'C:\\Apache24\\htdocs\\sample\\public\\tfpdf.php';
 
         $pdf = new tFPDF();
@@ -607,6 +610,7 @@ class MemoController
         // 本文出力
         $pdf->MultiCell(0, 6, $content . ($guestName ? "\n\n---\n署名: $guestName" : ""));
 
+        // 画像処理 
         if (!empty($imagePath)) {
             $owner = $username ?: 'guest';
             $safeFolder = preg_match('/^[a-zA-Z0-9\._-]+$/', $owner) ? $owner : 'u_' . substr(md5($owner), 0, 12);
@@ -676,20 +680,27 @@ class MemoController
         // PDFデータの生成
         $pdfData = $pdf->Output('S');
 
-        // 出力前に、もし何か（警告など）が出てしまっていたらクリアする
+        // 出力直前にバッファに溜まったゴミ（Warning等）があれば全て捨てる
         if (ob_get_length())
             ob_clean();
 
+        // PWA/モバイル向けに最適化されたヘッダー送出
+        $filename = "memo_" . date('YmdHis') . ".pdf";
         header('Content-Type: application/pdf');
         header("Content-Disposition: attachment; filename=memo_" . date('YmdHis') . ".pdf");
         header('Content-Length: ' . strlen($pdfData)); // ファイルサイズを指定するとより確実です
+        header('Cache-Control: private, max-age=0, must-revalidate');
+        header('Pragma: public');
+        header('Expires: 0');
 
+        // バイナリデータのみを純粋に出力
         echo $pdfData;
 
         // 出力後に一時ファイルを削除
         if (isset($tempFileToDelete) && file_exists($tempFileToDelete)) {
             unlink($tempFileToDelete);
         }
+        // 他のコードが実行されないよう即座に終了
         exit;
     }
 
@@ -969,9 +980,22 @@ class MemoController
      */
     private function executePdfDownload($token)
     {
-        // 重要：出力バッファをクリアして、WarningがPDFに混じらないようにする
-        if (ob_get_length())
-            ob_clean();
+        if (empty($token)) {
+            // 既存のログインチェックを強化
+            $username = $_SESSION['user'] ?? null;
+            if (!$username) {
+                header('HTTP/1.1 401 Unauthorized');
+                die("セッションが切れています。再度ログインしてください。");
+            }
+        }
+
+        // 強力なバッファクリア
+        // 二重三重にかかっているバッファをすべて破棄し、PDFデータの先頭を汚さないようにします
+        while (ob_get_level()) {
+            ob_end_clean();
+        }
+        // 新しくバッファを開始
+        ob_start();
 
         $db = getDB();
         $sql = "SELECT * FROM user_memos WHERE share_token = ? AND share_expires_at > NOW()";
@@ -998,6 +1022,15 @@ class MemoController
             'image_path' => $fullImagePath,
             'created_at' => $memo['created_at'] ?? date('Y-m-d H:i:s')
         ];
+
+        // ダウンロード用ヘッダーの先行送出
+        // PWA(standalone)では、このヘッダーが「保存」をトリガーする重要な鍵になります
+        $downloadFileName = "memo_" . date('Ymd_His') . ".pdf";
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: attachment; filename="' . $downloadFileName . '"');
+        header('Cache-Control: no-cache, no-store, must-revalidate');
+        header('Pragma: no-cache');
+        header('Expires: 0');
 
         // PDF生成。ここで header() が送出されます。
         $this->generatePdf(
@@ -1285,7 +1318,9 @@ class MemoController
         // 1. PHPのエラー表示とバッファを完全に黙らせる
         error_reporting(0);
         ini_set('display_errors', 0);
-        while (ob_get_level()) { ob_end_clean(); }
+        while (ob_get_level()) {
+            ob_end_clean();
+        }
 
         // 2. 一時ファイルのパス設定
         $tmp_dir = sys_get_temp_dir();
@@ -1306,10 +1341,11 @@ class MemoController
         // 4. Python実行（保存先パスを第2引数として渡す）
         $python_path = '"C:\Program Files\Python314\python.exe"';
         $script_path = realpath(__DIR__ . "/../scripts/python_excel_gen.py");
-        $command = sprintf('%s %s %s %s 2>&1', 
-            $python_path, 
-            escapeshellarg($script_path), 
-            escapeshellarg($tmp_json), 
+        $command = sprintf(
+            '%s %s %s %s 2>&1',
+            $python_path,
+            escapeshellarg($script_path),
+            escapeshellarg($tmp_json),
             escapeshellarg($tmp_excel)
         );
 
@@ -1328,7 +1364,7 @@ class MemoController
 
             // ファイルを直接読み込んで出力（メモリ節約とゴミ混入防止）
             readfile($tmp_excel);
-            
+
             // 後片付け
             @unlink($tmp_json);
             @unlink($tmp_excel);

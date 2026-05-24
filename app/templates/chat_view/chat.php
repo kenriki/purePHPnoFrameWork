@@ -96,15 +96,6 @@ $messages = $messageModel->getChatHistory($current_user_id, $receiver_id);
 //     }
 // }
 // 1. メッセージ送信処理 (POST)
-// if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['message'])) {
-//     $msg_text = trim($_POST['message']);
-//     if ($msg_text !== '' && $receiver_id) {
-//         $messageModel->sendMessage($current_user_id, $receiver_id, $msg_text);
-//         header("Location: index.php?page=chat&receiver_id=" . $receiver_id);
-//         exit;
-//     }
-// }
-// 1. メッセージ送信処理 (POST)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['message'])) {
     $msg_text = trim($_POST['message']);
     if ($msg_text !== '' && $receiver_id) {

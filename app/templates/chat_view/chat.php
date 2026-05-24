@@ -26,6 +26,15 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
+// // --- デバッグ用：POSTの有無をチェック ---
+// if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+//     echo "POSTデータが届いています:<br>";
+//     var_dump($_POST);
+//     echo "<br>---------------------<br>";
+//     // ここで一旦処理を止めて中身を確認する
+//     exit; 
+// }
+
 $current_user_id = $_SESSION['user_id'];
 $receiver_id = isset($_GET['receiver_id']) && $_GET['receiver_id'] !== '' ? (int) $_GET['receiver_id'] : null;
 
@@ -36,26 +45,46 @@ $messageModel = new Message($pdo);
 // =======================================================
 // chat.php 上部の削除処理（action=delete）
 // 削除処理ブロック
+$messageModel = new Message($pdo);
+
+// =======================================================
+// 1. 削除処理 (POST時)
+// =======================================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete') {
     $partner_id = isset($_POST['partner_id']) ? (int) $_POST['partner_id'] : null;
     $message_id = isset($_POST['message_id']) ? (int) $_POST['message_id'] : null;
 
     if ($message_id) {
-        $stmt = $pdo->prepare("UPDATE messages SET deleted_by_user_id = :my_id 
-                               WHERE id = :id AND (sender_id = :my_id OR receiver_id = :my_id)");
-        $stmt->execute([':my_id' => $current_user_id, ':id' => $message_id]);
+        // 条件を極限までシンプルにする（IDだけで更新）
+        $stmt = $pdo->prepare("UPDATE messages SET deleted_by_user_id = :my_id WHERE id = :id");
+        $result = $stmt->execute([':my_id' => $current_user_id, ':id' => $message_id]);
+
+        // 実際に更新されたか確認
+        if ($stmt->rowCount() === 0) {
+            error_log("更新対象なし: ID " . $message_id);
+        }
+
+        header("Location: index.php?page=chat&receiver_id=" . $receiver_id . "&deleted=1");
+        exit;
     } elseif ($partner_id) {
         $stmt = $pdo->prepare("UPDATE messages SET deleted_by_user_id = :my_id 
-                               WHERE (sender_id = :my_id AND receiver_id = :partner_id) 
-                                  OR (sender_id = :partner_id AND receiver_id = :my_id)");
+                                WHERE (sender_id = :my_id AND receiver_id = :partner_id) 
+                                   OR (sender_id = :partner_id AND receiver_id = :my_id)");
         $stmt->execute([':my_id' => $current_user_id, ':partner_id' => $partner_id]);
-    }
 
-    // 【修正】削除した場合は復旧させないため、receiver_id を含めずにリダイレクトする
-    // または、削除時は別のフラグを立てて「復旧処理をスキップ」させる必要があります
-    header("Location: index.php?page=chat");
-    exit;
+        header("Location: index.php?page=chat&deleted=1");
+        exit;
+    }
 }
+
+// 既読・復旧処理 (GET時)
+// 【重要】削除直後 (URLに deleted=1 がある時) は、絶対に既読化（復旧）処理をスキップする
+if ($receiver_id && !isset($_GET['deleted'])) {
+    $messageModel->markAsRead($receiver_id, $current_user_id);
+}
+
+// メッセージ履歴取得
+$messages = $messageModel->getChatHistory($current_user_id, $receiver_id);
 
 // 1. メッセージ送信処理 (POST)
 // if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['message'])) {
@@ -571,7 +600,7 @@ if (file_exists(__DIR__ . '/../layout/header.php')) {
 
     // 【追加】削除前の確認ダイアログ
     function confirmDelete() {
-        return confirm("このメッセージを削除してもよろしいですか？\n(送信相手の画面からも消去されます)");
+        return confirm("このメッセージを自分の画面から削除しますか？\n(送信相手の画面には残り続けます)");
     }
 </script>
 

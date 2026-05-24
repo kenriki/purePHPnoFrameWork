@@ -34,30 +34,60 @@ $messageModel = new Message($pdo);
 // =======================================================
 // 【追加】新機能：メッセージ削除処理 (POST / action=delete)
 // =======================================================
+// chat.php 上部の削除処理（action=delete）
+// 削除処理ブロック
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete') {
-    $delete_msg_id = isset($_POST['message_id']) ? (int) $_POST['message_id'] : null;
+    $partner_id = isset($_POST['partner_id']) ? (int) $_POST['partner_id'] : null;
+    $message_id = isset($_POST['message_id']) ? (int) $_POST['message_id'] : null;
 
-    if ($delete_msg_id) {
-        try {
-            // 不正な削除（他人のメッセージを消すなど）を防ぐため、送信者が自分であるレコードのみ削除
-            $stmtDel = $pdo->prepare("DELETE FROM messages WHERE id = ? AND sender_id = ?");
-            $stmtDel->execute([$delete_msg_id, $current_user_id]);
-        } catch (Exception $e) {
-            error_log("Failed to delete message: " . $e->getMessage());
-        }
-
-        // 削除後に画面をきれいに再読み込み
-        $redirect_url = "index.php?page=chat" . ($receiver_id ? "&receiver_id=" . $receiver_id : "");
-        header("Location: " . $redirect_url);
-        exit;
+    if ($message_id) {
+        $stmt = $pdo->prepare("UPDATE messages SET deleted_by_user_id = :my_id 
+                               WHERE id = :id AND (sender_id = :my_id OR receiver_id = :my_id)");
+        $stmt->execute([':my_id' => $current_user_id, ':id' => $message_id]);
+    } elseif ($partner_id) {
+        $stmt = $pdo->prepare("UPDATE messages SET deleted_by_user_id = :my_id 
+                               WHERE (sender_id = :my_id AND receiver_id = :partner_id) 
+                                  OR (sender_id = :partner_id AND receiver_id = :my_id)");
+        $stmt->execute([':my_id' => $current_user_id, ':partner_id' => $partner_id]);
     }
+
+    // 【修正】削除した場合は復旧させないため、receiver_id を含めずにリダイレクトする
+    // または、削除時は別のフラグを立てて「復旧処理をスキップ」させる必要があります
+    header("Location: index.php?page=chat");
+    exit;
 }
 
+// 1. メッセージ送信処理 (POST)
+// if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['message'])) {
+//     $msg_text = trim($_POST['message']);
+//     if ($msg_text !== '' && $receiver_id) {
+//         $messageModel->sendMessage($current_user_id, $receiver_id, $msg_text);
+//         header("Location: index.php?page=chat&receiver_id=" . $receiver_id);
+//         exit;
+//     }
+// }
 // 1. メッセージ送信処理 (POST)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['message'])) {
     $msg_text = trim($_POST['message']);
     if ($msg_text !== '' && $receiver_id) {
         $messageModel->sendMessage($current_user_id, $receiver_id, $msg_text);
+
+        // 相手のメールアドレスを取得
+        $stmtEmail = $pdo->prepare("SELECT email FROM users WHERE id = :id");
+        $stmtEmail->execute([':id' => $receiver_id]);
+        $receiver_email = $stmtEmail->fetchColumn();
+
+        // MailUtil を使用した通知メール送信
+        if ($receiver_email) {
+            $subject = "新しいメッセージが届いています";
+            $body = "システムに新しいメッセージが届きました。\n\n"
+                . "以下のリンクからログインして確認してください。\n"
+                . "http://{$_SERVER['HTTP_HOST']}/index.php?page=chat&receiver_id=" . $current_user_id;
+
+            // AuthController.php と同様の形式で MailUtil を呼び出す
+            MailUtil::sendMail($receiver_email, $subject, $body);
+        }
+
         header("Location: index.php?page=chat&receiver_id=" . $receiver_id);
         exit;
     }
@@ -74,19 +104,44 @@ try {
     $user_column = 'username';
 }
 
+// if ($receiver_id) {
+//     // 【重要】自分が受信者(current_user_id)で、相手(receiver_id)から届いた未読メッセージを既読にする
+//     $messageModel->markAsRead($receiver_id, $current_user_id);
+
+//     // 履歴を取得
+//     $messages = $messageModel->getChatHistory($current_user_id, $receiver_id);
+
+//     // 相手のユーザー情報を取得
+//     $stmtUser = $pdo->prepare("SELECT id, {$user_column} AS name FROM users WHERE id = :id");
+//     $stmtUser->execute([':id' => $receiver_id]);
+//     $receiver = $stmtUser->fetch(PDO::FETCH_ASSOC);
+// }
 if ($receiver_id) {
-    // 【重要】自分が受信者(current_user_id)で、相手(receiver_id)から届いた未読メッセージを既読にする
+    // 【重要】復旧処理の条件付け
+    // 検索窓から来た場合（URLに search_name がある場合）のみ、自動復旧を実行する
+    if (isset($_GET['search_name']) && $_GET['search_name'] !== '') {
+        $stmtRestore = $pdo->prepare("UPDATE messages 
+                                      SET deleted_by_user_id = NULL 
+                                      WHERE ((sender_id = :my_id AND receiver_id = :receiver_id)
+                                         OR (sender_id = :receiver_id AND receiver_id = :my_id))
+                                      AND deleted_by_user_id = :my_id"); // 自分によって非表示にされたものだけ解除
+        $stmtRestore->execute([
+            ':my_id' => $current_user_id,
+            ':receiver_id' => $receiver_id
+        ]);
+    }
+
+    // 【既存】自分が受信者(current_user_id)で、相手(receiver_id)から届いた未読メッセージを既読にする
     $messageModel->markAsRead($receiver_id, $current_user_id);
 
-    // 履歴を取得
+    // 【既存】履歴を取得
     $messages = $messageModel->getChatHistory($current_user_id, $receiver_id);
 
-    // 相手のユーザー情報を取得
+    // 【既存】相手のユーザー情報を取得
     $stmtUser = $pdo->prepare("SELECT id, {$user_column} AS name FROM users WHERE id = :id");
     $stmtUser->execute([':id' => $receiver_id]);
     $receiver = $stmtUser->fetch(PDO::FETCH_ASSOC);
 }
-
 // 3. ユーザー検索処理
 $search_keyword = $_GET['search_name'] ?? null;
 $search_results = null;
@@ -100,29 +155,43 @@ $search_results = null;
 //     $search_results = $stmtSearch->fetchAll(PDO::FETCH_ASSOC);
 // }
 // 1. キーワードを整形（空白削除）
-// 1. キーワードを整形（空白削除）
+// 1. 変数の準備（SQLで安全に使うため）
 $keyword = trim($search_keyword ?? '');
+$my_id = $current_user_id;
 
+// 2. SQLの切り替え
 if ($keyword !== '') {
-    // 2. username も email も `=`（完全一致）にする
-    // どちらかがキーワードと完全に一致した場合のみ結果に含めます
+    // 【検索時】指定キーワードでユーザーを探す（完全一致）
+    // $user_column は事前に定義されているものとします
     $sql = "SELECT id, {$user_column} AS name 
             FROM users 
             WHERE (username = :keyword OR email = :keyword) 
             AND id != :my_id";
-
-    $stmtSearch = $pdo->prepare($sql);
-
-    // 3. 完全一致なので、% は一切付与しません
-    $stmtSearch->execute([
-        ':keyword' => $keyword,
-        ':my_id' => $current_user_id
-    ]);
-
-    $search_results = $stmtSearch->fetchAll(PDO::FETCH_ASSOC);
+    $params = [':keyword' => $keyword, ':my_id' => $my_id];
 } else {
-    $search_results = [];
+    // 【一覧時】やり取りのある相手を最新順に取得する（エラー回避のためグループ化を調整）
+    $sql = "SELECT u.id, 
+                   COALESCE(cs.custom_title, u.username) AS name,
+                   (SELECT MAX(created_at) 
+                    FROM messages 
+                    WHERE (sender_id = u.id AND receiver_id = :my_id) 
+                       OR (sender_id = :my_id AND receiver_id = u.id)
+                   ) AS last_msg_time
+            FROM users u
+            JOIN messages m ON (u.id = m.sender_id OR u.id = m.receiver_id)
+            LEFT JOIN chat_settings cs ON cs.target_id = u.id AND cs.user_id = :my_id
+            WHERE (m.sender_id = :my_id OR m.receiver_id = :my_id)
+            AND u.id != :my_id
+            AND (m.deleted_by_user_id IS NULL OR m.deleted_by_user_id != :my_id)
+            GROUP BY u.id, name
+            ORDER BY last_msg_time DESC";
+    $params = [':my_id' => $my_id];
 }
+
+// 3. 実行
+$stmtSearch = $pdo->prepare($sql);
+$stmtSearch->execute($params);
+$search_results = $stmtSearch->fetchAll(PDO::FETCH_ASSOC);
 
 if (file_exists(__DIR__ . '/../layout/header.php')) {
     if (!headers_sent() && !defined('HEADER_INCLUDED')) {
@@ -384,15 +453,22 @@ if (file_exists(__DIR__ . '/../layout/header.php')) {
             <div class="chat-list" style="width: 100%; max-width: 300px; border-right: 1px solid #ccc; padding: 10px;">
                 <h3>トーク一覧</h3>
                 <?php
+                // カスタムタイトルを取得するためのSQLをループ前に追加
+                $stmt_title = $pdo->prepare("SELECT target_id, custom_title FROM chat_settings WHERE user_id = :my_id");
+                $stmt_title->execute([':my_id' => $current_user_id]);
+                $titles = $stmt_title->fetchAll(PDO::FETCH_KEY_PAIR);
+
                 $chat_list = $messageModel->getChatList($current_user_id);
                 foreach ($chat_list as $chat):
                     $partner_id = ($chat['sender_id'] == $current_user_id) ? $chat['receiver_id'] : $chat['sender_id'];
+                    // カスタムタイトルがあればそれを使用、なければsender_nameを使用
+                    $display_name = isset($titles[$partner_id]) ? $titles[$partner_id] : $chat['sender_name'];
                     ?>
                     <div style="display: flex; align-items: center; border-bottom: 1px solid #eee; padding: 5px 0;">
                         <a href="index.php?page=chat&receiver_id=<?= $partner_id ?>"
                             style="flex: 1; min-width: 0; text-decoration: none; color: #333; padding-right: 10px;">
                             <div style="font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                                <?= htmlspecialchars($chat['sender_name']) ?>
+                                <?= htmlspecialchars($display_name) ?>
                             </div>
                             <div
                                 style="font-size: 0.8rem; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
@@ -402,7 +478,7 @@ if (file_exists(__DIR__ . '/../layout/header.php')) {
                                 style="font-size: 0.7rem; color: #999;"><?= date('m/d H:i', strtotime($chat['created_at'])) ?></small>
                         </a>
 
-                        <form action="index.php?page=chat" method="POST" onsubmit="return confirm('このトーク履歴を完全に削除しますか？');"
+                        <form action="index.php?page=chat" method="POST" onsubmit="return confirm('このトーク履歴を非表示にしますか？');"
                             style="margin: 0; flex-shrink: 0;">
                             <input type="hidden" name="action" value="delete">
                             <input type="hidden" name="partner_id" value="<?= $partner_id ?>">
@@ -421,7 +497,8 @@ if (file_exists(__DIR__ . '/../layout/header.php')) {
                         <?php foreach ($search_results as $row): ?>
                             <li>
                                 <span><?php echo htmlspecialchars($row['name'], ENT_QUOTES, 'UTF-8'); ?></span>
-                                <a href="index.php?page=chat&receiver_id=<?php echo $row['id']; ?>">チャットを開く</a>
+                                <a
+                                    href="index.php?page=chat&receiver_id=<?php echo $row['id']; ?>&search_name=<?php echo urlencode($keyword); ?>">チャットを開く</a>
                             </li>
                         <?php endforeach; ?>
                     <?php else: ?>

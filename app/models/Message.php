@@ -90,16 +90,18 @@ class Message
      */
     public function getChatList($my_id)
     {
-        $sql = "SELECT m.*, u.username as sender_name 
+        // 相手のIDを特定して名前をJOINするSQL
+        $sql = "SELECT m.*, 
+                       u.username as sender_name,
+                       CASE WHEN m.sender_id = :my_id THEN m.receiver_id ELSE m.sender_id END as partner_id
                 FROM messages m
-                JOIN users u ON m.sender_id = u.id
+                JOIN users u ON u.id = (CASE WHEN m.sender_id = :my_id THEN m.receiver_id ELSE m.sender_id END)
                 WHERE m.id IN (
                     SELECT MAX(id) 
                     FROM messages 
                     WHERE (sender_id = :my_id OR receiver_id = :my_id)
                     AND (deleted_by_user_id IS NULL OR deleted_by_user_id != :my_id)
-                    GROUP BY 
-                        CASE WHEN sender_id = :my_id THEN receiver_id ELSE sender_id END
+                    GROUP BY CASE WHEN sender_id = :my_id THEN receiver_id ELSE sender_id END
                 )
                 ORDER BY m.created_at DESC";
 
@@ -107,7 +109,7 @@ class Message
         $stmt->execute([':my_id' => $my_id]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
-    
+
     /**
      * 特定の相手とのチャット履歴をすべて削除する
      * @param int $my_id 自分のID
@@ -127,5 +129,5 @@ class Message
             ':partner_id' => $partner_id
         ]);
     }
-    
+
 }

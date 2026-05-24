@@ -8,7 +8,7 @@
     <title>共有されたメモ - <?= htmlspecialchars($memo['title'] ?? '無題') ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <?php if (strpos($_SERVER['HTTP_USER_AGENT'], 'Line') !== false): ?>
-    <meta property=" al:android:url"
+        <meta property=" al:android:url"
             content="https://desktop-mnoqic1.tail7aa158.ts.net/index.php?page=memo&action=view_share&token=60d9b1abcbfd4e11b12361901498657f&openExternalBrowser=1">
         <meta property="al:ios:url"
             content="https://desktop-mnoqic1.tail7aa158.ts.net/index.php?page=memo&action=view_share&token=60d9b1abcbfd4e11b12361901498657f&openExternalBrowser=1">
@@ -104,6 +104,7 @@
                             <h2 class="h4 mb-0">共有されたメモ</h2>
                             <div class="ms-auto d-flex align-items-center">
                                 <a href="index.php?openExternalBrowser=1&page=memo&action=view_share&token=<?= htmlspecialchars($_GET['token'] ?? '') ?>&download=pdf"
+                                    target="_blank" rel="noopener noreferrer"
                                     class="btn btn-outline-danger btn-sm me-2">
                                     <i class="fas fa-file-pdf"></i> PDF保存
                                 </a>

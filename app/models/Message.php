@@ -91,16 +91,17 @@ class Message
     public function getChatList($my_id)
     {
         $sql = "SELECT m.*, u.username as sender_name 
-            FROM messages m
-            JOIN users u ON m.sender_id = u.id
-            WHERE m.id IN (
-                SELECT MAX(id) 
-                FROM messages 
-                WHERE sender_id = :my_id OR receiver_id = :my_id 
-                GROUP BY 
-                    CASE WHEN sender_id = :my_id THEN receiver_id ELSE sender_id END
-            )
-            ORDER BY m.created_at DESC";
+                FROM messages m
+                JOIN users u ON m.sender_id = u.id
+                WHERE m.id IN (
+                    SELECT MAX(id) 
+                    FROM messages 
+                    WHERE (sender_id = :my_id OR receiver_id = :my_id)
+                    AND (deleted_by_user_id IS NULL OR deleted_by_user_id != :my_id)
+                    GROUP BY 
+                        CASE WHEN sender_id = :my_id THEN receiver_id ELSE sender_id END
+                )
+                ORDER BY m.created_at DESC";
 
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([':my_id' => $my_id]);
@@ -114,9 +115,11 @@ class Message
      */
     public function deleteChatHistory($my_id, $partner_id)
     {
-        $sql = "DELETE FROM messages 
-            WHERE (sender_id = :my_id AND receiver_id = :partner_id)
-               OR (sender_id = :partner_id AND receiver_id = :my_id)";
+        // 物理削除ではなく、deleted_by_user_id を更新する
+        $sql = "UPDATE messages 
+                SET deleted_by_user_id = :my_id 
+                WHERE (sender_id = :my_id AND receiver_id = :partner_id)
+                   OR (sender_id = :partner_id AND receiver_id = :my_id)";
 
         $stmt = $this->pdo->prepare($sql);
         return $stmt->execute([
@@ -124,4 +127,5 @@ class Message
             ':partner_id' => $partner_id
         ]);
     }
+    
 }

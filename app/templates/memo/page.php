@@ -595,17 +595,26 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
 
 <script>
     /**
-     * Excelボタンの強制送信設定
+     * Excelボタンが押された時だけ、formtargetとactionをセットして強制送信する
      */
     const excelBtn = document.getElementById('excel-btn-trigger');
     if (excelBtn) {
         excelBtn.addEventListener('click', function () {
             const form = document.getElementById('memo-form');
+
+            // 現在の設定をバックアップ
             const originalAction = form.action;
             const originalTarget = form.target;
+
+            // Excel出力専用の設定を一時的にセット
             form.action = "index.php?page=memo&action=excel_download";
             form.target = "_blank";
+
+            // 既存のフォームにあるJSバリデーション等を無視して強制送信
+            // これにより、event.preventDefault() の影響を受けずにPHPへ飛びます
             HTMLFormElement.prototype.submit.call(form);
+
+            // 送信後、元の「保存用」の設定に戻しておく
             setTimeout(() => {
                 form.action = originalAction;
                 form.target = originalTarget;
@@ -614,7 +623,7 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
     }
 
     /**
-     * 画像削除処理
+     * サーバー側の物理ファイルとDBレコード(image_path)を即座に削除する
      */
     function deleteImageFromServer(memoId) {
         if (!memoId) return;
@@ -714,12 +723,35 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
                     }
                 }
 
+                // 修正後の送信処理ブロック
                 fetch(form.action, { method: 'POST', body: formData })
-                    .then(() => {
+                    .then(async response => {
+                        if (!response.ok) throw new Error('Network response was not ok');
+
+                        // 1. バーを100%にする
                         clearInterval(interval);
                         if (overlayBar) overlayBar.style.width = '100%';
+
+                        // 2. オーバーレイのテキストを書き換える
+                        // overlay-overlay 内の 2番目の div (「データを保存中...」の部分) を対象にする
+                        const loadingText = overlay.querySelector('div:nth-child(2)');
+                        if (loadingText) {
+                            loadingText.textContent = '保存しました！';
+                            loadingText.style.color = '#28a745'; // 緑色にして成功感を出す
+                            loadingText.style.fontWeight = 'bold';
+                        }
+
+                        // 3. 0.8秒待ってからリロード
                         localStorage.removeItem('draft_memo');
-                        setTimeout(() => location.reload(), 800);
+                        setTimeout(() => {
+                            location.reload();
+                        }, 800);
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('保存に失敗しました。');
+                        overlay.style.display = 'none'; // エラー時は閉じる
+                        saveBtn.disabled = false;
                     });
             });
         }

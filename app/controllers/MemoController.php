@@ -588,6 +588,9 @@ class MemoController
             ob_end_clean();
         ob_start();
 
+        // PDF生成中に発生する可能性のある軽微なWarningをキャッチするためにバッファ開始
+        ob_start();
+
         require_once 'C:\\Apache24\\htdocs\\sample\\public\\tfpdf.php';
 
         $pdf = new tFPDF();
@@ -650,6 +653,8 @@ class MemoController
         if (ob_get_length())
             ob_clean();
 
+        // PWA/モバイル向けに最適化されたヘッダー送出
+        $filename = "memo_" . date('YmdHis') . ".pdf";
         header('Content-Type: application/pdf');
         header('Content-Disposition: attachment; filename="memo_' . date('YmdHis') . '.pdf"');
         header('Content-Length: ' . strlen($pdfData));
@@ -657,11 +662,13 @@ class MemoController
         header('Pragma: no-cache');
         header('Expires: 0');
 
+        // バイナリデータのみを純粋に出力
         echo $pdfData;
 
         if (isset($tempFileToDelete) && file_exists($tempFileToDelete)) {
             unlink($tempFileToDelete);
         }
+        // 他のコードが実行されないよう即座に終了
         exit;
     }
 

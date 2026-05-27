@@ -595,26 +595,17 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
 
 <script>
     /**
-     * Excelボタンが押された時だけ、formtargetとactionをセットして強制送信する
+     * Excelボタンの強制送信設定
      */
     const excelBtn = document.getElementById('excel-btn-trigger');
     if (excelBtn) {
         excelBtn.addEventListener('click', function () {
             const form = document.getElementById('memo-form');
-
-            // 現在の設定をバックアップ
             const originalAction = form.action;
             const originalTarget = form.target;
-
-            // Excel出力専用の設定を一時的にセット
             form.action = "index.php?page=memo&action=excel_download";
             form.target = "_blank";
-
-            // 既存のフォームにあるJSバリデーション等を無視して強制送信
-            // これにより、event.preventDefault() の影響を受けずにPHPへ飛びます
             HTMLFormElement.prototype.submit.call(form);
-
-            // 送信後、元の「保存用」の設定に戻しておく
             setTimeout(() => {
                 form.action = originalAction;
                 form.target = originalTarget;
@@ -623,7 +614,7 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
     }
 
     /**
-     * サーバー側の物理ファイルとDBレコード(image_path)を即座に削除する
+     * 画像削除処理
      */
     function deleteImageFromServer(memoId) {
         if (!memoId) return;

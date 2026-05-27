@@ -714,12 +714,35 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
                     }
                 }
 
+                // 修正後の送信処理ブロック
                 fetch(form.action, { method: 'POST', body: formData })
-                    .then(() => {
+                    .then(async response => {
+                        if (!response.ok) throw new Error('Network response was not ok');
+
+                        // 1. バーを100%にする
                         clearInterval(interval);
                         if (overlayBar) overlayBar.style.width = '100%';
+
+                        // 2. オーバーレイのテキストを書き換える
+                        // overlay-overlay 内の 2番目の div (「データを保存中...」の部分) を対象にする
+                        const loadingText = overlay.querySelector('div:nth-child(2)');
+                        if (loadingText) {
+                            loadingText.textContent = '保存しました！';
+                            loadingText.style.color = '#28a745'; // 緑色にして成功感を出す
+                            loadingText.style.fontWeight = 'bold';
+                        }
+
+                        // 3. 0.8秒待ってからリロード
                         localStorage.removeItem('draft_memo');
-                        setTimeout(() => location.reload(), 800);
+                        setTimeout(() => {
+                            location.reload();
+                        }, 800);
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('保存に失敗しました。');
+                        overlay.style.display = 'none'; // エラー時は閉じる
+                        saveBtn.disabled = false;
                     });
             });
         }

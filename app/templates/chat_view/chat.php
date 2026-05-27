@@ -596,6 +596,15 @@ if (file_exists(__DIR__ . '/../layout/header.php')) {
     window.addEventListener('DOMContentLoaded', () => {
         const t = document.getElementById('chatTimeline');
         if (t) { t.scrollTop = t.scrollHeight; }
+        
+        const chatForm = document.querySelector('.chat-input-area');
+        if (chatForm) {
+            chatForm.addEventListener('submit', function () {
+                const btn = this.querySelector('button[type="submit"]');
+                btn.disabled = true;
+                btn.textContent = '送信中...';
+            });
+        }
     });
 
     // 【追加】削除前の確認ダイアログ

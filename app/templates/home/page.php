@@ -660,43 +660,6 @@ $unread_messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </div>
     </header>
 
-    <div class="unread-messages-section"
-        style="margin-top: 20px; border: 1px solid #ccc; padding: 15px; border-radius: 8px;">
-        <h3>新着メッセージ (
-            <?= count($unread_messages) ?>件)
-        </h3>
-
-        <?php if (empty($unread_messages)): ?>
-            <p style="color: #777; padding: 10px;">新しいメッセージはありません。</p>
-        <?php else: ?>
-            <ul style="list-style: none; padding: 0;">
-                <?php foreach ($unread_messages as $msg):
-                    // 1. 各変数を安全に取得（nullの場合は空文字またはデフォルト値をセット）
-                    $senderName = htmlspecialchars($msg['sender_name'] ?? '送信者不明', ENT_QUOTES, 'UTF-8');
-                    $content = $msg['content'] ?? '';
-                    // 2. mb_strimwidthに渡す前に空チェックを入れることでエラーを回避
-                    $shortContent = !empty($content) ? htmlspecialchars(mb_strimwidth($content, 0, 30, '...'), ENT_QUOTES, 'UTF-8') : '(内容なし)';
-                    $createdAt = isset($msg['created_at']) ? date('m/d H:i', strtotime($msg['created_at'])) : '--/--';
-                    $senderId = $msg['sender_id'] ?? '';
-                    ?>
-                    <li style="margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                <strong style="display: block; font-size: 0.9rem;"><?= $senderName ?></strong>
-                                <span style="font-size: 0.85rem; color: #333;"><?= $shortContent ?></span>
-                            </div>
-                            <a href="index.php?page=chat&receiver_id=<?= $senderId ?>"
-                                style="font-size: 0.75rem; background: #007bff; color: #fff; padding: 4px 8px; border-radius: 4px; text-decoration: none;">
-                                チャットへ
-                            </a>
-                        </div>
-                        <small style="color: #999; font-size: 0.75rem;"><?= $createdAt ?></small>
-                    </li>
-                <?php endforeach; ?>
-            </ul>
-        <?php endif; ?>
-    </div>
-
     <div class="dashboard-grid">
 
         <!-- 左：メインカレンダー -->

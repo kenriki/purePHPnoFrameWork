@@ -583,15 +583,9 @@ class MemoController
      */
     private function generatePdf($content, $guestName = '', $imagePath = '', $username = '')
     {
-        ini_set('memory_limit', '256M');
-        // 追加：これまでのWarning出力をすべて消し去る
-        if (ob_get_length())
-            ob_clean();
-
-        while (ob_get_level())
+        // 1. バッファを完全にリセット（先頭のズレを防ぐ）
+        if (ob_get_level())
             ob_end_clean();
-
-        // PDF生成中に発生する可能性のある軽微なWarningをキャッチするためにバッファ開始
         ob_start();
 
         require_once 'C:\\Apache24\\htdocs\\sample\\public\\tfpdf.php';
@@ -602,30 +596,29 @@ class MemoController
         $pdf->SetFont('NotoSansJP', '', 10);
 
         // ヘッダー
-        $header = "メモ エクスポート (" . date('Y-m-d H:i') . ")";
-        //$pdf->Cell(0, 10, $header, 'B', 1);
-        $pdf->Cell(0, 10, $header, 'B', 1, 'L'); // 'L'を明示し、1で改行
+        $pdf->Cell(0, 10, "メモ エクスポート (" . date('Y-m-d H:i') . ")", 'B', 1, 'L');
         $pdf->Ln(5);
 
         // 本文出力
         $pdf->MultiCell(0, 6, $content . ($guestName ? "\n\n---\n署名: $guestName" : ""));
 
-        // 画像処理 
+        // 2. 画像パスの構築ロジックを修正
         if (!empty($imagePath)) {
-            $owner = $username ?: 'guest';
-            $safeFolder = preg_match('/^[a-zA-Z0-9\._-]+$/', $owner) ? $owner : 'u_' . substr(md5($owner), 0, 12);
-
-            // パスの組み立て（\ と / が混在しないよう調整）
-            $baseDir = "C:/Apache24/htdocs/sample/app/data/user_memos/{$safeFolder}/images/";
-            //$originalPath = $baseDir . $imagePath;
-            $originalPath = $this->baseDir . "images/" . $imagePath;
+            // もし $imagePath が絶対パス（C:/...）で渡されていればそのまま使い、
+            // そうでなければ現在のユーザーディレクトリから推測する
+            if (file_exists($imagePath)) {
+                $originalPath = $imagePath;
+            } else {
+                $owner = $username ?: 'guest';
+                $safeFolder = preg_match('/^[a-zA-Z0-9\._-]+$/', $owner) ? $owner : 'u_' . substr(md5($owner), 0, 12);
+                $originalPath = "C:/Apache24/htdocs/sample/app/data/user_memos/{$safeFolder}/images/" . basename($imagePath);
+            }
 
             if (file_exists($originalPath)) {
-                $tempPng = $baseDir . "temp_" . time() . ".png";
+                $tempPng = sys_get_temp_dir() . "/memo_img_" . time() . "_" . uniqid() . ".png";
                 $imgInfo = getimagesize($originalPath);
                 $img = null;
 
-                // GDライブラリによる変換
                 switch ($imgInfo[2]) {
                     case IMAGETYPE_WEBP:
                         $img = @imagecreatefromwebp($originalPath);
@@ -640,67 +633,35 @@ class MemoController
 
                 if ($img) {
                     imagepng($img, $tempPng);
-                    // imagedestroy($img); // PHP 8.5では非推奨のため削除またはコメントアウト
 
-                    // 改ページ制御
-                    $pdf->Ln(10); // 画像の上の余白
-                    $imgWidth = 100; // 出力サイズ
-                    $imgHeight = 0;   // 0にするとアスペクト比を維持して自動計算されますが、判定用に仮の値を想定
-
-                    // 貼り付けたい画像の高さ（ここでは100mm程度と仮定）が、ページの残り（PageHeight - 下部余白 - 現在位置）より大きいか
-                    $remainingHeight = $pdf->getPageHeight() - 20; // 20は下部マージン
-                    if ($pdf->GetY() + 100 > $remainingHeight) {
+                    if ($pdf->GetY() + 100 > ($pdf->getPageHeight() - 20)) {
                         $pdf->AddPage();
                     }
-
-                    // 画像の埋め込み。第5引数に 'PNG' を明示
                     $pdf->Image($tempPng, $pdf->GetX() + 5, $pdf->GetY(), 100, 0, 'PNG');
-
-                    // 削除フラグ（出力後に削除するため）
                     $tempFileToDelete = $tempPng;
-                } else {
-                    $pdf->Ln(5);
-                    $pdf->SetTextColor(255, 0, 0);
-                    $pdf->Cell(0, 10, "Error: Failed to process image content.");
-                    $pdf->SetTextColor(0, 0, 0);
                 }
-            } else {
-                // デバッグ用：ファイルが見つからない場合にパスを表示
-                $pdf->Ln(5);
-                $pdf->SetTextColor(200, 0, 0);
-                //$pdf->Cell(0, 10, "Debug: File not found at " . $originalPath);
-                $pdf->Cell(100, 6, "（添付画像は表示できませんでした）", 0, 0, 'C');
-                $pdf->SetTextColor(0, 0, 0);
             }
         }
 
-        header('Content-Type: application/pdf');
-        header("Content-Disposition: attachment; filename=memo_" . date('YmdHis') . ".pdf");
-
-        // PDFデータの生成
+        // 3. PDFデータの取得とヘッダー送信
         $pdfData = $pdf->Output('S');
 
-        // 出力直前にバッファに溜まったゴミ（Warning等）があれば全て捨てる
+        // 出力前に確実にバッファをクリアして、PDF以外のデータが混入しないようにする
         if (ob_get_length())
             ob_clean();
 
-        // PWA/モバイル向けに最適化されたヘッダー送出
-        $filename = "memo_" . date('YmdHis') . ".pdf";
         header('Content-Type: application/pdf');
-        header("Content-Disposition: attachment; filename=memo_" . date('YmdHis') . ".pdf");
-        header('Content-Length: ' . strlen($pdfData)); // ファイルサイズを指定するとより確実です
-        header('Cache-Control: private, max-age=0, must-revalidate');
-        header('Pragma: public');
+        header('Content-Disposition: attachment; filename="memo_' . date('YmdHis') . '.pdf"');
+        header('Content-Length: ' . strlen($pdfData));
+        header('Cache-Control: no-cache, no-store, must-revalidate');
+        header('Pragma: no-cache');
         header('Expires: 0');
 
-        // バイナリデータのみを純粋に出力
         echo $pdfData;
 
-        // 出力後に一時ファイルを削除
         if (isset($tempFileToDelete) && file_exists($tempFileToDelete)) {
             unlink($tempFileToDelete);
         }
-        // 他のコードが実行されないよう即座に終了
         exit;
     }
 
@@ -980,22 +941,10 @@ class MemoController
      */
     private function executePdfDownload($token)
     {
-        if (empty($token)) {
-            // 既存のログインチェックを強化
-            $username = $_SESSION['user'] ?? null;
-            if (!$username) {
-                header('HTTP/1.1 401 Unauthorized');
-                die("セッションが切れています。再度ログインしてください。");
-            }
-        }
-
-        // 強力なバッファクリア
-        // 二重三重にかかっているバッファをすべて破棄し、PDFデータの先頭を汚さないようにします
+        // 1. バッファをクリアしてPDFデータのみを出力する準備
         while (ob_get_level()) {
             ob_end_clean();
         }
-        // 新しくバッファを開始
-        ob_start();
 
         $db = getDB();
         $sql = "SELECT * FROM user_memos WHERE share_token = ? AND share_expires_at > NOW()";
@@ -1007,37 +956,36 @@ class MemoController
             die("有効期限切れか、不正なトークンです。");
         }
 
+        // 2. 本文の復号
         $decryptedContent = $this->decryptContent($memo['content']);
 
-        // 画像パスの組み立て（メソッドを呼ばず直接書く）
+        // 3. 画像パスの絶対パス構築
         $fullImagePath = null;
         if (!empty($memo['image_path'])) {
+            $owner = $memo['username'] ?: 'guest';
+            $safeFolder = $this->getSafeDirName($owner);
+
+            // サーバー内の物理絶対パスを定義
+            // 例: C:/Apache24/htdocs/sample/app/data/user_memos/ユーザーフォルダ/images/ファイル名.png
+            $basePath = "C:/Apache24/htdocs/sample/";
             $fileName = basename($memo['image_path']);
-            $fullImagePath = $_SERVER['DOCUMENT_ROOT'] . '/sample/app/data/user_memos/' . $memo['username'] . '/images/' . $fileName;
+
+            $path = $basePath . "app/data/user_memos/{$safeFolder}/images/" . $fileName;
+
+            // ファイルが存在するか念のため確認
+            if (file_exists($path)) {
+                $fullImagePath = $path;
+            } else {
+                error_log("PDF画像が見つかりません: " . $path);
+            }
         }
 
-        $pdfData = [
-            'title' => !empty($memo['title']) ? $memo['title'] : '共有されたメモ',
-            'content' => $decryptedContent,
-            'image_path' => $fullImagePath,
-            'created_at' => $memo['created_at'] ?? date('Y-m-d H:i:s')
-        ];
-
-        // ダウンロード用ヘッダーの先行送出
-        // PWA(standalone)では、このヘッダーが「保存」をトリガーする重要な鍵になります
-        $downloadFileName = "memo_" . date('Ymd_His') . ".pdf";
-        header('Content-Type: application/pdf');
-        header('Content-Disposition: attachment; filename="' . $downloadFileName . '"');
-        header('Cache-Control: no-cache, no-store, must-revalidate');
-        header('Pragma: no-cache');
-        header('Expires: 0');
-
-        // PDF生成。ここで header() が送出されます。
+        // 4. PDF生成処理の呼び出し
+        // ※ generatePdf側でさらにパスを結合していない前提です
         $this->generatePdf(
-            $pdfData['content'],    // 第1引数: $content
-            '共有ユーザー',          // 第2引数: $guestName (適宜変更可)
-            basename($memo['image_path']), // 第3引数: $imagePath (ファイル名のみ)
-            $memo['username']       // 第4引数: $username
+            $decryptedContent,
+            $memo['title'] ?? '無題',
+            $fullImagePath
         );
         exit;
     }
@@ -1315,6 +1263,8 @@ class MemoController
      */
     public function generateExcel($id, $content, $create_date, $image_path = '')
     {
+        ini_set('log_errors', 'On');
+        ini_set('error_log', __DIR__ . '/php_debug.log');
         // 1. PHPのエラー表示とバッファを完全に黙らせる
         error_reporting(0);
         ini_set('display_errors', 0);
@@ -1323,19 +1273,52 @@ class MemoController
         }
 
         // 2. 一時ファイルのパス設定
-        $tmp_dir = sys_get_temp_dir();
-        $tmp_json = tempnam($tmp_dir, 'json_');
-        $tmp_excel = $tmp_dir . DIRECTORY_SEPARATOR . 'memo_' . uniqid() . '.xlsx';
+        // $tmp_dir = sys_get_temp_dir();
+        // $tmp_json = tempnam($tmp_dir, 'json_');
+        // $tmp_excel = $tmp_dir . DIRECTORY_SEPARATOR . 'memo_' . uniqid() . '.xlsx';
+        $tmp_dir = __DIR__ . '/../temp';
+        if (!is_dir($tmp_dir)) {
+            // tempフォルダを作成し、権限をフルに与える
+            mkdir($tmp_dir, 0777, true);
+        }
+
+        // 一時ファイルを生成
+        $unique_id = uniqid('memo_');
+        $tmp_json = $tmp_dir . DIRECTORY_SEPARATOR . $unique_id . '.json';
+        $tmp_excel = $tmp_dir . DIRECTORY_SEPARATOR . $unique_id . '.xlsx';
 
         // 3. 入力データ作成
         $safeDir = isset($this->safeDirName) ? $this->safeDirName : 'default';
-        $full_image_path = (!empty($image_path)) ? realpath(__DIR__ . "/../app/data/user_memos/{$safeDir}/images/{$image_path}") : '';
+
+        // 画像パスの組み立てと存在確認
+        $full_image_path = '';
+        $base_images_dir = __DIR__ . "/../app/data/user_memos/{$safeDir}/images/";
+
+        if (!empty($image_path)) {
+            // ファイル名だけを抽出（パスの重複を防ぐ）
+            $fileName = basename($image_path);
+            $targetPath = $base_images_dir . $fileName;
+
+            // file_exists で物理的な存在を確認
+            if (file_exists($targetPath)) {
+                // 絶対パスに変換
+                $full_image_path = realpath($targetPath);
+            } else {
+                // デバッグログ：ファイルが見つからない場合に記録
+                error_log("【Excel生成エラー】画像ファイルが存在しません: " . $targetPath);
+            }
+        }
 
         $data = [
+            'id' => $id,
             'content' => $content,
             'created_at' => $create_date,
             'image_path' => $full_image_path
         ];
+
+        // JSONファイルに書き出す前の最終確認用デバッグログ
+        error_log("【Excel生成デバッグ】Pythonへ渡すデータ: " . json_encode($data));
+
         file_put_contents($tmp_json, json_encode($data, JSON_UNESCAPED_UNICODE));
 
         // 4. Python実行（保存先パスを第2引数として渡す）

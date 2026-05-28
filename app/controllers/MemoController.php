@@ -588,9 +588,6 @@ class MemoController
             ob_end_clean();
         ob_start();
 
-        // PDF生成中に発生する可能性のある軽微なWarningをキャッチするためにバッファ開始
-        ob_start();
-
         require_once 'C:\\Apache24\\htdocs\\sample\\public\\tfpdf.php';
 
         $pdf = new tFPDF();

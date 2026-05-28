@@ -57,7 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['receipt_image'])) {
     //$apiUrl = "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=" . $apiKey;
     //$apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" . $apiKey;
     //$apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" . $apiKey;
-    $apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=" . $apiKey;
+    $apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" . $apiKey;
 
     $imageTmpPath = $_FILES['receipt_image']['tmp_name'];
     if (!is_uploaded_file($imageTmpPath)) {
@@ -113,8 +113,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['receipt_image'])) {
         ],
         "generationConfig" => [
             "temperature" => 0.2, // データの正確性を高めるために少し下げました
+            'maxOutputTokens' => 2000,
             "topP" => 0.95,
-            "maxOutputTokens" => 1024
+            //"maxOutputTokens" => 1024
         ]
     ];
 

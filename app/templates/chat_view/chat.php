@@ -5,6 +5,11 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+if (!isset($_SESSION['user_id'])) {
+    header('Location: index.php?page=login');
+    exit;
+}
+
 // 1. セッションとDB接続の初期化
 if (session_status() === PHP_SESSION_NONE)
     session_start();

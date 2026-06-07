@@ -127,4 +127,76 @@ class Message
         ]);
     }
 
+    /**
+     * グループチャット用にメッセージを送信する
+     */
+    public function sendGroupMessage($sender_id, $room_id, $message)
+    {
+        $sql = "INSERT INTO messages (sender_id, room_id, message, is_read, created_at) 
+                VALUES (:sender_id, :room_id, :message, 0, NOW())";
+        $stmt = $this->pdo->prepare($sql);
+        return $stmt->execute([
+            ':sender_id' => $sender_id,
+            ':room_id' => $room_id,
+            ':message' => $message
+        ]);
+    }
+
+    /**
+     * グループのチャット履歴を取得
+     */
+    public function getGroupChatHistory($room_id, $my_id)
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT m.*, u.username as sender_name 
+            FROM messages m
+            JOIN users u ON m.sender_id = u.id
+            WHERE m.room_id = :room_id
+            AND (m.deleted_by_user_id IS NULL OR m.deleted_by_user_id != :my_id)
+            ORDER BY m.created_at ASC
+        ");
+        $stmt->execute([':room_id' => $room_id, ':my_id' => $my_id]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** グループ一覧を取得 */
+    public function getGroupList($my_id)
+    {
+        $sql = "SELECT r.id, r.name 
+                FROM rooms r
+                JOIN room_members rm ON r.id = rm.room_id
+                WHERE rm.user_id = :my_id";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([':my_id' => $my_id]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function getRoomMessages($room_id)
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT m.*, u.username AS sender_name 
+            FROM messages m 
+            JOIN users u ON m.sender_id = u.id 
+            WHERE m.room_id = :room_id 
+            AND (m.deleted_by_user_id IS NULL OR m.deleted_by_user_id != :my_id)
+            ORDER BY m.created_at ASC
+        ");
+        $stmt->execute([':room_id' => $room_id, ':my_id' => $_SESSION['user_id']]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    // グループチャットの未読数
+    public function getUnreadGroupCount($user_id)
+    {
+        $sql = "SELECT COUNT(m.id) 
+            FROM messages m
+            JOIN room_members rm ON m.room_id = rm.room_id
+            WHERE rm.user_id = :user_id 
+            AND m.is_read = 0 
+            AND m.sender_id != :user_id";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([':user_id' => $user_id]);
+        return (int) $stmt->fetchColumn();
+    }
+
 }

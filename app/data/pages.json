@@ -165,12 +165,39 @@
             }
         ]
     },
+    "add_member": {
+        "title": "メンバー追加",
+        "sections": [
+            {
+                "type": "php",
+                "file": "chat_view/add_member.php"
+            }
+        ]
+    },
     "chat_view": {
         "title": "ユーザーチャット",
         "sections": [
             {
                 "type": "php",
                 "file": "chat_view/page.php"
+            }
+        ]
+    },
+    "group_chat": {
+        "title": "グループチャット",
+        "sections": [
+            {
+                "type": "php",
+                "file": "chat_view/page.php"
+            }
+        ]
+    },
+    "group_create": {
+        "title": "グループ作成",
+        "sections": [
+            {
+                "type": "php",
+                "file": "chat_view/create_group.php"
             }
         ]
     },

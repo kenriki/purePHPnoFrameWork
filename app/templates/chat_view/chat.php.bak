@@ -19,37 +19,6 @@ if (!isset($pdo) || !($pdo instanceof PDO)) {
     }
 }
 
-$current_user_id = $_SESSION['user_id'] ?? null;
-// ★ここで URL から安全に ID を取得する
-$receiver_id = isset($_GET['receiver_id']) && $_GET['receiver_id'] !== '' ? (int)$_GET['receiver_id'] : null;
-$room_id = isset($_GET['room_id']) && $_GET['room_id'] !== '' ? (int)$_GET['room_id'] : null;
-
-// ここでURLパラメータからIDを受け取って「確実に」既読にする
-// 1. まず既読処理を確定させる
-if ($current_user_id) {
-    $pdo = getDB();
-    
-    // 【重要】グループチャットの場合は「ルーム内の未読を全件既読にする」
-    if (!empty($_GET['room_id'])) {
-        $stmt = $pdo->prepare("UPDATE messages SET is_read = 1 WHERE room_id = ? AND is_read = 0");
-        $stmt->execute([(int)$_GET['room_id']]);
-        
-        // 念のためキャッシュさせないためのヘッダー（必要に応じて）
-        // header("Cache-Control: no-cache, must-revalidate");
-    } elseif (!empty($_GET['receiver_id'])) {
-        // 個人用：receiver_id を指定
-        $stmt = $pdo->prepare("UPDATE messages SET is_read = 1 WHERE receiver_id = ? AND sender_id = ? AND is_read = 0");
-        $stmt->execute([$current_user_id, (int)$_GET['receiver_id']]);
-    }
-}
-
-// 2. その後に履歴を取得（これにより、最新の既読状態が反映される）
-if ($receiver_id) {
-    $messages = $messageModel->getChatHistory($current_user_id, $receiver_id);
-} elseif ($room_id) {
-    $messages = $messageModel->getRoomMessages($room_id);
-}
-
 require_once __DIR__ . '/../../models/Message.php';
 
 if (!isset($_SESSION['user_id'])) {
@@ -68,17 +37,14 @@ if (!isset($_SESSION['user_id'])) {
 
 $current_user_id = $_SESSION['user_id'];
 $receiver_id = isset($_GET['receiver_id']) && $_GET['receiver_id'] !== '' ? (int) $_GET['receiver_id'] : null;
-$room_id = isset($_GET['room_id']) && $_GET['room_id'] !== '' ? (int) $_GET['room_id'] : null; // 追加
 
-// メッセージ取得用
-$messages = [];
-if ($receiver_id) {
-    $messages = $messageModel->getChatHistory($current_user_id, $receiver_id);
-} elseif ($room_id) {
-    // グループ用メッセージ取得処理（Messageモデルにあると仮定）
-    $messages = $messageModel->getRoomMessages($room_id); 
-}
+$messageModel = new Message($pdo);
 
+// =======================================================
+// 【追加】新機能：メッセージ削除処理 (POST / action=delete)
+// =======================================================
+// chat.php 上部の削除処理（action=delete）
+// 削除処理ブロック
 $messageModel = new Message($pdo);
 
 // =======================================================
@@ -120,79 +86,38 @@ if ($receiver_id && !isset($_GET['deleted'])) {
 // メッセージ履歴取得
 $messages = $messageModel->getChatHistory($current_user_id, $receiver_id);
 
-
+// 1. メッセージ送信処理 (POST)
+// if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['message'])) {
+//     $msg_text = trim($_POST['message']);
+//     if ($msg_text !== '' && $receiver_id) {
+//         $messageModel->sendMessage($current_user_id, $receiver_id, $msg_text);
+//         header("Location: index.php?page=chat&receiver_id=" . $receiver_id);
+//         exit;
+//     }
+// }
 // 1. メッセージ送信処理 (POST)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['message'])) {
     $msg_text = trim($_POST['message']);
-    
-    // --- メール通知ロジック ---
-    if ($msg_text !== '' && ($receiver_id || $room_id)) {
-        
-        // 1. 送信者のユーザー名を取得
-        $stmt_user = $pdo->prepare("SELECT username FROM users WHERE id = ?");
-        $stmt_user->execute([$current_user_id]);
-        $sender_name = $stmt_user->fetchColumn() ?: "送信者";
+    if ($msg_text !== '' && $receiver_id) {
+        $messageModel->sendMessage($current_user_id, $receiver_id, $msg_text);
 
-        // 動的なURL生成ベース
-        $base_url = "http://" . $_SERVER['HTTP_HOST'] . "/index.php";
+        // 相手のメールアドレスを取得
+        $stmtEmail = $pdo->prepare("SELECT email FROM users WHERE id = :id");
+        $stmtEmail->execute([':id' => $receiver_id]);
+        $receiver_email = $stmtEmail->fetchColumn();
 
-        if ($room_id) {
-            // A. グループへ送信
-            $messageModel->sendGroupMessage($current_user_id, $room_id, $msg_text);
-            
-            // ★1. グループ名を取得
-            $stmt_room = $pdo->prepare("SELECT name FROM rooms WHERE id = ?");
-            $stmt_room->execute([$room_id]);
-            $room_name = $stmt_room->fetchColumn() ?: "グループチャット";
+        // MailUtil を使用した通知メール送信
+        if ($receiver_email) {
+            $subject = "新しいメッセージが届いています";
+            $body = "システムに新しいメッセージが届きました。\n\n"
+                . "以下のリンクからログインして確認してください。\n"
+                . "http://{$_SERVER['HTTP_HOST']}/index.php?page=chat&receiver_id=" . $current_user_id;
 
-            // ★2. グループメンバー全員のメールアドレスを取得して通知
-            $stmt = $pdo->prepare("
-                SELECT u.email 
-                FROM users u 
-                JOIN room_members rm ON u.id = rm.user_id 
-                WHERE rm.room_id = ? AND u.id != ?
-            ");
-            $stmt->execute([$room_id, $current_user_id]);
-            $members = $stmt->fetchAll(PDO::FETCH_COLUMN);
-
-            if (!empty($members)) {
-                $chat_url = $base_url . "?page=chat&room_id=" . $room_id;
-                
-                // ★3. メール本文にグループ名と送信者名を含める
-                $subject = "【{$room_name}】新しいメッセージがあります";
-                $body = "{$room_name} にて、{$sender_name} さんからメッセージが届きました。\n\n" . 
-                        "------------------------------------------\n" .
-                        "メッセージ内容:\n" . $msg_text . "\n\n" . 
-                        "------------------------------------------\n" .
-                        "以下のリンクから確認してください。\n" . $chat_url;
-
-                foreach ($members as $email) {
-                    MailUtil::sendMail($email, $subject, $body);
-                }
-            }
-            $redirect_url = "index.php?page=chat&room_id=" . $room_id;
-        } else {
-            // B. 個人へ送信
-            $messageModel->sendMessage($current_user_id, $receiver_id, $msg_text);
-            
-            // 2B. 受信者のメールアドレスを取得
-            $stmt = $pdo->prepare("SELECT email FROM users WHERE id = ?");
-            $stmt->execute([$receiver_id]);
-            if ($email = $stmt->fetchColumn()) {
-                $chat_url = $base_url . "?page=chat&receiver_id=" . $current_user_id;
-                $subject = "【お知らせ】新しいメッセージが届きました";
-                $body = "{$sender_name} さんからメッセージが届きました。\n\n" . 
-                        "------------------------------------------\n" .
-                        "メッセージ内容:\n" . $msg_text . "\n\n" . 
-                        "------------------------------------------\n" .
-                        "以下のリンクからチャットを確認してください。\n" . $chat_url;
-                
-                MailUtil::sendMail($email, $subject, $body);
-            }
-            $redirect_url = "index.php?page=chat&receiver_id=" . $receiver_id;
+            // AuthController.php と同様の形式で MailUtil を呼び出す
+            MailUtil::sendMail($receiver_email, $subject, $body);
         }
-        
-        header("Location: " . $redirect_url);
+
+        header("Location: index.php?page=chat&receiver_id=" . $receiver_id);
         exit;
     }
 }
@@ -201,24 +126,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['message'])) {
 $messages = [];
 $receiver = null;
 
-$user_column = 'username';
+$user_column = 'name';
 try {
-    $pdo->query("SELECT username FROM users LIMIT 1");
+    $pdo->query("SELECT name FROM users LIMIT 1");
 } catch (Exception $e) {
     $user_column = 'username';
 }
 
-if ($room_id) {
-    $messages = $messageModel->getRoomMessages($room_id);
-    $stmt = $pdo->prepare("SELECT name FROM rooms WHERE id = ?");
-    $stmt->execute([$room_id]);
-    $receiver = ['name' => $stmt->fetchColumn() ?: 'グループチャット'];
-} elseif ($receiver_id) {
+
+// if ($receiver_id) {
+//     // 【重要】自分が受信者(current_user_id)で、相手(receiver_id)から届いた未読メッセージを既読にする
+//     $messageModel->markAsRead($receiver_id, $current_user_id);
+
+//     // 履歴を取得
+//     $messages = $messageModel->getChatHistory($current_user_id, $receiver_id);
+
+//     // 相手のユーザー情報を取得
+//     $stmtUser = $pdo->prepare("SELECT id, {$user_column} AS name FROM users WHERE id = :id");
+//     $stmtUser->execute([':id' => $receiver_id]);
+//     $receiver = $stmtUser->fetch(PDO::FETCH_ASSOC);
+// }
+if ($receiver_id) {
+    // 【重要】復旧処理の条件付け
+    // 検索窓から来た場合（URLに search_name がある場合）のみ、自動復旧を実行する
+    if (isset($_GET['search_name']) && $_GET['search_name'] !== '') {
+        $stmtRestore = $pdo->prepare("UPDATE messages 
+                                      SET deleted_by_user_id = NULL 
+                                      WHERE ((sender_id = :my_id AND receiver_id = :receiver_id)
+                                         OR (sender_id = :receiver_id AND receiver_id = :my_id))
+                                      AND deleted_by_user_id = :my_id"); // 自分によって非表示にされたものだけ解除
+        $stmtRestore->execute([
+            ':my_id' => $current_user_id,
+            ':receiver_id' => $receiver_id
+        ]);
+    }
+
+    // 【既存】自分が受信者(current_user_id)で、相手(receiver_id)から届いた未読メッセージを既読にする
     $messageModel->markAsRead($receiver_id, $current_user_id);
+
+    // 【既存】履歴を取得
     $messages = $messageModel->getChatHistory($current_user_id, $receiver_id);
-    $stmt = $pdo->prepare("SELECT id, username AS name FROM users WHERE id = :id");
-    $stmt->execute([':id' => $receiver_id]);
-    $receiver = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    // 【既存】相手のユーザー情報を取得
+    $stmtUser = $pdo->prepare("SELECT id, {$user_column} AS name FROM users WHERE id = :id");
+    $stmtUser->execute([':id' => $receiver_id]);
+    $receiver = $stmtUser->fetch(PDO::FETCH_ASSOC);
 }
 // 3. ユーザー検索処理
 $search_keyword = $_GET['search_name'] ?? null;
@@ -239,26 +191,29 @@ $my_id = $current_user_id;
 
 // 2. SQLの切り替え
 if ($keyword !== '') {
-    // 【検索時】指定キーワードでユーザーを探す
-    // ※ $user_column を使用せず、明確にカラム名を指定して安定させる
-    $sql = "SELECT id, username AS name 
+    // 【検索時】指定キーワードでユーザーを探す（完全一致）
+    // $user_column は事前に定義されているものとします
+    $sql = "SELECT id, {$user_column} AS name 
             FROM users 
             WHERE (username = :keyword OR email = :keyword) 
             AND id != :my_id";
     $params = [':keyword' => $keyword, ':my_id' => $my_id];
 } else {
-    // 【一覧時】やり取りのある相手を最新順に取得する
-    // GROUP BY にエイリアス名を使わず、u.id で統一
+    // 【一覧時】やり取りのある相手を最新順に取得する（エラー回避のためグループ化を調整）
     $sql = "SELECT u.id, 
                    COALESCE(cs.custom_title, u.username) AS name,
-                   MAX(m.created_at) AS last_msg_time
+                   (SELECT MAX(created_at) 
+                    FROM messages 
+                    WHERE (sender_id = u.id AND receiver_id = :my_id) 
+                       OR (sender_id = :my_id AND receiver_id = u.id)
+                   ) AS last_msg_time
             FROM users u
             JOIN messages m ON (u.id = m.sender_id OR u.id = m.receiver_id)
             LEFT JOIN chat_settings cs ON cs.target_id = u.id AND cs.user_id = :my_id
             WHERE (m.sender_id = :my_id OR m.receiver_id = :my_id)
             AND u.id != :my_id
             AND (m.deleted_by_user_id IS NULL OR m.deleted_by_user_id != :my_id)
-            GROUP BY u.id, cs.custom_title, u.username
+            GROUP BY u.id, name
             ORDER BY last_msg_time DESC";
     $params = [':my_id' => $my_id];
 }
@@ -533,18 +488,6 @@ if (file_exists(__DIR__ . '/../layout/header.php')) {
                 $stmt_title->execute([':my_id' => $current_user_id]);
                 $titles = $stmt_title->fetchAll(PDO::FETCH_KEY_PAIR);
 
-                
-                // グループ取得用SQLを追加
-                $stmtRooms = $pdo->prepare("SELECT r.id, r.name FROM rooms r JOIN room_members rm ON r.id = rm.room_id WHERE rm.user_id = :my_id");
-                $stmtRooms->execute([':my_id' => $current_user_id]);
-                $group_list = $stmtRooms->fetchAll(PDO::FETCH_ASSOC);
-
-                // グループを表示
-                foreach ($group_list as $group) {
-                    echo '<div style="padding: 5px 0;"><a href="index.php?page=chat&room_id='.$group['id'].'">[G] '.htmlspecialchars($group['name']).'</a></div>';
-                }
-
-                // 個人チャットを表示
                 $chat_list = $messageModel->getChatList($current_user_id);
                 foreach ($chat_list as $chat):
                     $partner_id = ($chat['sender_id'] == $current_user_id) ? $chat['receiver_id'] : $chat['sender_id'];
@@ -597,64 +540,27 @@ if (file_exists(__DIR__ . '/../layout/header.php')) {
 
         <div class="chat-main">
             <?php if ($receiver): ?>
-            <h4 style="display: flex; justify-content: space-between; align-items: center;">
-                <span>
-                    <?php 
-                        $displayName = htmlspecialchars($receiver['name'] ?? 'チャット', ENT_QUOTES, 'UTF-8');
-                        echo ($room_id) ? $displayName : $displayName . ' さんとのチャット';
-                    ?>
-                </span>
-                <?php if ($room_id): ?>
-                    <button onclick="document.getElementById('addMemberModal').style.display='block'" class="btn-small">＋ メンバー追加</button>
-                <?php endif; ?>
-            </h4>
-
-            <details>
-                <summary style="cursor:pointer; padding:5px; background:#f8f9fa; border:1px solid #ddd; margin-bottom:10px;">グループを新規作成</summary>
-                <div class="group-create-area" style="padding: 10px; border: 1px solid #eee;">
-                    <?php include __DIR__ . '/create_group_form.php'; ?>
-                </div>
-            </details>
-
-            <div id="addMemberModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000;">
-                <div style="background:#fff; width:300px; margin:100px auto; padding:20px; border-radius:8px; position:relative;">
-                    <h5>メンバーを追加</h5>
-                    <form action="index.php?page=add_member" method="POST">
-                        <input type="hidden" name="room_id" value="<?= htmlspecialchars($room_id) ?>">
-                        <input type="text" name="new_member_name" placeholder="ユーザー名を入力" required style="width:100%; margin-bottom:10px;">
-                        <button type="submit">追加実行</button>
-                        <button type="button" onclick="document.getElementById('addMemberModal').style.display='none'">閉じる</button>
-                    </form>
-                </div>
-            </div>
+                <h4 style="margin-top:0; margin-bottom:15px; border-bottom: 2px solid #f4f4f4; padding-bottom: 8px;">
+                    <?php echo htmlspecialchars($receiver['name'], ENT_QUOTES, 'UTF-8'); ?> さんとのチャット
+                </h4>
 
                 <div class="chat-timeline" id="chatTimeline">
                     <?php if (count($messages) > 0): ?>
                         <?php foreach ($messages as $msg): ?>
-                            <?php 
-                                $is_me = ((int) $msg['sender_id'] === (int) $current_user_id); 
-                                // 戻りURLを現在のGETパラメータに合わせて動的に作成
-                                $current_url = "index.php?page=chat" . ($room_id ? "&room_id=".$room_id : "&receiver_id=".$receiver_id);
-                            ?>
+                            <?php $is_me = ((int) $msg['sender_id'] === (int) $current_user_id); ?>
                             <div class="msg-row <?php echo $is_me ? 'me' : 'partner'; ?>">
 
                                 <?php if ($is_me): ?>
-                                    <?php if ((int) $msg['is_read'] === 1 && (int) $msg['sender_id'] !== (int) $current_user_id): ?>
+                                    <?php if ((int) $msg['is_read'] === 1): ?>
                                         <span class="msg-status">既読</span>
-                                    <?php elseif ((int) $msg['sender_id'] === (int) $current_user_id && (int) $msg['is_read'] === 0): ?>
+                                    <?php else: ?>
                                         <span class="msg-status unread">未読</span>
                                     <?php endif; ?>
                                 <?php endif; ?>
 
                                 <div class="msg-bubble">
-                                    <?php if (!$is_me && $room_id && isset($msg['sender_name'])): ?>
-                                        <div style="font-size: 10px; color: #666; margin-bottom: 2px;">
-                                            <?php echo htmlspecialchars($msg['sender_name'], ENT_QUOTES, 'UTF-8'); ?>
-                                        </div>
-                                    <?php endif; ?>
-
                                     <?php if ($is_me && isset($msg['id'])): ?>
-                                        <form action="<?php echo $current_url; ?>" method="POST"
+                                        <form action="index.php?page=chat&receiver_id=<?php echo $receiver_id; ?>" method="POST"
                                             class="msg-delete-form" onsubmit="return confirmDelete();">
                                             <input type="hidden" name="action" value="delete">
                                             <input type="hidden" name="message_id" value="<?php echo $msg['id']; ?>">
@@ -672,8 +578,8 @@ if (file_exists(__DIR__ . '/../layout/header.php')) {
                     <?php endif; ?>
                 </div>
 
-                <form action="index.php?page=chat<?php echo $room_id ? '&room_id='.$room_id : '&receiver_id='.$receiver_id; ?>" 
-                    method="POST" class="chat-input-area">
+                <form action="index.php?page=chat&receiver_id=<?php echo $receiver_id; ?>" method="POST"
+                    class="chat-input-area">
                     <textarea name="message" placeholder="メッセージを入力..." required></textarea>
                     <button type="submit">送信</button>
                 </form>
@@ -683,6 +589,10 @@ if (file_exists(__DIR__ . '/../layout/header.php')) {
                     <p style="font-size: 12px; color: #bbb;">左側の検索窓から相手を探して「チャットを開く」を押してください。</p>
                 </div>
             <?php endif; ?>
+            <!-- <div class="group-create-area" style="margin-top: 20px; border-top: 1px solid #ccc; padding-top: 10px;">
+                <h5>チャットグループ作成</h5>
+                <?php include __DIR__ . '/create_group_form.php'; ?>
+            </div> -->
         </div>
     </div>
 </div>

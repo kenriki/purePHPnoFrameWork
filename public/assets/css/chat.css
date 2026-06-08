@@ -1,0 +1,231 @@
+    /* ベースレイアウト */
+    .chat-container {
+        max-width: 100%;
+        margin: 0 auto;
+        padding: 10px;
+        font-family: sans-serif;
+        box-sizing: border-box;
+    }
+
+    .chat-layout {
+        display: flex;
+        gap: 15px;
+        margin-top: 10px;
+    }
+
+    .chat-sidebar {
+        width: 280px;
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 8px;
+        border: 1px solid #dee2e6;
+        box-sizing: border-box;
+        flex-shrink: 0;
+    }
+
+    .chat-main {
+        flex: 1;
+        background: #fff;
+        padding: 15px;
+        border-radius: 8px;
+        border: 1px solid #dee2e6;
+        box-sizing: border-box;
+        min-width: 0;
+    }
+
+    /* 検索ボックス */
+    .search-box {
+        display: flex;
+        gap: 5px;
+        margin-bottom: 15px;
+    }
+
+    .search-box input {
+        flex: 1;
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 14px;
+    }
+
+    .search-box button {
+        padding: 8px 12px;
+        background: #6c757d;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+    }
+
+    .result-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .result-list li {
+        padding: 10px 8px;
+        border-bottom: 1px solid #eee;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .result-list a {
+        text-decoration: none;
+        color: #007bff;
+        font-size: 13px;
+        font-weight: bold;
+    }
+
+    /* タイムライン */
+    .chat-timeline {
+        height: 350px;
+        overflow-y: auto;
+        border: 1px solid #eee;
+        padding: 10px;
+        margin-bottom: 15px;
+        background: #fdfdfd;
+        border-radius: 4px;
+    }
+
+    .msg-row {
+        display: flex;
+        margin-bottom: 12px;
+        align-items: flex-end;
+        gap: 6px;
+    }
+
+    .msg-row.me {
+        justify-content: flex-end;
+    }
+
+    .msg-row.partner {
+        justify-content: flex-start;
+    }
+
+    /* 既読・未読バッジのスタイル */
+    .msg-status {
+        font-size: 11px;
+        color: #28a745;
+        font-weight: bold;
+        user-select: none;
+        margin-bottom: 3px;
+    }
+
+    .msg-status.unread {
+        color: #ccc;
+        font-weight: normal;
+    }
+
+    /* 吹き出し */
+    .msg-bubble {
+        max-width: 75%;
+        padding: 10px 14px;
+        border-radius: 16px;
+        font-size: 14px;
+        line-height: 1.4;
+        word-break: break-all;
+        position: relative;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+
+    .msg-row.me .msg-bubble {
+        background: #007bff;
+        color: white;
+        border-bottom-right-radius: 2px;
+        padding-right: 32px;
+        /* 削除ボタン用の余白 */
+    }
+
+    .msg-row.partner .msg-bubble {
+        background: #e9ecef;
+        color: #333;
+        border-bottom-left-radius: 2px;
+    }
+
+    /* 【追加】メッセージ削除ボタンのスタイル */
+    .msg-delete-form {
+        position: absolute;
+        top: 6px;
+        right: 8px;
+        margin: 0;
+        padding: 0;
+        line-height: 1;
+    }
+
+    .btn-delete-msg {
+        background: none;
+        border: none;
+        color: rgba(255, 255, 255, 0.6);
+        cursor: pointer;
+        font-size: 13px;
+        padding: 2px;
+        transition: color 0.2s;
+    }
+
+    .btn-delete-msg:hover {
+        color: #ffc107;
+        /* ホバー時に黄色にハイライト */
+    }
+
+    .msg-meta {
+        font-size: 10px;
+        color: rgba(0, 0, 0, 0.4);
+        margin-top: 4px;
+        display: block;
+        text-align: right;
+    }
+
+    .msg-row.me .msg-meta {
+        color: rgba(255, 255, 255, 0.7);
+    }
+
+    /* 入力エリア */
+    .chat-input-area {
+        display: flex;
+        gap: 10px;
+    }
+
+    .chat-input-area textarea {
+        flex: 1;
+        height: 42px;
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        resize: none;
+        font-size: 14px;
+        box-sizing: border-box;
+    }
+
+    .chat-input-area button {
+        padding: 0 20px;
+        background: #28a745;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        font-weight: bold;
+        cursor: pointer;
+        font-size: 14px;
+    }
+
+    /* 📱 スマホ環境（画面幅768px以下）用のレスポンシブデザイン */
+    @media (max-width: 768px) {
+        .chat-layout {
+            flex-direction: column;
+        }
+
+        .chat-sidebar {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        .chat-main {
+            width: 100%;
+        }
+
+        .chat-timeline {
+            height: 280px;
+        }
+    }

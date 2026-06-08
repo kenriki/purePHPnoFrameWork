@@ -29,6 +29,15 @@ $current_user_id = $_SESSION['user_id'] ?? null;
 $receiver_id = isset($_GET['receiver_id']) && $_GET['receiver_id'] !== '' ? (int)$_GET['receiver_id'] : null;
 $room_id = isset($_GET['room_id']) && $_GET['room_id'] !== '' ? (int)$_GET['room_id'] : null;
 
+if ($room_id) {
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM room_members WHERE room_id = ? AND user_id = ?");
+    $stmt->execute([$room_id, $current_user_id]);
+    
+    if ($stmt->fetchColumn() == 0) {
+        die("このグループへのアクセス権限がありません。");
+    }
+}
+
 // ここでURLパラメータからIDを受け取って「確実に」既読にする
 // 1. まず既読処理を確定させる
 if ($current_user_id) {

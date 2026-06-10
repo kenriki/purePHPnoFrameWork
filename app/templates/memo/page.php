@@ -583,6 +583,26 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
             </form>
         </div>
     <?php endif; ?>
+    <!-- <?php if (!empty($memo['id'])): ?>
+        <div class="alert alert-info">
+            <p>このメモを誰かに共有しますか？</p>
+
+            <form action="index.php?page=memo&action=generate_share_url" method="POST">
+                <input type="hidden" name="memo_id" value="<?= htmlspecialchars((string) $memo['id']) ?>">
+
+                <div class="mb-3">
+                    <label for="share_duration" class="form-label small">有効期限を選択:</label>
+                    <select name="share_duration" id="share_duration" class="form-select form-select-sm">
+                        <option value="1h">1時間限定</option>
+                        <option value="24h" selected>24時間限定</option>
+                        <option value="permanent">無期限</option>
+                    </select>
+                </div>
+
+                <button type="submit" class="btn btn-sm btn-info">共有URLを発行</button>
+            </form>
+        </div>
+    <?php endif; ?> -->
 
     <div style="margin-top: 30px; padding-top: 15px; border-top: 1px solid #eee;">
         <a href="index.php?page=home" style="text-decoration: none; color: #007bff; font-weight: bold;">🏠 ホーム画面へ戻る</a>
@@ -924,4 +944,19 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
     document.querySelectorAll('a[href*="action=pdf"]').forEach(a => {
         a.addEventListener('click', (e) => secureDownload(e, 'memo.pdf'));
     });
+</script>
+<script>
+document.addEventListener('keydown', function(event) {
+    // Ctrl + S または Command + S (Mac用) を検知
+    if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+        event.preventDefault(); // ブラウザの標準保存ダイアログを抑制
+        
+        const form = document.getElementById('memo-form');
+        if (form) {
+            // 必要に応じて「保存中」の表示を出すなどの処理を追加可能
+            // alert('保存します'); 
+            form.submit();
+        }
+    }
+});
 </script>

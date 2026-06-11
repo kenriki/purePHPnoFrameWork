@@ -951,11 +951,19 @@ document.addEventListener('keydown', function(event) {
     if ((event.ctrlKey || event.metaKey) && event.key === 's') {
         event.preventDefault(); // ブラウザの標準保存ダイアログを抑制
         
-        const form = document.getElementById('memo-form');
-        if (form) {
-            // 必要に応じて「保存中」の表示を出すなどの処理を追加可能
-            // alert('保存します'); 
-            form.submit();
+        // 1. 保存ボタン（送信ボタン）を取得する
+        // ※実際のボタンのidかclass、またはtype属性に合わせて指定してください
+        const saveButton = document.getElementById('save-button') || document.querySelector('input[type="submit"]') || document.querySelector('button[type="submit"]');
+        
+        if (saveButton) {
+            // 2. ボタンを擬似的にクリックして、既存の保存処理（ローカルストレージ削除など）を発火させる
+            saveButton.click();
+        } else {
+            // ボタンが見つからない場合のフォールバックとして従来の処理を残す
+            const form = document.getElementById('memo-form');
+            if (form) {
+                form.submit();
+            }
         }
     }
 });

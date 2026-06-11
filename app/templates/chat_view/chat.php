@@ -26,13 +26,13 @@ if (!isset($pdo) || !($pdo instanceof PDO)) {
 
 $current_user_id = $_SESSION['user_id'] ?? null;
 // ★ここで URL から安全に ID を取得する
-$receiver_id = isset($_GET['receiver_id']) && $_GET['receiver_id'] !== '' ? (int)$_GET['receiver_id'] : null;
-$room_id = isset($_GET['room_id']) && $_GET['room_id'] !== '' ? (int)$_GET['room_id'] : null;
+$receiver_id = isset($_GET['receiver_id']) && $_GET['receiver_id'] !== '' ? (int) $_GET['receiver_id'] : null;
+$room_id = isset($_GET['room_id']) && $_GET['room_id'] !== '' ? (int) $_GET['room_id'] : null;
 
 if ($room_id) {
     $stmt = $pdo->prepare("SELECT COUNT(*) FROM room_members WHERE room_id = ? AND user_id = ?");
     $stmt->execute([$room_id, $current_user_id]);
-    
+
     if ($stmt->fetchColumn() == 0) {
         die("このグループへのアクセス権限がありません。");
     }
@@ -42,18 +42,18 @@ if ($room_id) {
 // 1. まず既読処理を確定させる
 if ($current_user_id) {
     $pdo = getDB();
-    
+
     // 【重要】グループチャットの場合は「ルーム内の未読を全件既読にする」
     if (!empty($_GET['room_id'])) {
         $stmt = $pdo->prepare("UPDATE messages SET is_read = 1 WHERE room_id = ? AND is_read = 0");
-        $stmt->execute([(int)$_GET['room_id']]);
-        
+        $stmt->execute([(int) $_GET['room_id']]);
+
         // 念のためキャッシュさせないためのヘッダー（必要に応じて）
         // header("Cache-Control: no-cache, must-revalidate");
     } elseif (!empty($_GET['receiver_id'])) {
         // 個人用：receiver_id を指定
         $stmt = $pdo->prepare("UPDATE messages SET is_read = 1 WHERE receiver_id = ? AND sender_id = ? AND is_read = 0");
-        $stmt->execute([$current_user_id, (int)$_GET['receiver_id']]);
+        $stmt->execute([$current_user_id, (int) $_GET['receiver_id']]);
     }
 }
 
@@ -90,7 +90,7 @@ if ($receiver_id) {
     $messages = $messageModel->getChatHistory($current_user_id, $receiver_id);
 } elseif ($room_id) {
     // グループ用メッセージ取得処理（Messageモデルにあると仮定）
-    $messages = $messageModel->getRoomMessages($room_id); 
+    $messages = $messageModel->getRoomMessages($room_id);
 }
 
 $messageModel = new Message($pdo);
@@ -138,10 +138,10 @@ $messages = $messageModel->getChatHistory($current_user_id, $receiver_id);
 // 1. メッセージ送信処理 (POST)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['message'])) {
     $msg_text = trim($_POST['message']);
-    
+
     // --- メール通知ロジック ---
     if ($msg_text !== '' && ($receiver_id || $room_id)) {
-        
+
         // 1. 送信者のユーザー名を取得
         $stmt_user = $pdo->prepare("SELECT username FROM users WHERE id = ?");
         $stmt_user->execute([$current_user_id]);
@@ -153,7 +153,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['message'])) {
         if ($room_id) {
             // A. グループへ送信
             $messageModel->sendGroupMessage($current_user_id, $room_id, $msg_text);
-            
+
             // ★1. グループ名を取得
             $stmt_room = $pdo->prepare("SELECT name FROM rooms WHERE id = ?");
             $stmt_room->execute([$room_id]);
@@ -171,14 +171,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['message'])) {
 
             if (!empty($members)) {
                 $chat_url = $base_url . "?page=chat&room_id=" . $room_id;
-                
+
                 // ★3. メール本文にグループ名と送信者名を含める
                 $subject = "【{$room_name}】新しいメッセージがあります";
-                $body = "{$room_name} にて、{$sender_name} さんからメッセージが届きました。\n\n" . 
-                        "------------------------------------------\n" .
-                        "メッセージ内容:\n" . $msg_text . "\n\n" . 
-                        "------------------------------------------\n" .
-                        "以下のリンクから確認してください。\n" . $chat_url;
+                $body = "{$room_name} にて、{$sender_name} さんからメッセージが届きました。\n\n" .
+                    "------------------------------------------\n" .
+                    "メッセージ内容:\n" . $msg_text . "\n\n" .
+                    "------------------------------------------\n" .
+                    "以下のリンクから確認してください。\n" . $chat_url;
 
                 foreach ($members as $email) {
                     MailUtil::sendMail($email, $subject, $body);
@@ -188,24 +188,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['message'])) {
         } else {
             // B. 個人へ送信
             $messageModel->sendMessage($current_user_id, $receiver_id, $msg_text);
-            
+
             // 2B. 受信者のメールアドレスを取得
             $stmt = $pdo->prepare("SELECT email FROM users WHERE id = ?");
             $stmt->execute([$receiver_id]);
             if ($email = $stmt->fetchColumn()) {
                 $chat_url = $base_url . "?page=chat&receiver_id=" . $current_user_id;
                 $subject = "【お知らせ】新しいメッセージが届きました";
-                $body = "{$sender_name} さんからメッセージが届きました。\n\n" . 
-                        "------------------------------------------\n" .
-                        "メッセージ内容:\n" . $msg_text . "\n\n" . 
-                        "------------------------------------------\n" .
-                        "以下のリンクからチャットを確認してください。\n" . $chat_url;
-                
+                $body = "{$sender_name} さんからメッセージが届きました。\n\n" .
+                    "------------------------------------------\n" .
+                    "メッセージ内容:\n" . $msg_text . "\n\n" .
+                    "------------------------------------------\n" .
+                    "以下のリンクからチャットを確認してください。\n" . $chat_url;
+
                 MailUtil::sendMail($email, $subject, $body);
             }
             $redirect_url = "index.php?page=chat&receiver_id=" . $receiver_id;
         }
-        
+
         header("Location: " . $redirect_url);
         exit;
     }
@@ -314,7 +314,7 @@ if (file_exists(__DIR__ . '/../layout/header.php')) {
                 $stmt_title->execute([':my_id' => $current_user_id]);
                 $titles = $stmt_title->fetchAll(PDO::FETCH_KEY_PAIR);
 
-                
+
                 // グループ取得用SQLを追加
                 $stmtRooms = $pdo->prepare("SELECT r.id, r.name FROM rooms r JOIN room_members rm ON r.id = rm.room_id WHERE rm.user_id = :my_id");
                 $stmtRooms->execute([':my_id' => $current_user_id]);
@@ -322,7 +322,7 @@ if (file_exists(__DIR__ . '/../layout/header.php')) {
 
                 // グループを表示
                 foreach ($group_list as $group) {
-                    echo '<div style="padding: 5px 0;"><a href="index.php?page=chat&room_id='.$group['id'].'">[G] '.htmlspecialchars($group['name']).'</a></div>';
+                    echo '<div style="padding: 5px 0;"><a href="index.php?page=chat&room_id=' . $group['id'] . '">[G] ' . htmlspecialchars($group['name']) . '</a></div>';
                 }
 
                 // 個人チャットを表示
@@ -378,52 +378,88 @@ if (file_exists(__DIR__ . '/../layout/header.php')) {
 
         <div class="chat-main">
             <?php if ($receiver): ?>
-            <h4 style="display: flex; justify-content: space-between; align-items: center;">
-                <span>
-                    <?php 
+                <h4 style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>
+                        <?php
                         $displayName = htmlspecialchars($receiver['name'] ?? 'チャット', ENT_QUOTES, 'UTF-8');
                         echo ($room_id) ? $displayName : $displayName . ' さんとのチャット';
-                    ?>
-                </span>
-                <?php if ($room_id): ?>
-                    <button onclick="document.getElementById('addMemberModal').style.display='block'" class="btn-small">＋ メンバー追加</button>
-                <?php endif; ?>
-            </h4>
+                        ?>
+                    </span>
+                    <?php if ($room_id): ?>
+                        <button onclick="document.getElementById('addMemberModal').style.display='block'" class="btn-small">＋
+                            メンバー追加</button>
+                    <?php endif; ?>
+                </h4>
 
-            <details>
-                <summary style="cursor:pointer; padding:5px; background:#f8f9fa; border:1px solid #ddd; margin-bottom:10px;">グループを新規作成</summary>
-                <div class="group-create-area" style="padding: 10px; border: 1px solid #eee;">
-                    <?php include __DIR__ . '/create_group_form.php'; ?>
-                </div>
-            </details>
+                <details>
+                    <summary
+                        style="cursor:pointer; padding:5px; background:#f8f9fa; border:1px solid #ddd; margin-bottom:10px;">
+                        グループを新規作成</summary>
+                    <div class="group-create-area" style="padding: 10px; border: 1px solid #eee;">
+                        <?php include __DIR__ . '/create_group_form.php'; ?>
+                    </div>
+                </details>
 
-            <div id="addMemberModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000;">
-                <div style="background:#fff; width:300px; margin:100px auto; padding:20px; border-radius:8px; position:relative;">
-                    <h5>メンバーを追加</h5>
-                    <form action="index.php?page=add_member" method="POST">
-                        <input type="hidden" name="room_id" value="<?= htmlspecialchars($room_id) ?>">
-                        <input type="text" name="new_member_name" placeholder="ユーザー名を入力" required style="width:100%; margin-bottom:10px;">
-                        <button type="submit">追加実行</button>
-                        <button type="button" onclick="document.getElementById('addMemberModal').style.display='none'">閉じる</button>
-                    </form>
+                <div id="addMemberModal"
+                    style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000;">
+                    <div
+                        style="background:#fff; width:300px; margin:100px auto; padding:20px; border-radius:8px; position:relative;">
+                        <h5>メンバーを追加</h5>
+                        <form action="index.php?page=add_member" method="POST">
+                            <input type="hidden" name="room_id" value="<?= htmlspecialchars($room_id) ?>">
+                            <input type="text" name="new_member_name" placeholder="ユーザー名を入力" required
+                                style="width:100%; margin-bottom:10px;">
+                            <button type="submit">追加実行</button>
+                            <button type="button"
+                                onclick="document.getElementById('addMemberModal').style.display='none'">閉じる</button>
+                        </form>
+                    </div>
                 </div>
-            </div>
 
                 <div class="chat-timeline" id="chatTimeline">
                     <?php if (count($messages) > 0): ?>
                         <?php foreach ($messages as $msg): ?>
-                            <?php 
-                                $is_me = ((int) $msg['sender_id'] === (int) $current_user_id); 
-                                // 戻りURLを現在のGETパラメータに合わせて動的に作成
-                                $current_url = "index.php?page=chat" . ($room_id ? "&room_id=".$room_id : "&receiver_id=".$receiver_id);
+                            <?php
+                            $is_me = ((int) $msg['sender_id'] === (int) $current_user_id);
+                            // 戻りURLを現在のGETパラメータに合わせて動的に作成
+                            $current_url = "index.php?page=chat" . ($room_id ? "&room_id=" . $room_id : "&receiver_id=" . $receiver_id);
                             ?>
                             <div class="msg-row <?php echo $is_me ? 'me' : 'partner'; ?>">
 
                                 <?php if ($is_me): ?>
-                                    <?php if ((int) $msg['is_read'] === 1 && (int) $msg['sender_id'] !== (int) $current_user_id): ?>
-                                        <span class="msg-status">既読</span>
-                                    <?php elseif ((int) $msg['sender_id'] === (int) $current_user_id && (int) $msg['is_read'] === 0): ?>
-                                        <span class="msg-status unread">未読</span>
+                                    <?php
+                                    // ループ内で確実に動作するよう、現在の状況からroom_idを取得
+                                    $current_room_id = $_GET['room_id'] ?? $room_id ?? null;
+
+                                    if ($current_room_id) {
+                                        // 1. 自分以外のグループメンバーのユーザー名（一覧）を取得
+                                        $stmt_members = $pdo->prepare("
+                                            SELECT u.username 
+                                            FROM users u 
+                                            JOIN room_members rm ON u.id = rm.user_id 
+                                            WHERE rm.room_id = ? AND u.id != ?
+                                        ");
+                                        $stmt_members->execute([(int)$current_room_id, $current_user_id]);
+                                        $read_users = $stmt_members->fetchAll(PDO::FETCH_COLUMN);
+
+                                        // 2. 既読の人数（配列の要素数）
+                                        $member_count = count($read_users);
+
+                                        // 3. ホバー時に改行区切りでユーザー名が出るように結合
+                                        $hover_text = !empty($read_users) ? implode("\n", $read_users) : "既読メンバーはいません";
+                                    }
+                                    ?>
+
+                                    <?php if (!empty($current_room_id)): ?>
+                                        <span class="msg-status" title="<?php echo htmlspecialchars($hover_text, ENT_QUOTES, 'UTF-8'); ?>" style="cursor: help; display: inline-block; min-width: 40px;">
+                                            既読: <?php echo (int)$member_count; ?>
+                                        </span>
+                                    <?php else: ?>
+                                        <?php if ((int) $msg['is_read'] === 1): ?>
+                                            <span class="msg-status">既読</span>
+                                        <?php else: ?>
+                                            <span class="msg-status unread">未読</span>
+                                        <?php endif; ?>
                                     <?php endif; ?>
                                 <?php endif; ?>
 
@@ -435,8 +471,8 @@ if (file_exists(__DIR__ . '/../layout/header.php')) {
                                     <?php endif; ?>
 
                                     <?php if ($is_me && isset($msg['id'])): ?>
-                                        <form action="<?php echo $current_url; ?>" method="POST"
-                                            class="msg-delete-form" onsubmit="return confirmDelete();">
+                                        <form action="<?php echo $current_url; ?>" method="POST" class="msg-delete-form"
+                                            onsubmit="return confirmDelete();">
                                             <input type="hidden" name="action" value="delete">
                                             <input type="hidden" name="message_id" value="<?php echo $msg['id']; ?>">
                                             <button type="submit" class="btn-delete-msg" title="メッセージを削除">🗑️</button>
@@ -444,6 +480,19 @@ if (file_exists(__DIR__ . '/../layout/header.php')) {
                                     <?php endif; ?>
 
                                     <?php echo nl2br(htmlspecialchars($msg['message'], ENT_QUOTES, 'UTF-8')); ?>
+
+                                    <!-- <div class="msg-actions"
+                                        style="margin-top: 5px; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 3px; display: flex; gap: 10px; font-size: 11px;">
+                                        <span class="like-btn" onclick="toggleLike(<?php echo $msg['id']; ?>)"
+                                            style="cursor:pointer; color: #e91e63;">
+                                            ❤️ <span
+                                                id="like-count-<?php echo $msg['id']; ?>"><?php echo $msg['like_count'] ?? 0; ?></span>
+                                        </span>
+                                        <span class="read-info" style="color: #666;">
+                                            既読: <?php echo $msg['read_count'] ?? 0; ?>
+                                        </span>
+                                    </div> -->
+
                                     <span class="msg-meta"><?php echo date('m/d H:i', strtotime($msg['created_at'])); ?></span>
                                 </div>
                             </div>
@@ -453,7 +502,8 @@ if (file_exists(__DIR__ . '/../layout/header.php')) {
                     <?php endif; ?>
                 </div>
 
-                <form action="index.php?page=chat<?php echo $room_id ? '&room_id='.$room_id : '&receiver_id='.$receiver_id; ?>" 
+                <form
+                    action="index.php?page=chat<?php echo $room_id ? '&room_id=' . $room_id : '&receiver_id=' . $receiver_id; ?>"
                     method="POST" class="chat-input-area">
                     <textarea name="message" placeholder="メッセージを入力..." required></textarea>
                     <button type="submit">送信</button>
@@ -472,7 +522,7 @@ if (file_exists(__DIR__ . '/../layout/header.php')) {
     window.addEventListener('DOMContentLoaded', () => {
         const t = document.getElementById('chatTimeline');
         if (t) { t.scrollTop = t.scrollHeight; }
-        
+
         const chatForm = document.querySelector('.chat-input-area');
         if (chatForm) {
             chatForm.addEventListener('submit', function () {
@@ -488,6 +538,26 @@ if (file_exists(__DIR__ . '/../layout/header.php')) {
         return confirm("このメッセージを自分の画面から削除しますか？\n(送信相手の画面には残り続けます)");
     }
 
+    function toggleLike(messageId) {
+        // ボタンの要素を取得
+        const btn = document.getElementById('like-btn-' + messageId);
+
+        fetch('like_message.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'message_id=' + messageId
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'liked') {
+                    btn.style.color = 'red'; // いいねしたら赤くする
+                } else {
+                    btn.style.color = '#ccc'; // 解除したらグレーに戻す
+                }
+            })
+            .catch(error => console.error('Error:', error));
+    }
+
     function searchUsers() {
         const keyword = document.getElementById('userSearchInput').value;
         fetch('app/templates/chat_view/search_users.php?q=' + encodeURIComponent(keyword))
@@ -495,7 +565,7 @@ if (file_exists(__DIR__ . '/../layout/header.php')) {
             .then(users => {
                 const container = document.getElementById('userResults');
                 container.innerHTML = ''; // クリア
-                
+
                 users.forEach(user => {
                     const label = document.createElement('label');
                     label.innerHTML = `

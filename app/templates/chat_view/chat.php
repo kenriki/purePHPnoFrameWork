@@ -162,6 +162,16 @@ if ($room_id) {
     $stmt = $pdo->prepare("SELECT name FROM rooms WHERE id = ?");
     $stmt->execute([$room_id]);
     $receiver = ['name' => $stmt->fetchColumn() ?: 'グループチャット'];
+    // 現在このルームに参加している全てのメンバー名を取得
+    $stmt_rm = $pdo->prepare("
+        SELECT u.username 
+        FROM users u 
+        JOIN room_members rm ON u.id = rm.user_id 
+        WHERE rm.room_id = ?
+        ORDER BY u.username ASC
+    ");
+    $stmt_rm->execute([$room_id]);
+    $room_members_list = $stmt_rm->fetchAll(PDO::FETCH_COLUMN);
 } elseif ($receiver_id) {
     $messages = $messageModel->getChatHistory($current_user_id, $receiver_id);
     $stmt = $pdo->prepare("SELECT id, username AS name FROM users WHERE id = :id");
@@ -298,6 +308,15 @@ if (file_exists(__DIR__ . '/../layout/header.php')) {
                         echo ($room_id) ? $displayName : $displayName . ' さんとのチャット';
                         ?>
                     </span>
+                    <!-- グループ表示のときだけタイトルの横に所属ユーザを出す -->
+                    <?php if ($room_id && !empty($room_members_list)): ?>
+                        <span class="room-members-inline"
+                            style="font-size: 0.8rem; color: #777; font-weight: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
+                            title="参加メンバー: <?= htmlspecialchars(implode(', ', $room_members_list), ENT_QUOTES, 'UTF-8'); ?>">
+                            参加者:(
+                            <?= htmlspecialchars(implode(', ', $room_members_list), ENT_QUOTES, 'UTF-8'); ?>)
+                        </span>
+                    <?php endif; ?>
                     <?php if ($room_id): ?>
                         <button onclick="document.getElementById('addMemberModal').style.display='block'" class="btn-small">＋
                             メンバー追加</button>
@@ -524,11 +543,11 @@ if (file_exists(__DIR__ . '/../layout/header.php')) {
         if (!messageId) return;
 
         // 現在のURLのパラメータ（?page=chat&receiver_id=6 など）を丸ごと取得
-        const currentParams = window.location.search; 
-        
+        const currentParams = window.location.search;
+
         // 基本のパラメータオブジェクトを作成
         const urlParams = new URLSearchParams(currentParams);
-        
+
         // pageを強制的に 'like_message' に上書きし、message_id を追加する
         urlParams.set('page', 'like_message');
         urlParams.set('message_id', messageId);
@@ -541,33 +560,33 @@ if (file_exists(__DIR__ . '/../layout/header.php')) {
 
         // 通常のFetch処理（パースのエラーハンドリング付き）
         fetch(requestUrl, { method: 'GET' })
-        .then(response => {
-            if (!response.ok) throw new Error('ネットワーク応答エラー');
-            return response.json();
-        })
-        .then(data => {
-            // サーバーから正常に 'liked' / 'unliked' が返ってきた場合の処理
-            if (data.status === 'liked' || data.status === 'unliked') {
-                const btnElem = document.getElementById(`like-btn-${messageId}`);
-                const countElem = document.getElementById(`like-count-${messageId}`);
-                let currentCount = parseInt(countElem.textContent, 10) || 0;
+            .then(response => {
+                if (!response.ok) throw new Error('ネットワーク応答エラー');
+                return response.json();
+            })
+            .then(data => {
+                // サーバーから正常に 'liked' / 'unliked' が返ってきた場合の処理
+                if (data.status === 'liked' || data.status === 'unliked') {
+                    const btnElem = document.getElementById(`like-btn-${messageId}`);
+                    const countElem = document.getElementById(`like-count-${messageId}`);
+                    let currentCount = parseInt(countElem.textContent, 10) || 0;
 
-                if (data.status === 'liked') {
-                    btnElem.style.color = '#e91e63';
-                    countElem.textContent = currentCount + 1;
-                } else if (data.status === 'unliked') {
-                    btnElem.style.color = '#ccc';
-                    countElem.textContent = Math.max(0, currentCount - 1);
+                    if (data.status === 'liked') {
+                        btnElem.style.color = '#e91e63';
+                        countElem.textContent = currentCount + 1;
+                    } else if (data.status === 'unliked') {
+                        btnElem.style.color = '#ccc';
+                        countElem.textContent = Math.max(0, currentCount - 1);
+                    }
+                } else {
+                    // サーバー側が 'error' などを返してきた場合はそのメッセージを出す
+                    alert('サーバーエラー: ' + (data.message || '処理に失敗しました'));
                 }
-            } else {
-                // サーバー側が 'error' などを返してきた場合はそのメッセージを出す
-                alert('サーバーエラー: ' + (data.message || '処理に失敗しました'));
-            }
-        })
-        .catch(error => {
-            console.error('通信またはパースエラー:', error);
-            alert('通信エラーが発生しました。');
-        });
+            })
+            .catch(error => {
+                console.error('通信またはパースエラー:', error);
+                alert('通信エラーが発生しました。');
+            });
     }
 </script>
 

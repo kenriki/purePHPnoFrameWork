@@ -1,5 +1,6 @@
 <?php
 session_start();
+$appEnv = $_ENV['APP_ENV'] ?? 'production';
 date_default_timezone_set('Asia/Tokyo');
 header('Content-Type: text/html; charset=UTF-8');
 mb_internal_encoding("UTF-8");
@@ -19,12 +20,14 @@ $api_request = $_GET['api'] ?? '';
 $pageId = $page; // pageIdを初期化
 $action = $_GET['action'] ?? '';
 
+// APIリクエスト処理
 if ($api_request === 'equipment') {
     require_once __DIR__ . '/../app/api/api_equipment.php';
     exit;
 }
+
+// AIダッシュボード処理
 if ($action === 'ask') {
-//if (isset($_GET['action']) && $_GET['action'] === 'ask') {
     require_once __DIR__ . '/../app/templates/ai-dashboard/page.php';
     exit;
 }
@@ -33,220 +36,176 @@ if ($action === 'ask') {
  * 3. ログイン・アクティブ状態の管理とGoogle連携チェック
  */
 $isGoogleLinked = false;
+$pdo = null; // 共通PDO変数
+
 if (isset($_SESSION['user_id'])) {
     try {
-        $db = getDB();
-
+        $pdo = getDB();
         // アクティブ時間の更新
-        $stmtActive = $db->prepare("UPDATE users SET last_active_at = NOW() WHERE id = ?");
+        $stmtActive = $pdo->prepare("UPDATE users SET last_active_at = NOW() WHERE id = ?");
         $stmtActive->execute([$_SESSION['user_id']]);
 
-        // Google連携状態の確認 (トークンの有無)
-        $stmtToken = $db->prepare("SELECT user_name FROM google_tokens WHERE user_name = ?");
-        $userName = $_SESSION['user_id'] ?? 'guest';
-        $stmtToken->execute([$userName]);
+        // Google連携状態の確認
+        $stmtToken = $pdo->prepare("SELECT user_name FROM google_tokens WHERE user_name = ?");
+        $stmtToken->execute([$_SESSION['user_id']]);
         if ($stmtToken->fetch()) {
             $isGoogleLinked = true;
         }
-
     } catch (Exception $e) {
         error_log("Session/Token check failed: " . $e->getMessage());
     }
 }
 
 /**
- * =======================================================
- * 【重要・パス解決版】既存の処理を壊さず、未読チャット件数を安全にカウント
- * =======================================================
+ * 未読チャット件数の取得
  */
 $GLOBALS['unread_count'] = 0;
 if (isset($_SESSION['user_id'])) {
-    try {
-        $chat_pdo = getDB();
+    $path = file_exists(__DIR__ . '/../app/models/Message.php') ? __DIR__ . '/../app/models/Message.php' : __DIR__ . '/../models/Message.php';
+    if (file_exists($path)) {
+        require_once $path;
+        $messageModel = new Message($pdo ?? getDB());
+        $GLOBALS['unread_count'] = $messageModel->getUnreadCount($_SESSION['user_id']);
+    }
+}
 
-        // 環境による階層の違いを吸収するため、2パターンのパスをチェックします
-        $path_option1 = __DIR__ . '/../app/models/Message.php';
-        $path_option2 = __DIR__ . '/../models/Message.php';
-        $resolved_path = null;
-
-        if (file_exists($path_option1)) {
-            $resolved_path = $path_option1;
-        } elseif (file_exists($path_option2)) {
-            $resolved_path = $path_option2;
-        }
-
-        // ファイルが正しく見つかった場合のみMessageモデルを生成
-        if ($chat_pdo instanceof PDO && $resolved_path !== null) {
-            require_once $resolved_path;
-            $messageModel = new Message($chat_pdo);
-            $GLOBALS['unread_count'] = $messageModel->getUnreadCount($_SESSION['user_id']);
+/**
+ * ルーティング処理
+ */
+switch ($page) {
+    case 'chat':
+        include __DIR__ . '/../app/templates/chat_view/chat.php';
+        exit;
+        
+    case 'like_message':
+        // これより上部で出力されてしまったHTML（ヘッダー等）をすべてバッファから抹消
+        if (ob_get_length()) ob_clean();
+        
+        // レスポンスを完全にJSONとして定義
+        header('Content-Type: application/json; charset=utf-8');
+        
+        $like_script = __DIR__ . '/../app/templates/chat_view/like_message.php';
+        if (file_exists($like_script)) {
+            include $like_script;
         } else {
-            error_log("Message.php class file could not be found in expected paths.");
+            header("HTTP/1.1 500 Internal Server Error");
+            echo json_encode(['status' => 'error', 'message' => 'ファイルが見つかりません。']);
         }
-    } catch (Exception $e) {
-        error_log("Chat unread count failed: " . $e->getMessage());
-    }
+        // index.phpの下部にあるフッターなどのHTMLに絶対に合流させないために即終了
+        exit;
+
+    case 'add_member':
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $room_id = $_POST['room_id'] ?? 0;
+            $name = $_POST['new_member_name'] ?? '';
+            $stmt = $pdo->prepare("SELECT id FROM users WHERE username = ?");
+            $stmt->execute([$name]);
+            if ($user = $stmt->fetch()) {
+                $check = $pdo->prepare("SELECT * FROM room_members WHERE room_id = ? AND user_id = ?");
+                $check->execute([$room_id, $user['id']]);
+                if (!$check->fetch()) {
+                    $stmt = $pdo->prepare("INSERT INTO room_members (room_id, user_id) VALUES (?, ?)");
+                    $stmt->execute([$room_id, $user['id']]);
+                }
+            }
+            header("Location: index.php?page=chat&room_id=" . $room_id);
+            exit;
+        }
+        break;
+
+    case 'google_auth':
+        header("Location: auth.php");
+        exit;
+
+    case 'view_share':
+        require_once __DIR__ . '/../app/controllers/MemoController.php';
+        (new MemoController())->view_share();
+        exit;
+
+    case 'generate_share_url':
+        require_once __DIR__ . '/../app/controllers/MemoController.php';
+        (new MemoController())->generate_share_url();
+        exit;
+
+    case 'memo':
+        if ($action === 'set_guest_name' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+            $_SESSION['guest_name'] = $_POST['guest_name'] ?? '';
+            header("Location: /index.php?page=memo&action=list");
+            exit;
+        }
+        require_once __DIR__ . '/../app/controllers/MemoController.php';
+        $controller = new MemoController();
+        $data = $controller->handleRequest();
+        $data['isGoogleLinked'] = $isGoogleLinked;
+        extract($data);
+        include __DIR__ . '/../app/templates/memo/page.php';
+        exit;
+
+    case 'memo_list':
+        require_once __DIR__ . '/../app/controllers/PageController.php';
+        $controller = new PageController();
+        $pageData = $controller->showMemoList();
+        $templatePath = "../app/templates/memo_list/page.php";
+        if (!file_exists(__DIR__ . '/' . $templatePath))
+            $templatePath = "../app/templates/home/page.php";
+        include __DIR__ . '/../app/templates/layout/header.php';
+        include __DIR__ . '/' . $templatePath;
+        include __DIR__ . '/../app/templates/layout/footer.php';
+        exit;
+
+    case 'group_create':
+        include __DIR__ . '/../app/templates/chat_view/create_group_form.php';
+        exit;
+
+    case 'do_create_group':
+        require_once __DIR__ . '/../app/templates/chat_view/create_group.php';
+        exit;
+
+    case 'admin':
+        require_once __DIR__ . '/../app/controllers/AdminController.php';
+        $controller = new AdminController();
+        $data = $controller->handleRequest();
+        $data['isGoogleLinked'] = $isGoogleLinked;
+        extract($data);
+        include __DIR__ . '/../app/templates/admin/page.php';
+        exit;
+
+    case 'api':
+        require_once __DIR__ . '/../app/controllers/ApiController.php';
+        (new ApiController())->handleRequest($_GET['api'] ?? '');
+        exit;
+
+    case 'sampleTest-1':
+        include __DIR__ . '/../app/templates/layout/header.php';
+        include __DIR__ . "/../app/templates/sampleTest-1/page.php";
+        include __DIR__ . '/../app/templates/layout/footer.php';
+        exit;
+
 }
 
-/**
- * 4. チャット画面専用のルーティング
- */
-if ($page === 'chat') {
-    // チャット画面の表示・データ処理
-    include __DIR__ . '/../app/templates/chat_view/chat.php';
-    exit;
-}
-
-/**
- * 5. Google認証・連携専用ルーティング
- * 連携ボタンから page=google_auth でアクセスされた場合
- */
-if ($page === 'google_auth') {
-    // auth.php へリダイレクト
-    header("Location: auth.php");
-    exit;
-}
-
-/**
- * 6. 共有メモ閲覧（ログイン不要）
- */
-if ($page === 'view_share') {
-    require_once __DIR__ . '/../app/controllers/MemoController.php';
-    $controller = new MemoController();
-    $controller->view_share();
-    exit;
-}
-
-/**
- * 7. 共有URL生成処理
- */
-if ($page === 'generate_share_url') {
-    require_once __DIR__ . '/../app/controllers/MemoController.php';
-    $controller = new MemoController();
-    $controller->generate_share_url();
-    exit;
-}
-
-/**
- * 8. 合言葉（guest_name）のセッション保存処理
- */
-if ($page === 'memo' && $action === 'set_guest_name') {
-    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        $_SESSION['guest_name'] = $_POST['guest_name'] ?? '';
-    }
-    header("Location: /index.php?page=memo&action=list");
-    exit;
-}
-
-/**
- * 9. 特定のページ（memo）に対するカスタムルーティング
- */
-if ($page === 'memo') {
-    $pageId = 'memo';
-    require_once __DIR__ . '/../app/controllers/MemoController.php';
-
-    // Google未連携の状態でカレンダー操作をしようとした場合の警告用フラグを渡す
-    $controller = new MemoController();
-    $data = $controller->handleRequest();
-
-    // データの展開（$isGoogleLinked をビューで使えるようにする）
-    $data['isGoogleLinked'] = $isGoogleLinked;
-    extract($data);
-
-    include __DIR__ . '/../app/templates/memo/page.php';
-    exit;
-}
-
-/**
- * 10. マイメモ一覧（memo_list）に対するカスタムルーティング
- */
-if ($page === 'memo_list') {
-    require_once __DIR__ . '/../app/controllers/PageController.php';
-
-    $controller = new PageController();
-    $pageData = $controller->showMemoList();
-
-    //$pageId = 'memo_list';
-    // index.php 117行目付近
-    $templatePath = "../app/templates/{$pageId}/page.php";
-
-    // もし 404（memo_listなど）の場合は、共通の page.php を使うように強制する
-    if ($pageId === 'memo_list' || !file_exists($templatePath)) {
-        $templatePath = "../app/templates/home/page.php"; // あるいは共通の page.php
-    }
-
-
-    include __DIR__ . '/../app/templates/layout/header.php';
-    include($templatePath);
-    include __DIR__ . '/../app/templates/layout/footer.php';
-    exit;
-}
-
-if ($page === 'admin') {
-    $pageId = 'admin';
-    require_once __DIR__ . '/../app/controllers/AdminController.php';
-
-    $controller = new AdminController();
-    $data = $controller->handleRequest();
-
-    // 必要なら共通変数を渡す
-    $data['isGoogleLinked'] = $isGoogleLinked ?? false;
-    extract($data);
-
-    include __DIR__ . '/../app/templates/admin/page.php';
-    exit;
-
-} elseif ($page === 'api') {
-    require_once __DIR__ . '/../app/controllers/ApiController.php';
-
-    $apiPath = $_GET['api'] ?? '';
-    $controller = new ApiController();
-    $controller->handleRequest($apiPath); // APIはJSON返すだけなのでexitは中でやる
-    exit;
-} elseif ($page === 'sampleTest-1') {
-    // 1. ページIDを設定
-    $pageId = 'sampleTest-1';
-
-    // 2. レイアウトとテンプレートの読み込み（パスの結合を確実に！）
-    include __DIR__ . '/../app/templates/layout/header.php';
-    include __DIR__ . "/../app/templates/{$pageId}/page.php";
-    include __DIR__ . '/../app/templates/layout/footer.php';
-    exit;
-}
-
-/**
- * 11. 既存のルーティングの実行（HOMEなどのカレンダー表示はすべてここで安全に実行されます）
- */
+// 既存ルーティングの実行
 route($page);
 ?>
+
 <script>
-    // 1. 画面スリープを防止する機能 (Wake Lock)
+    // Wake Lock
     let wakeLock = null;
     async function requestWakeLock() {
         try {
             if ('wakeLock' in navigator) {
                 wakeLock = await navigator.wakeLock.request('screen');
-                console.log('スリープ防止機能：有効');
+                console.log('スリープ防止：有効');
             }
-        } catch (err) {
-            console.log('スリープ防止エラー:', err);
-        }
+        } catch (err) { console.log('スリープ防止エラー:', err); }
     }
-
-    // 2. ページ表示時に実行
     document.addEventListener('visibilitychange', () => {
-        if (wakeLock !== null && document.visibilityState === 'visible') {
-            requestWakeLock();
-        }
+        if (wakeLock !== null && document.visibilityState === 'visible') requestWakeLock();
     });
-
-    // 初回起動時に実行
     requestWakeLock();
 
-    // 3. サービスワーカーの登録（PWA化に必須）
+    // Service Worker
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js').then(() => {
-            console.log('Service Worker Registered');
-        });
+        navigator.serviceWorker.register('/sw.js').then(() => console.log('SW Registered'));
     }
 </script>
+<script src="main.js"></script>

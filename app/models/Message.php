@@ -35,16 +35,35 @@ class Message
      * * @param int $user_id1
      * @return array
      */
-    public function getChatHistory($my_id, $partner_id)
-    {
-        $stmt = $this->pdo->prepare("
-        SELECT * FROM messages 
-        WHERE ((sender_id = :my_id AND receiver_id = :partner_id) 
-           OR (sender_id = :partner_id AND receiver_id = :my_id))
-        AND (deleted_by_user_id IS NULL OR deleted_by_user_id != :my_id)
-        ORDER BY created_at ASC
-    ");
-        $stmt->execute([':my_id' => $my_id, ':partner_id' => $partner_id]);
+    // public function getChatHistory($my_id, $partner_id)
+    // {
+    //     $stmt = $this->pdo->prepare("
+    //     SELECT * FROM messages 
+    //     WHERE ((sender_id = :my_id AND receiver_id = :partner_id) 
+    //        OR (sender_id = :partner_id AND receiver_id = :my_id))
+    //     AND (deleted_by_user_id IS NULL OR deleted_by_user_id != :my_id)
+    //     ORDER BY created_at ASC
+    // ");
+    //     $stmt->execute([':my_id' => $my_id, ':partner_id' => $partner_id]);
+    //     return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    // }
+    public function getChatHistory($my_id, $partner_id) {
+        // 💡 SQLのSELECT項目に、総いいね数と、自分がいいねしたかのフラグを追加します
+        $sql = "SELECT m.*, u.username AS sender_name,
+                    (SELECT COUNT(*) FROM message_likes WHERE message_id = m.id) AS like_count,
+                    (SELECT COUNT(*) FROM message_likes WHERE message_id = m.id AND user_id = :my_id) AS is_liked
+                FROM messages m
+                JOIN users u ON m.sender_id = u.id
+                WHERE ((m.sender_id = :my_id AND m.receiver_id = :partner_id)
+                OR (m.sender_id = :partner_id AND m.receiver_id = :my_id))
+                AND (m.deleted_by_user_id IS NULL OR m.deleted_by_user_id != :my_id)
+                ORDER BY m.created_at ASC";
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([
+            ':my_id' => $my_id,
+            ':partner_id' => $partner_id
+        ]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -171,17 +190,34 @@ class Message
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public function getRoomMessages($room_id)
-    {
-        $stmt = $this->pdo->prepare("
-            SELECT m.*, u.username AS sender_name 
-            FROM messages m 
-            JOIN users u ON m.sender_id = u.id 
-            WHERE m.room_id = :room_id 
-            AND (m.deleted_by_user_id IS NULL OR m.deleted_by_user_id != :my_id)
-            ORDER BY m.created_at ASC
-        ");
-        $stmt->execute([':room_id' => $room_id, ':my_id' => $_SESSION['user_id']]);
+    // public function getRoomMessages($room_id)
+    // {
+    //     $stmt = $this->pdo->prepare("
+    //         SELECT m.*, u.username AS sender_name 
+    //         FROM messages m 
+    //         JOIN users u ON m.sender_id = u.id 
+    //         WHERE m.room_id = :room_id 
+    //         AND (m.deleted_by_user_id IS NULL OR m.deleted_by_user_id != :my_id)
+    //         ORDER BY m.created_at ASC
+    //     ");
+    //     $stmt->execute([':room_id' => $room_id, ':my_id' => $_SESSION['user_id']]);
+    //     return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    // }
+    public function getRoomMessages($room_id, $my_id) { // 引数に $my_id が必要になります
+        $sql = "SELECT m.*, u.username AS sender_name,
+                    (SELECT COUNT(*) FROM message_likes WHERE message_id = m.id) AS like_count,
+                    (SELECT COUNT(*) FROM message_likes WHERE message_id = m.id AND user_id = :my_id) AS is_liked
+                FROM messages m
+                JOIN users u ON m.sender_id = u.id
+                WHERE m.room_id = :room_id
+                AND (m.deleted_by_user_id IS NULL OR m.deleted_by_user_id != :my_id)
+                ORDER BY m.created_at ASC";
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([
+            ':room_id' => $room_id,
+            ':my_id' => $my_id
+        ]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -197,6 +233,53 @@ class Message
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([':user_id' => $user_id]);
         return (int) $stmt->fetchColumn();
+    }
+
+    function generateUniqueRoomCode($pdo)
+    {
+        do {
+            // 8桁のランダムな英数字を生成
+            $code = substr(str_shuffle('ABCDEFGHJKLMNPQRSTUVWXYZ23456789'), 0, 8);
+
+            // 重複チェック
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM rooms WHERE room_code = ?");
+            $stmt->execute([$code]);
+        } while ($stmt->fetchColumn() > 0); // 重複があれば再生成
+
+        return $code;
+    }
+    /**
+     * メッセージにいいねを追加・削除（トグル）
+     */
+    public function toggleLike($message_id, $user_id)
+    {
+        // 既にいいねしているか確認
+        $stmt = $this->pdo->prepare("SELECT id FROM message_likes WHERE message_id = ? AND user_id = ?");
+        $stmt->execute([$message_id, $user_id]);
+
+        if ($stmt->fetch()) {
+            // あれば削除
+            $stmt = $this->pdo->prepare("DELETE FROM message_likes WHERE message_id = ? AND user_id = ?");
+            return $stmt->execute([$message_id, $user_id]);
+        } else {
+            // なければ追加
+            $stmt = $this->pdo->prepare("INSERT INTO message_likes (message_id, user_id) VALUES (?, ?)");
+            return $stmt->execute([$message_id, $user_id]);
+        }
+    }
+
+    /**
+     * ルーム内のメッセージに既読を記録（グループ用）
+     */
+    public function markRoomMessageAsRead($room_id, $user_id)
+    {
+        // まだ既読テーブルにないレコードのみを追加
+        $sql = "INSERT INTO read_receipts (message_id, user_id)
+            SELECT m.id, ? FROM messages m
+            WHERE m.room_id = ?
+            AND NOT EXISTS (SELECT 1 FROM read_receipts rr WHERE rr.message_id = m.id AND rr.user_id = ?)";
+        $stmt = $this->pdo->prepare($sql);
+        return $stmt->execute([$user_id, $room_id, $user_id]);
     }
 
 }

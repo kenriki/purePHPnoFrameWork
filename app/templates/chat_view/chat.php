@@ -348,73 +348,74 @@ if (file_exists(__DIR__ . '/../layout/header.php')) {
                     </div>
                 </div>
 
+                <?php
+                    // =======================================================
+                    // [修正前処理] ループに入る前に既読情報を一括でメモリにロード
+                    // =======================================================
+                    $read_counts = []; // メッセージID => 既読人数
+                    $my_reads = [];    // 自分が既読したメッセージIDのリスト
+                    if (!empty($messages)) {
+                        $msg_ids = array_column($messages, 'id');
+                        $placeholders = implode(',', array_fill(0, count($msg_ids), '?'));
+                        
+                        // 全メッセージの既読件数を一括取得
+                        $stmt = $pdo->prepare("SELECT message_id, COUNT(user_id) as cnt FROM message_reads WHERE message_id IN ($placeholders) GROUP BY message_id");
+                        $stmt->execute($msg_ids);
+                        $read_counts = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+                        
+                        // 自分が既読済みかどうかのチェック用
+                        $stmt = $pdo->prepare("SELECT message_id FROM message_reads WHERE message_id IN ($placeholders) AND user_id = ?");
+                        $stmt->execute(array_merge($msg_ids, [$current_user_id]));
+                        $my_reads = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                    }
+                ?>
+
                 <div class="chat-timeline" id="chatTimeline">
                     <?php if (count($messages) > 0): ?>
-                        <?php foreach ($messages as $msg): ?>
-                            <?php
+                        <?php foreach ($messages as $msg):
                             $is_me = ((int) $msg['sender_id'] === $current_user_id);
-                            $current_url = "index.php?page=chat" . ($room_id ? "&room_id=" . $room_id : "&receiver_id=" . $receiver_id);
+                            $msg_id = $msg['id'];
+
+                            // 既読INSERT処理（自分が送信者ではなく、かつ未読の場合のみ）
+                            if (!$is_me && !in_array($msg_id, $my_reads)) {
+                                $stmt_ins = $pdo->prepare("INSERT INTO message_reads (message_id, user_id, read_at) VALUES (?, ?, NOW())");
+                                $stmt_ins->execute([$msg_id, $current_user_id]);
+                                $my_reads[] = $msg_id;
+                                $read_counts[$msg_id] = ($read_counts[$msg_id] ?? 0) + 1;
+                            }
                             ?>
                             <div class="msg-row <?= $is_me ? 'me' : 'partner'; ?>">
-
                                 <?php if ($is_me): ?>
-                                    <?php if (!empty($room_id)):
-                                        // グループチャットの既読カウント
-                                        $stmt_members = $pdo->prepare("
-                                            SELECT u.username FROM users u 
-                                            JOIN room_members rm ON u.id = rm.user_id 
-                                            WHERE rm.room_id = ? AND u.id != ?
-                                        ");
-                                        $stmt_members->execute([$room_id, $current_user_id]);
-                                        $read_users = $stmt_members->fetchAll(PDO::FETCH_COLUMN);
-                                        $member_count = count($read_users);
-                                        $hover_text = !empty($read_users) ? implode("\n", $read_users) : "既読メンバーはいません";
-                                        ?>
-                                        <span class="msg-status" title="<?= htmlspecialchars($hover_text, ENT_QUOTES, 'UTF-8'); ?>"
-                                            style="cursor: help; display: inline-block; min-width: 40px;">
-                                            既読: <?= (int) $member_count; ?>
-                                        </span>
-                                    <?php else: ?>
-                                        <span class="msg-status <?= ((int) $msg['is_read'] === 1) ? '' : 'unread'; ?>">
+                                    <span class="msg-status">
+                                        <?php if ($room_id): ?>
+                                            既読: <?= (int) ($read_counts[$msg_id] ?? 0); ?>
+                                        <?php else: ?>
                                             <?= ((int) $msg['is_read'] === 1) ? '既読' : '未読'; ?>
-                                        </span>
-                                    <?php endif; ?>
+                                        <?php endif; ?>
+                                    </span>
                                 <?php endif; ?>
 
                                 <div class="msg-bubble">
                                     <?php if (!$is_me && $room_id && isset($msg['sender_name'])): ?>
-                                        <div style="font-size: 10px; color: #666; margin-bottom: 2px;">
-                                            <?= htmlspecialchars($msg['sender_name'], ENT_QUOTES, 'UTF-8'); ?>
-                                        </div>
-                                    <?php endif; ?>
-
-                                    <?php if ($is_me && isset($msg['id'])): ?>
-                                        <form action="<?= $current_url; ?>" method="POST" class="msg-delete-form"
-                                            onsubmit="return confirmDelete();">
-                                            <input type="hidden" name="action" value="delete">
-                                            <input type="hidden" name="message_id" value="<?= $msg['id']; ?>">
-                                            <button type="submit" class="btn-delete-msg" title="メッセージを削除">🗑️</button>
-                                        </form>
+                                        <div style="font-size: 10px; color: #666;">
+                                            <?= htmlspecialchars($msg['sender_name'], ENT_QUOTES, 'UTF-8'); ?></div>
                                     <?php endif; ?>
 
                                     <?= nl2br(htmlspecialchars($msg['message'], ENT_QUOTES, 'UTF-8')); ?>
 
-                                    <div class="msg-actions"
-                                        style="margin-top: 5px; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 3px; display: flex; gap: 10px; font-size: 11px;">
+                                    <div class="msg-actions">
                                         <?php $is_liked = !empty($msg['is_liked']); ?>
-                                        <span class="like-btn" id="like-btn-<?= $msg['id']; ?>"
-                                            onclick="toggleLike(<?= $msg['id']; ?>)"
-                                            style="cursor:pointer; color: <?= $is_liked ? '#e91e63' : '#ccc'; ?>;">
-                                            ❤️<span id="like-count-<?= $msg['id']; ?>"><?= $msg['like_count'] ?? 0; ?></span>
+                                        <span class="like-btn" id="like-btn-<?= $msg_id; ?>" onclick="toggleLike(<?= $msg_id; ?>)"
+                                            style="color: <?= $is_liked ? '#e91e63' : '#ccc'; ?>;">
+                                            ❤️<span id="like-count-<?= $msg_id; ?>"><?= $msg['like_count'] ?? 0; ?></span>
                                         </span>
                                     </div>
-
                                     <span class="msg-meta"><?= date('m/d H:i', strtotime($msg['created_at'])); ?></span>
                                 </div>
                             </div>
                         <?php endforeach; ?>
                     <?php else: ?>
-                        <p style="color: #bbb; text-align: center; margin-top: 120px; font-size: 13px;">メッセージはまだありません</p>
+                        <p>メッセージはまだありません</p>
                     <?php endif; ?>
                 </div>
 

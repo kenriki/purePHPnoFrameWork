@@ -295,8 +295,6 @@ function formatSizeUnits($bytes)
                     <?php foreach ($files as $f):
                         $safe_token = htmlspecialchars(basename($f['file_path']));
                         $safe_id = htmlspecialchars($f['id']);
-
-                        // 物理パスからサイズを取得
                         $full_path = $base_dir . $f['file_path'];
                         $file_size = file_exists($full_path) ? formatSizeUnits(filesize($full_path)) : '不明';
                         ?>
@@ -307,20 +305,25 @@ function formatSizeUnits($bytes)
                                     <?= htmlspecialchars($f['file_name']) ?>
                                 </a>
 
-                                <?php if ($f['is_public'] && $f['expires_at'] > date('Y-m-d H:i:s')):
-                                    $base_url = (isset($_SERVER['HTTPS']) ? "https://" : "http://") . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']);
-                                    $guest_url = $base_url . '/download.php?token=' . $safe_token;
-                                    ?>
-                                    <div class="guest-link" style="font-size:0.8em; color:#005bac; margin-top:5px;">
-                                        ゲスト公開中:
-                                        <input type="text" id="url_<?= $safe_id ?>" value="<?= htmlspecialchars($guest_url) ?>"
-                                            style="width:120px; font-size:0.9em;">
-                                        <button type="button" onclick="copyToClipboard('url_<?= $safe_id ?>')"
-                                            style="background:#28a745; color:white; border:none; padding:2px 5px; font-size:0.8em; cursor:pointer;">
-                                            コピー
-                                        </button>
+                                <?php if ($f['is_public'] && !empty($f['expires_at'])): ?>
+                                    <div style="font-size: 0.75em; color: #dc3545; margin-top: 2px;">
+                                        期限: <?= htmlspecialchars($f['expires_at']) ?>
                                     </div>
                                 <?php endif; ?>
+
+                                <?php
+                                $base_url = (isset($_SERVER['HTTPS']) ? "https://" : "http://") . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']);
+                                $file_url = $base_url . '/download.php?token=' . $safe_token;
+                                ?>
+                                <div class="guest-link" style="font-size:0.8em; color:#005bac; margin-top:5px;">
+                                    URL:
+                                    <input type="text" id="url_<?= $safe_id ?>" value="<?= htmlspecialchars($file_url) ?>"
+                                        style="width:120px; font-size:0.9em;">
+                                    <button type="button" onclick="copyToClipboard('url_<?= $safe_id ?>')"
+                                        style="background:#28a745; color:white; border:none; padding:2px 5px; font-size:0.8em; cursor:pointer;">
+                                        コピー
+                                    </button>
+                                </div>
                             </td>
                             <td><?= $file_size ?></td>
                             <td><?= htmlspecialchars($f['username']) ?></td>

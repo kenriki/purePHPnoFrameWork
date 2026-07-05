@@ -96,6 +96,18 @@ if ($current_user_id) {
     $stmt->execute(['uid' => $current_user_id]);
     $files = $stmt->fetchAll();
 }
+
+// ファイルサイズを読みやすい形式に変換する関数
+function formatSizeUnits($bytes)
+{
+    if ($bytes >= 1073741824)
+        return number_format($bytes / 1073741824, 2) . ' GB';
+    if ($bytes >= 1048576)
+        return number_format($bytes / 1048576, 2) . ' MB';
+    if ($bytes >= 1024)
+        return number_format($bytes / 1024, 2) . ' KB';
+    return $bytes . ' bytes';
+}
 ?>
 
 <!DOCTYPE html>
@@ -201,6 +213,7 @@ if ($current_user_id) {
                 <thead>
                     <tr>
                         <th>ファイル名</th>
+                        <th>サイズ</th>
                         <th>投稿者</th>
                         <th>日時</th>
                         <th>操作</th>
@@ -208,9 +221,12 @@ if ($current_user_id) {
                 </thead>
                 <tbody>
                     <?php foreach ($files as $f):
-                        // 安全のためファイルパスのベースネームをエスケープ
                         $safe_token = htmlspecialchars(basename($f['file_path']));
                         $safe_id = htmlspecialchars($f['id']);
+
+                        // 物理パスからサイズを取得
+                        $full_path = $base_dir . $f['file_path'];
+                        $file_size = file_exists($full_path) ? formatSizeUnits(filesize($full_path)) : '不明';
                         ?>
                         <tr>
                             <td>
@@ -234,6 +250,7 @@ if ($current_user_id) {
                                     </div>
                                 <?php endif; ?>
                             </td>
+                            <td><?= $file_size ?></td>
                             <td><?= htmlspecialchars($f['username']) ?></td>
                             <td><?= htmlspecialchars($f['uploaded_at']) ?></td>
                             <td>
@@ -264,8 +281,9 @@ if ($current_user_id) {
                 "language": {
                     "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/ja.json"
                 },
+                "pageLength": 5,
                 "columnDefs": [
-                    { "orderable": false, "targets": 3 } // インデックス3（操作列）をソート無効
+                    { "orderable": false, "targets": 4 } // インデックス3（操作列）をソート無効
                 ]
             });
 

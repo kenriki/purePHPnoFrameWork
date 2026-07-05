@@ -349,25 +349,25 @@ if (file_exists(__DIR__ . '/../layout/header.php')) {
                 </div>
 
                 <?php
-                    // =======================================================
-                    // [修正前処理] ループに入る前に既読情報を一括でメモリにロード
-                    // =======================================================
-                    $read_counts = []; // メッセージID => 既読人数
-                    $my_reads = [];    // 自分が既読したメッセージIDのリスト
-                    if (!empty($messages)) {
-                        $msg_ids = array_column($messages, 'id');
-                        $placeholders = implode(',', array_fill(0, count($msg_ids), '?'));
-                        
-                        // 全メッセージの既読件数を一括取得
-                        $stmt = $pdo->prepare("SELECT message_id, COUNT(user_id) as cnt FROM message_reads WHERE message_id IN ($placeholders) GROUP BY message_id");
-                        $stmt->execute($msg_ids);
-                        $read_counts = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
-                        
-                        // 自分が既読済みかどうかのチェック用
-                        $stmt = $pdo->prepare("SELECT message_id FROM message_reads WHERE message_id IN ($placeholders) AND user_id = ?");
-                        $stmt->execute(array_merge($msg_ids, [$current_user_id]));
-                        $my_reads = $stmt->fetchAll(PDO::FETCH_COLUMN);
-                    }
+                // =======================================================
+                // [修正前処理] ループに入る前に既読情報を一括でメモリにロード
+                // =======================================================
+                $read_counts = []; // メッセージID => 既読人数
+                $my_reads = [];    // 自分が既読したメッセージIDのリスト
+                if (!empty($messages)) {
+                    $msg_ids = array_column($messages, 'id');
+                    $placeholders = implode(',', array_fill(0, count($msg_ids), '?'));
+
+                    // 全メッセージの既読件数を一括取得
+                    $stmt = $pdo->prepare("SELECT message_id, COUNT(user_id) as cnt FROM message_reads WHERE message_id IN ($placeholders) GROUP BY message_id");
+                    $stmt->execute($msg_ids);
+                    $read_counts = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+
+                    // 自分が既読済みかどうかのチェック用
+                    $stmt = $pdo->prepare("SELECT message_id FROM message_reads WHERE message_id IN ($placeholders) AND user_id = ?");
+                    $stmt->execute(array_merge($msg_ids, [$current_user_id]));
+                    $my_reads = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                }
                 ?>
 
                 <div class="chat-timeline" id="chatTimeline">
@@ -398,7 +398,8 @@ if (file_exists(__DIR__ . '/../layout/header.php')) {
                                 <div class="msg-bubble">
                                     <?php if (!$is_me && $room_id && isset($msg['sender_name'])): ?>
                                         <div style="font-size: 10px; color: #666;">
-                                            <?= htmlspecialchars($msg['sender_name'], ENT_QUOTES, 'UTF-8'); ?></div>
+                                            <?= htmlspecialchars($msg['sender_name'], ENT_QUOTES, 'UTF-8'); ?>
+                                        </div>
                                     <?php endif; ?>
 
                                     <?= nl2br(htmlspecialchars($msg['message'], ENT_QUOTES, 'UTF-8')); ?>
@@ -417,6 +418,22 @@ if (file_exists(__DIR__ . '/../layout/header.php')) {
                     <?php else: ?>
                         <p>メッセージはまだありません</p>
                     <?php endif; ?>
+                </div>
+
+                <div class="chat-actions" style="margin-top: 10px;">
+                    <?php
+                    // 送信先ID（receiver_id または room_id）を維持してリンクを生成
+                    $file_url = "index.php?page=file_upload";
+                    if ($room_id) {
+                        $file_url .= "&room_id=" . htmlspecialchars($room_id);
+                    } elseif ($receiver_id) {
+                        $file_url .= "&receiver_id=" . htmlspecialchars($receiver_id);
+                    }
+                    ?>
+                    <a href="<?= $file_url ?>" class="btn-attach" target="_blank"
+                        style="color: #007bff; text-decoration: none; font-size: 0.9rem;">
+                        📎 添付ファイルをアップロードする
+                    </a>
                 </div>
 
                 <form action="index.php?page=chat<?= $room_id ? '&room_id=' . $room_id : '&receiver_id=' . $receiver_id; ?>"

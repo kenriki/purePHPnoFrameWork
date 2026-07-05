@@ -183,6 +183,71 @@ function formatSizeUnits($bytes)
             display: block;
             margin-top: 5px;
         }
+
+        /* ----------------------------------------------------
+        DataTables レイアウト調整 
+        ---------------------------------------------------- */
+        .dataTables_wrapper .top {
+            display: flex;
+            align-items: center;
+            /* 垂直方向の中央揃え */
+            gap: 20px;
+            /* プルダウンと件数表示の隙間 */
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+            /* 幅が狭い場合に折り返す */
+        }
+
+        /* プルダウンと件数表示の余白をリセットして左寄せにする */
+        .dataTables_length {
+            margin: 0 !important;
+        }
+
+        .dataTables_info {
+            margin: 0 !important;
+            padding: 0 !important;
+            float: none !important;
+            /* DataTablesデフォルトの浮動配置を解除 */
+        }
+
+        /* 検索窓（Filter）を右寄せに固定 */
+        .dataTables_filter {
+            margin-left: auto;
+            margin-right: 0;
+        }
+
+        /* ページネーション（Bottom）を右寄せにする */
+        .dataTables_wrapper .bottom {
+            display: flex;
+            justify-content: flex-end;
+            /* 右寄せ */
+            margin-top: 10px;
+        }
+
+        /* 既存の不要なfloatを念のため無効化 */
+        .dataTables_wrapper .dataTables_length,
+        .dataTables_wrapper .dataTables_filter,
+        .dataTables_wrapper .dataTables_info,
+        .dataTables_wrapper .dataTables_paginate {
+            float: none !important;
+        }
+
+        /* 全体検索窓を完全に消す */
+        .dataTables_filter {
+            display: none !important;
+        }
+
+        /* ページネーションを右寄せ */
+        .dataTables_paginate {
+            float: right;
+        }
+
+        /* 検索窓の幅を列に合わせる */
+        #filterRow th input {
+            width: 90%;
+            padding: 4px;
+            box-sizing: border-box;
+        }
     </style>
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
     <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
@@ -217,6 +282,13 @@ function formatSizeUnits($bytes)
                         <th>投稿者</th>
                         <th>日時</th>
                         <th>操作</th>
+                    </tr>
+                    <tr id="filterRow">
+                        <th><input type="text" placeholder="検索" /></th>
+                        <th></th>
+                        <th><input type="text" placeholder="検索" /></th>
+                        <th><input type="text" placeholder="検索" /></th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -278,13 +350,31 @@ function formatSizeUnits($bytes)
             }
 
             $('#fileTable').DataTable({
+                initComplete: function () {
+                    // 各カラムの検索窓に機能を割り当て
+                    this.api().columns().every(function (i) {
+                        var column = this;
+                        // ヘッダー行内の input を探す
+                        var input = $('#filterRow th').eq(i).find('input');
+
+                        input.on('keyup change clear', function () {
+                            if (column.search() !== this.value) {
+                                column.search(this.value).draw();
+                            }
+                        });
+                    });
+                },
                 "language": {
                     "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/ja.json"
                 },
-                "pageLength": 5,
+                "pageLength": 5, // ここでデフォルト5件表示を指定
+                "lengthMenu": [5, 10, 25, 50, 100, 500], // プルダウンの選択肢
                 "columnDefs": [
                     { "orderable": false, "targets": 4 } // インデックス3（操作列）をソート無効
-                ]
+                ],
+                //"dom": '<"top"li>f rt <"bottom"p>'
+                "dom": '<"top"lip>rt<"bottom">',
+                //"dom": '<"top"lf>rt<"bottom"ip><"clear">' // DOMの配置を明示的に指定
             });
 
             // 2. ユーザー検索機能の初期化

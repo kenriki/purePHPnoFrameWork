@@ -160,6 +160,17 @@ function formatSizeUnits($bytes)
             cursor: pointer;
         }
 
+        /* アップロードフォームのユーザー指定欄 */
+        #userIn {
+            width: 100%;
+            max-width: 400px;
+            /* 必要に応じて調整してください */
+            padding: 8px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
         .sugg-box {
             border: 1px solid #ddd;
             position: absolute;
@@ -190,15 +201,11 @@ function formatSizeUnits($bytes)
         .dataTables_wrapper .top {
             display: flex;
             align-items: center;
-            /* 垂直方向の中央揃え */
             gap: 20px;
-            /* プルダウンと件数表示の隙間 */
             margin-bottom: 10px;
             flex-wrap: wrap;
-            /* 幅が狭い場合に折り返す */
         }
 
-        /* プルダウンと件数表示の余白をリセットして左寄せにする */
         .dataTables_length {
             margin: 0 !important;
         }
@@ -207,46 +214,43 @@ function formatSizeUnits($bytes)
             margin: 0 !important;
             padding: 0 !important;
             float: none !important;
-            /* DataTablesデフォルトの浮動配置を解除 */
         }
 
-        /* 検索窓（Filter）を右寄せに固定 */
-        .dataTables_filter {
-            margin-left: auto;
-            margin-right: 0;
-        }
-
-        /* ページネーション（Bottom）を右寄せにする */
-        .dataTables_wrapper .bottom {
-            display: flex;
-            justify-content: flex-end;
-            /* 右寄せ */
-            margin-top: 10px;
-        }
-
-        /* 既存の不要なfloatを念のため無効化 */
-        .dataTables_wrapper .dataTables_length,
-        .dataTables_wrapper .dataTables_filter,
-        .dataTables_wrapper .dataTables_info,
-        .dataTables_wrapper .dataTables_paginate {
-            float: none !important;
-        }
-
-        /* 全体検索窓を完全に消す */
+        /* 全体検索窓を非表示 */
         .dataTables_filter {
             display: none !important;
         }
 
-        /* ページネーションを右寄せ */
+        /* ページネーション配置 */
+        .dataTables_wrapper .bottom {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 10px;
+        }
+
         .dataTables_paginate {
             float: right;
         }
 
-        /* 検索窓の幅を列に合わせる */
+        /* 各列の個別検索窓 */
+        #filterRow th {
+            padding: 8px !important;
+        }
+
         #filterRow th input {
-            width: 90%;
-            padding: 4px;
+            width: 95% !important;
+            /* テーブル幅にほぼ合わせる */
+            padding: 5px;
             box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        /* ソートアイコンと検索窓の被り防止 */
+        table.dataTable thead .sorting:after,
+        table.dataTable thead .sorting_asc:after,
+        table.dataTable thead .sorting_desc:after {
+            bottom: 25px !important;
         }
     </style>
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
@@ -263,8 +267,8 @@ function formatSizeUnits($bytes)
             <h2>ファイルアップロード</h2>
             <form method="POST" enctype="multipart/form-data">
                 <input type="file" name="file" required><br>
-                <label><input type="checkbox" name="is_public"> 24時間限定のゲスト公開</label><br>
-                <div style="position:relative;">
+                <label><input type="checkbox" name="is_public"> 24H期限付き</label><br>
+                <div style="position:relative; width: 100%; max-width: 500px;">
                     <input type="text" name="target_users" id="userIn" placeholder="ユーザー名(カンマ区切りで完全一致)" autocomplete="off">
                     <div id="sugg" class="sugg-box"></div>
                 </div>

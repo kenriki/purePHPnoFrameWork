@@ -115,7 +115,7 @@ function formatSizeUnits($bytes)
 
 <head>
     <meta charset="UTF-8">
-    <title>ファイル管理サイト</title>
+    <title>添付ファイル管理サイト</title>
     <style>
         body {
             font-family: sans-serif;
@@ -259,7 +259,7 @@ function formatSizeUnits($bytes)
 </head>
 
 <body>
-    <h1>ファイル管理サイト</h1>
+    <h1>添付ファイル管理サイト</h1>
     <?php if (isset($error_message)): ?>
         <section><?= $error_message ?></section>
     <?php else: ?>
@@ -320,11 +320,21 @@ function formatSizeUnits($bytes)
                                 $file_url = $base_url . '/download.php?token=' . $safe_token;
                                 ?>
                                 <div class="guest-link" style="font-size:0.8em; color:#005bac; margin-top:5px;">
+                                    <?php
+                                    // 1. 基本となるベースURLを構築（プロトコル + ホスト名 + ディレクトリ）
+                                    $base_url = (isset($_SERVER['HTTPS']) ? "https://" : "http://") . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']);
+
+                                    // 2. download.php を経由したダウンロード用リンクを生成
+                                    // $safe_token はすでに定義済みであることを想定しています
+                                    $download_link = $base_url . '/download.php?token=' . $safe_token;
+                                    ?>
+
                                     URL:
-                                    <input type="text" id="url_<?= $safe_id ?>" value="<?= htmlspecialchars($file_url) ?>"
-                                        style="width:120px; font-size:0.9em;">
+                                    <input type="text" id="url_<?= $safe_id ?>" value="<?= htmlspecialchars($download_link) ?>"
+                                        style="width:200px; font-size:0.9em; padding:2px; border:1px solid #ccc; border-radius:3px;"
+                                        readonly>
                                     <button type="button" onclick="copyToClipboard('url_<?= $safe_id ?>')"
-                                        style="background:#28a745; color:white; border:none; padding:2px 5px; font-size:0.8em; cursor:pointer;">
+                                        style="background:#28a745; color:white; border:none; padding:2px 8px; font-size:0.9em; cursor:pointer; border-radius:3px;">
                                         コピー
                                     </button>
                                 </div>

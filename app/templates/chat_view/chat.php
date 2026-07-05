@@ -432,7 +432,7 @@ if (file_exists(__DIR__ . '/../layout/header.php')) {
                     ?>
                     <a href="<?= $file_url ?>" class="btn-attach" target="_blank"
                         style="color: #007bff; text-decoration: none; font-size: 0.9rem;">
-                        📎 添付ファイルをアップロードする
+                        📎 添付ファイル管理サイトへ飛ぶ
                     </a>
                 </div>
 

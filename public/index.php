@@ -76,14 +76,15 @@ switch ($page) {
     case 'chat':
         include __DIR__ . '/../app/templates/chat_view/chat.php';
         exit;
-        
+
     case 'like_message':
         // これより上部で出力されてしまったHTML（ヘッダー等）をすべてバッファから抹消
-        if (ob_get_length()) ob_clean();
-        
+        if (ob_get_length())
+            ob_clean();
+
         // レスポンスを完全にJSONとして定義
         header('Content-Type: application/json; charset=utf-8');
-        
+
         $like_script = __DIR__ . '/../app/templates/chat_view/like_message.php';
         if (file_exists($like_script)) {
             include $like_script;
@@ -112,6 +113,10 @@ switch ($page) {
             exit;
         }
         break;
+
+    case 'file_upload':
+        include __DIR__ . '/file_manager.php';
+        exit;
 
     case 'google_auth':
         header("Location: auth.php");

@@ -37,33 +37,35 @@
 
 <footer>
     <!-- ▼ これから何をする？（ポップアップ通知付き） -->
-    <div
-        style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-        <form id="quickTodoForm" style="display: flex; flex-direction: column; gap: 15px;">
-            <!-- 新規追加であることを示すための隠しフィールド -->
-            <input type="hidden" name="action" value="add">
+    <?php if (($pageId ?? '') === 'home'): ?>
+        <div
+            style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+            <form id="quickTodoForm" style="display: flex; flex-direction: column; gap: 15px;">
+                <!-- 新規追加であることを示すための隠しフィールド -->
+                <input type="hidden" name="action" value="add">
 
-            <!-- タスク内容入力 -->
-            <div>
-                <input type="text" name="content" id="todoContentInput" placeholder="これから何をする？" required
-                    style="width: 100%; border: none; border-bottom: 1px solid #e0e0e0; padding: 8px 0; font-size: 1rem; outline: none; background: transparent;">
-            </div>
+                <!-- タスク内容入力 -->
+                <div>
+                    <input type="text" name="content" id="todoContentInput" placeholder="これから何をする？" required
+                        style="width: 100%; border: none; border-bottom: 1px solid #e0e0e0; padding: 8px 0; font-size: 1rem; outline: none; background: transparent;">
+                </div>
 
-            <!-- 日付選択と追加ボタンの行 -->
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <input type="date" name="due_date" id="todoDateInput" value="<?php echo date('Y-m-d'); ?>"
-                        style="border: 1px solid #dcdcdc; border-radius: 6px; padding: 6px 10px; font-size: 0.9rem; color: #555; outline: none;">
+                <!-- 日付選択と追加ボタンの行 -->
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <input type="date" name="due_date" id="todoDateInput" value="<?php echo date('Y-m-d'); ?>"
+                            style="border: 1px solid #dcdcdc; border-radius: 6px; padding: 6px 10px; font-size: 0.9rem; color: #555; outline: none;">
+                    </div>
+                    <div>
+                        <button type="button" id="quickTodoSubmitBtn"
+                            style="background-color: #00b0ff; color: #ffffff; border: none; border-radius: 20px; padding: 8px 24px; font-weight: bold; font-size: 0.95rem; cursor: pointer; box-shadow: 0 2px 5px rgba(0, 176, 255, 0.3);">
+                            追加
+                        </button>
+                    </div>
                 </div>
-                <div>
-                    <button type="button" id="quickTodoSubmitBtn"
-                        style="background-color: #00b0ff; color: #ffffff; border: none; border-radius: 20px; padding: 8px 24px; font-weight: bold; font-size: 0.95rem; cursor: pointer; box-shadow: 0 2px 5px rgba(0, 176, 255, 0.3);">
-                        追加
-                    </button>
-                </div>
-            </div>
-        </form>
-    </div>
+            </form>
+        </div>
+    <?php endif; ?>
     <!-- ▼ ポップアップ（トースト通知）用のスタイルとスクリプト -->
     <div id="todoToast"
         style="display: none; position: fixed; bottom: 30px; right: 30px; background: #333; color: #fff; padding: 12px 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); z-index: 9999; font-size: 0.95rem; transition: opacity 0.3s ease;">

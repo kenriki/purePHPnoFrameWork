@@ -193,6 +193,19 @@ if ($isLoggedIn) {
             padding: 0 10px;
         }
     </style>
+    <script>
+        // ページ読み込み時に通知許可をリクエスト
+        window.addEventListener('load', () => {
+            if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission().then(permission => {
+                    if (permission === 'granted') {
+                        console.log('通知が許可されました');
+                        // ここでさらに「購読情報をサーバーに送る処理」が必要です
+                    }
+                });
+            }
+        });
+    </script>
 </head>
 
 <body>
@@ -211,7 +224,7 @@ if ($isLoggedIn) {
                 foreach ($menuData as $id => $content):
                     $title = $content['title'] ?? '';
                     if (
-                        $id === 'home' || $title === 'メモ' || $title === 'ユーザーチャット' || $title === '地図アプリ' || $title === 'AI分析'
+                        $id === 'home' || $title === 'メモ' || $title === 'ユーザーチャット' || $title === '地図アプリ' || $title === 'AI分析' || $title === 'AI分析free'
                         || $title === 'メモ(Excelダウンロード)'
                         || (strpos($title, 'サンプル') !== false && ($userRole ?? '') === 'admin')
                     ): ?>
@@ -224,6 +237,21 @@ if ($isLoggedIn) {
             <button class="nav-arrow right">›</button>
         </nav>
     <?php endif; ?>
+
+    <div>
+        <?php if (($pageId ?? '') === 'home'): ?>
+            <div class="view-selector">
+                <button class="view-btn active" onclick="switchView('month')">月</button>
+                <button class="view-btn" onclick="switchView('week')">週</button>
+                <button class="view-btn" onclick="switchView('day')">日</button>
+                <button class="view-btn" onclick="switchView('year')">年</button>
+                <button class="view-btn" onclick="location.href='todoManage.html'"
+                    style="display: inline-flex; align-items: center; justify-content: center; gap: 4px;" title="TODO管理へ">
+                    TODO
+                </button>
+            </div>
+        <?php endif; ?>
+    </div>
 
     <script>
         // 1. グローバル変数の初期化（最優先）

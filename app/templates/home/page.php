@@ -70,7 +70,7 @@ if (!isset($page['dashboard'])) {
     $page['dashboard'] = [
         'events' => [],
         'chart' => [],
-        'pinned' => []
+        'pinned' => [],
     ];
 }
 
@@ -197,23 +197,15 @@ $unread_messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <header class="dashboard-header">
         <h2>📅 ダッシュボード</h2>
         <div style="font-size: 0.8rem; color: #777;">
-            最終同期: <?php echo date('Y/m/d H:i'); ?>
+            最終同期:
+            <?php echo date('Y/m/d H:i'); ?>
             <a href="<?php echo $authUrl; ?>" class="btn btn-primary">
                 Googleと同期する
             </a>
         </div>
-        <div>
-            <div class="view-selector">
-                <button class="view-btn active" onclick="switchView('month')">月</button>
-                <button class="view-btn" onclick="switchView('week')">週</button>
-                <button class="view-btn" onclick="switchView('day')">日</button>
-                <button class="view-btn" onclick="switchView('year')">年 (12ヶ月)</button>
-            </div>
-        </div>
     </header>
 
     <div class="dashboard-grid">
-
         <!-- 左：メインカレンダー -->
         <div class="main-content">
 

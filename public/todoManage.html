@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Workspace</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- jQuery (DataTables依存) -->
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <!-- DataTables CSS/JS -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <!-- FullCalendar CSS/JS -->
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+    <!-- SheetJS (Excel出力用) -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- html2canvas (画像出力用) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" crossorigin="anonymous"
+        referrerpolicy="no-referrer"></script>
+
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        .dataTables_wrapper .dataTables_length,
+        .dataTables_wrapper .dataTables_filter,
+        .dataTables_wrapper .dataTables_info,
+        .dataTables_wrapper .dataTables_paginate {
+            padding: 0.75rem 1rem;
+            font-size: 0.875rem;
+        }
+
+        table.dataTable.no-footer {
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        table.dataTable thead th {
+            border-bottom: 1px solid #e5e7eb;
+            background-color: #f9fafb;
+        }
+
+        .fc-theme-standard td,
+        .fc-theme-standard th {
+            border-color: #f3f4f6;
+        }
+
+        .fc .fc-toolbar-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+        }
+
+        .fc .fc-button-primary {
+            background-color: #1d9bf0;
+            border-color: #1d9bf0;
+            border-radius: 9999px;
+            font-weight: bold;
+        }
+
+        .fc .fc-button-primary:hover {
+            background-color: #1a8cd8;
+            border-color: #1a8cd8;
+        }
+    </style>
+</head>
+
+<body class="bg-white text-gray-900 min-h-screen flex">
+
+    <!-- サイドバー (Twitterスタイル) -->
+    <aside class="w-64 border-r border-gray-100 p-4 flex flex-col justify-between hidden md:flex sticky top-0 h-screen">
+        <div>
+            <div class="flex items-center gap-3 px-3 py-2 text-sky-500 font-bold text-xl mb-4">
+                <i class="fa-solid fa-check-double text-2xl"></i>
+                <span>TaskHub</span>
+            </div>
+            <nav class="space-y-1">
+                <button onclick="switchTab('todo')" id="nav-todo"
+                    class="nav-item w-full flex items-center gap-4 px-4 py-3 text-lg font-bold rounded-full hover:bg-gray-100 transition text-sky-500">
+                    <i class="fa-solid fa-list-check"></i> <span>TODO</span>
+                </button>
+                <button onclick="switchTab('calendar')" id="nav-calendar"
+                    class="nav-item w-full flex items-center gap-4 px-4 py-3 text-lg font-medium text-gray-700 rounded-full hover:bg-gray-100 transition">
+                    <i class="fa-regular fa-calendar"></i> <span>カレンダー</span>
+                </button>
+                <button onclick="switchTab('table')" id="nav-table"
+                    class="nav-item w-full flex items-center gap-4 px-4 py-3 text-lg font-medium text-gray-700 rounded-full hover:bg-gray-100 transition">
+                    <i class="fa-solid fa-table"></i> <span>データ一覧</span>
+                </button>
+                <button onclick="switchTab('settings')" id="nav-settings"
+                    class="nav-item w-full flex items-center gap-4 px-4 py-3 text-lg font-medium text-gray-700 rounded-full hover:bg-gray-100 transition">
+                    <i class="fa-solid fa-gear"></i> <span>設定</span>
+                </button>
+            </nav>
+        </div>
+        <div class="space-y-2">
+            <button onclick="exportImage()"
+                class="w-full bg-sky-50 hover:bg-sky-100 text-sky-600 font-bold py-2.5 rounded-full text-sm transition flex items-center justify-center gap-2">
+                <i class="fa-solid fa-image"></i> 画像として保存
+            </button>
+            <button onclick="copyShareUrl()"
+                class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2.5 rounded-full text-sm transition flex items-center justify-center gap-2">
+                <i class="fa-solid fa-share-nodes"></i> URLを共有コピー
+            </button>
+            <button onclick="openModal()"
+                class="w-full bg-sky-500 hover:bg-sky-600 text-white font-bold py-3 rounded-full shadow transition">
+                新規タスクを作成
+            </button>
+        </div>
+    </aside>
+
+    <!-- メインコンテンツエリア -->
+    <main class="flex-1 max-w-4xl border-r border-gray-100 min-h-screen flex flex-col bg-white">
+        <!-- ヘッダー -->
+        <header
+            class="border-b border-gray-100 p-4 sticky top-0 bg-white/80 backdrop-blur z-10 flex justify-between items-center">
+            <h1 id="page-title" class="text-xl font-bold">TODO</h1>
+            <div class="flex items-center gap-2">
+                <button onclick="location.href='index.php'"
+                    class="bg-gray-100 text-gray-700 px-2 py-1.5 rounded-full text-xs font-bold flex items-center gap-1"
+                    title="ホーム">
+                    <i class="fa-solid fa-house"></i>
+                </button>
+                <button onclick="exportImage()"
+                    class="md:hidden bg-sky-50 text-sky-600 px-3 py-1.5 rounded-full text-sm font-bold flex items-center gap-1">
+                    <i class="fa-solid fa-image"></i> 画像ダウンロード
+                </button>
+                <!-- <button onclick="copyShareUrl()"
+                    class="md:hidden bg-gray-100 text-gray-700 px-3 py-1.5 rounded-full text-sm font-bold flex items-center gap-1">
+                    <i class="fa-solid fa-share-nodes"></i> 共有
+                </button> -->
+                <button onclick="openModal()"
+                    class="md:hidden bg-sky-500 text-white px-4 py-1.5 rounded-full text-sm font-bold">
+                    作成
+                </button>
+            </div>
+        </header>
+        <span id="header-user-badge"
+            class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-700 hidden"></span>
+
+        <!-- トースト通知用 -->
+        <div id="toast"
+            class="fixed bottom-5 right-5 bg-gray-900 text-white px-4 py-2 rounded-xl shadow-lg text-sm transition-opacity duration-300 opacity-0 pointer-events-none z-50">
+            URLをクリップボードにコピーしました！タスクが公開されました。
+        </div>
+
+        <!-- タブ1: TODO ページ (画像出力対象) -->
+        <div id="capture-area">
+            <section id="tab-todo" class="tab-content p-4 space-y-4">
+                <!-- <div class="border border-gray-200 rounded-2xl p-4 shadow-sm bg-white">
+                    <input type="text" id="quick-title" placeholder="これから何をする？"
+                        class="w-full text-lg outline-none mb-3 bg-transparent">
+                    <div class="flex justify-between items-center pt-2 border-t border-gray-100">
+                        <input type="date" id="quick-date"
+                            class="text-sm text-gray-500 outline-none border rounded px-2 py-1 bg-transparent">
+                        <button onclick="quickAddTodo()"
+                            class="bg-sky-500 hover:bg-sky-600 text-white text-sm font-bold px-4 py-1.5 rounded-full">
+                            追加
+                        </button>
+                    </div>
+                </div> -->
+                <div id="todo-list" class="divide-y divide-gray-100"></div>
+                <!-- スマホ・TODO下部用カレンダーエリア -->
+                <div class="mt-6 pt-4 border-t border-gray-200">
+                    <h2 class="text-md font-bold mb-3 text-gray-700 flex items-center gap-2">
+                        <i class="fa-regular fa-calendar text-sky-500"></i> カレンダー
+                    </h2>
+                    <div id="calendar-mobile" class="bg-white rounded-xl shadow-sm p-2"></div>
+                </div>
+            </section>
+        </div>
+
+        <!-- タブ2: カレンダー ページ -->
+        <section id="tab-calendar" class="tab-content p-4 hidden flex-1">
+            <div id="calendar" class="h-full"></div>
+        </section>
+
+        <!-- タブ3: データ一覧 (DataTables / Export) -->
+        <section id="tab-table" class="tab-content p-4 hidden space-y-4">
+            <div class="flex justify-end gap-2">
+                <button onclick="exportImage()"
+                    class="bg-sky-600 hover:bg-sky-700 text-white text-sm font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                    <i class="fa-solid fa-image"></i> 画像出力
+                </button>
+                <button onclick="exportCSV()"
+                    class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                    <i class="fa-solid fa-file-csv"></i> CSV出力
+                </button>
+                <button onclick="exportExcel()"
+                    class="bg-green-600 hover:bg-green-700 text-white text-sm font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                    <i class="fa-solid fa-file-excel"></i> Excel出力
+                </button>
+            </div>
+            <div class="overflow-x-auto border border-gray-200 rounded-xl">
+                <table id="datatable" class="w-full text-sm text-left">
+                    <thead>
+                        <tr>
+                            <th>タイトル</th>
+                            <th>期日</th>
+                            <th>公開状態</th>
+                            <th>ステータス</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- タブ4: カスタマイズ設定 ページ -->
+        <section id="tab-settings" class="tab-content p-4 hidden space-y-6">
+            <div class="border border-gray-200 rounded-2xl p-4 space-y-4">
+                <h2 class="font-bold text-lg border-b border-gray-100 pb-2">レイアウト＆UIカスタマイズ</h2>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">基本テーマ</label>
+                    <select id="setting-theme" onchange="saveSettings()"
+                        class="w-full border rounded-lg p-2 text-sm outline-none bg-transparent">
+                        <option value="light">ライトモード</option>
+                        <option value="dark">ダークモード (標準)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">フォントサイズ</label>
+                    <select id="setting-fontsize" onchange="saveSettings()"
+                        class="w-full border rounded-lg p-2 text-sm outline-none bg-transparent">
+                        <option value="text-sm">小</option>
+                        <option value="text-base" selected>標準</option>
+                        <option value="text-lg">大</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">初期表示タブ</label>
+                    <select id="setting-defaulttab" onchange="saveSettings()"
+                        class="w-full border rounded-lg p-2 text-sm outline-none bg-transparent">
+                        <option value="todo">TODO</option>
+                        <option value="calendar">カレンダー</option>
+                        <option value="table">データ一覧</option>
+                    </select>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- モーダル（追加・編集用） -->
+    <div id="modal" class="fixed inset-0 bg-black/40 backdrop-blur-sm hidden flex items-center justify-center z-50">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
+            <h3 id="modal-title" class="font-bold text-lg mb-4">タスクの編集</h3>
+            <input type="hidden" id="edit-id">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">タイトル</label>
+                    <input type="text" id="edit-task-title"
+                        class="w-full border rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-sky-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">期日</label>
+                    <input type="date" id="edit-task-date"
+                        class="w-full border rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-sky-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">ステータス</label>
+                    <select id="edit-task-status"
+                        class="w-full border rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-sky-500">
+                        <option value="pending">未完了</option>
+                        <option value="completed">完了</option>
+                    </select>
+                </div>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button onclick="closeModal()"
+                        class="px-4 py-2 text-sm font-bold text-gray-500 hover:bg-gray-100 rounded-full">キャンセル</button>
+                    <button onclick="saveTask()"
+                        class="px-4 py-2 text-sm font-bold bg-sky-500 hover:bg-sky-600 text-white rounded-full">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // LocalStorage Keys (設定用)
+        const SETTINGS_KEY = 'app_user_settings';
+        // const API_URL = 'http://localhost:8000/manage_todo.php';
+        const API_URL = 'manage_todo.php';
+
+        // State Variables
+        let todos = [];
+        let currentLoginUser = 'guest_user';
+        let settings = JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {
+            theme: 'light',
+            fontSize: 'text-base',
+            defaultTab: 'todo'
+        };
+
+        let dataTableInstance = null;
+        let calendarInstance = null;
+
+        // 初期化処理
+        $(document).ready(function () {
+            applySettings();
+            initFullCalendar();
+            initDataTable();
+
+            // サーバーからデータを取得してから画面描画
+            fetchTodos().then(() => {
+                switchTab(settings.defaultTab);
+            });
+        });
+
+        // --- API通信 (バックエンド連携) ---
+        async function fetchTodos() {
+            try {
+                const response = await fetch(API_URL, { method: 'GET', credentials: 'include' });
+                const data = await response.json();
+
+                if (data.current_user) {
+                    currentLoginUser = data.current_user;
+                    // ユーザー名を表示してhiddenを外す
+                    $('#header-user-badge').text(currentLoginUser).removeClass('hidden');
+                }
+                const itemList = Array.isArray(data) ? data : (data.todos || []);
+
+                todos = itemList.map(item => ({
+                    id: item.id,
+                    title: item.content,
+                    date: item.due_date ? item.due_date.split(' ')[0] : '',
+                    status: item.is_completed == 1 ? 'completed' : 'pending',
+                    category: item.category || 'guest'
+                }));
+                renderAll();
+            } catch (e) {
+                console.error('データの取得に失敗しました', e);
+            }
+        }
+
+        async function saveTaskToServer(task) {
+            try {
+                await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: task.id,
+                        content: task.title,
+                        category: task.category || 'guest',
+                        is_completed: task.status === 'completed' ? 1 : 0,
+                        due_date: task.date
+                    })
+                });
+                await fetchTodos();
+            } catch (e) {
+                console.error('データの保存に失敗しました', e);
+            }
+        }
+
+        async function deleteTaskFromServer(id) {
+            try {
+                await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'delete',
+                        id: id
+                    })
+                });
+                await fetchTodos();
+            } catch (e) {
+                console.error('データの削除に失敗しました', e);
+            }
+        }
+
+        // --- URL連携・共有機能 ---
+        async function copyShareUrl() {
+            for (let todo of todos) {
+                if (!todo.category || todo.category === 'guest') {
+                    todo.category = currentLoginUser;
+                    await saveTaskToServer(todo);
+                }
+            }
+
+            const targetUrl = window.location.href;
+            try {
+                await navigator.clipboard.writeText(targetUrl);
+                showToast();
+            } catch (err) {
+                console.error('クリップボードのコピーに失敗しました', err);
+                alert('クリップボードへのコピーに失敗しました。');
+            }
+        }
+
+        function showToast() {
+            const $toast = $('#toast');
+            $toast.removeClass('opacity-0 pointer-events-none').addClass('opacity-100');
+            setTimeout(() => {
+                $toast.removeClass('opacity-100').addClass('opacity-0 pointer-events-none');
+            }, 2500);
+        }
+
+        function renderAll() {
+            renderTodoList();
+            updateCalendarEvents();
+            updateDataTable();
+        }
+
+        function switchTab(tabId) {
+            $('.tab-content').addClass('hidden');
+            $(`#tab-${tabId}`).removeClass('hidden');
+
+            $('.nav-item').removeClass('font-bold text-sky-500').addClass('font-medium text-gray-700');
+            $(`#nav-${tabId}`).addClass('font-bold text-sky-500').removeClass('font-medium text-gray-700');
+
+            const titles = {
+                todo: 'TODO',
+                calendar: 'カレンダー',
+                table: 'データ一覧',
+                settings: '設定'
+            };
+            $('#page-title').text(titles[tabId]);
+
+            if (tabId === 'calendar' && calendarInstance) {
+                calendarInstance.render();
+            }
+        }
+
+        // --- TODO機能 ---
+        function renderTodoList() {
+            const $list = $('#todo-list').empty();
+            if (todos.length === 0) {
+                $list.html('<p class="text-center text-gray-400 py-8">タスクはありません</p>');
+                return;
+            }
+            todos.forEach(todo => {
+                const isDone = todo.status === 'completed';
+                const isPrivate = !todo.category || todo.category === 'guest';
+                $list.append(`
+                    <div class="flex items-center justify-between p-3 hover:bg-gray-50 transition rounded-xl">
+                        <div class="flex items-center gap-3">
+                          <input type="checkbox" ${isDone ? 'checked' : ''} onchange="toggleStatus('${todo.id}')" 
+                                                    class="w-5 h-5 accent-sky-500 rounded cursor-pointer">
+                          <span class="${isDone ? 'line-through text-gray-400' : 'text-gray-800'} font-medium">${escapeHtml(todo.title)}</span>
+                        
+                        </div>
+                        <div class="flex items-center gap-3 text-sm text-gray-400">
+                          <span>${todo.date || '期限なし'}</span>
+                          <button onclick="openModal('${todo.id}')" class="hover:text-sky-500 px-1"><i class="fa-regular fa-pen-to-square"></i></button>
+                          <button onclick="deleteTask('${todo.id}')" class="hover:text-red-500 px-1"><i class="fa-regular fa-trash-can"></i></button>
+                        </div>
+                    </div>
+                `);
+            });
+        }
+
+        async function quickAddTodo() {
+            const title = $('#quick-title').val().trim();
+            const date = $('#quick-date').val();
+            if (!title) return;
+
+            const newTask = {
+                id: 'todo-' + Date.now(),
+                title: title,
+                date: date || new Date().toISOString().split('T')[0],
+                status: 'pending',
+                category: 'guest'
+            };
+            $('#quick-title').val('');
+            $('#quick-date').val('');
+            await saveTaskToServer(newTask);
+        }
+
+        async function toggleStatus(id) {
+            const item = todos.find(t => t.id === id);
+            if (item) {
+                item.status = item.status === 'completed' ? 'pending' : 'completed';
+                await saveTaskToServer(item);
+            }
+        }
+
+        async function deleteTask(id) {
+            if (confirm('このタスクを削除しますか？')) {
+                await deleteTaskFromServer(id);
+            }
+        }
+
+        // --- Modal 操作 ---
+        function openModal(id = null) {
+            if (id) {
+                const item = todos.find(t => t.id === id);
+                $('#modal-title').text('タスクの編集');
+                $('#edit-id').val(item.id);
+                $('#edit-task-title').val(item.title);
+                $('#edit-task-date').val(item.date);
+                $('#edit-task-status').val(item.status);
+            } else {
+                $('#modal-title').text('タスクの追加');
+                $('#edit-id').val('');
+                $('#edit-task-title').val('');
+                $('#edit-task-date').val(new Date().toISOString().split('T')[0]);
+                $('#edit-task-status').val('pending');
+            }
+            $('#modal').removeClass('hidden');
+        }
+
+        function closeModal() {
+            $('#modal').addClass('hidden');
+        }
+
+        async function saveTask() {
+            const id = $('#edit-id').val();
+            const title = $('#edit-task-title').val().trim();
+            const date = $('#edit-task-date').val();
+            const status = $('#edit-task-status').val();
+
+            if (!title) return;
+
+            const existingItem = todos.find(t => t.id === id);
+            const category = existingItem ? existingItem.category : 'guest';
+
+            const taskData = {
+                id: id || ('todo-' + Date.now()),
+                title,
+                date,
+                status,
+                category: category || 'guest'
+            };
+
+            closeModal();
+            await saveTaskToServer(taskData);
+        }
+
+        // --- DataTables / FullCalendar / Export ---
+        function initDataTable() {
+            dataTableInstance = $('#datatable').DataTable({
+                language: { url: 'https://cdn.datatables.net/plug-ins/1.13.6/i18n/ja.json' },
+                columns: [
+                    { data: 'title' },
+                    { data: 'date' },
+                    {
+                        data: 'category',
+                        render: data => (!data || data === 'guest')
+                            ? '<span class="px-2 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded-full">非公開 (guest)</span>'
+                            : '<span class="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-bold rounded-full">公開</span>'
+                    },
+                    {
+                        data: 'status',
+                        render: data => data === 'completed'
+                            ? '<span class="px-2 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full">完了</span>'
+                            : '<span class="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs font-bold rounded-full">未完了</span>'
+                    },
+                    {
+                        data: 'id',
+                        render: id => `<button onclick="openModal('${id}')" class="text-sky-500 hover:underline mr-2">編集</button><button onclick="deleteTask('${id}')" class="text-red-500 hover:underline">削除</button>`
+                    }
+                ]
+            });
+        }
+
+        function updateDataTable() {
+            if (!dataTableInstance) return;
+            dataTableInstance.clear().rows.add(todos).draw();
+        }
+
+        // function initFullCalendar() {
+        //     const calendarEl = document.getElementById('calendar');
+        //     calendarInstance = new FullCalendar.Calendar(calendarEl, {
+        //         initialView: 'dayGridMonth',
+        //         locale: 'ja',
+        //         headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek' },
+        //         editable: true,
+        //         eventDrop: async function (info) {
+        //             const item = todos.find(t => t.id === info.event.id);
+        //             if (item) {
+        //                 item.date = info.event.startStr;
+        //                 await saveTaskToServer(item);
+        //             }
+        //         },
+        //         eventClick: function (info) { openModal(info.event.id); }
+        //     });
+        //     calendarInstance.render();
+        // }
+        function initFullCalendar() {
+            // メインカレンダー
+            const calendarEl = document.getElementById('calendar');
+            if (calendarEl) {
+                calendarInstance = new FullCalendar.Calendar(calendarEl, {
+                    initialView: 'dayGridMonth',
+                    locale: 'ja',
+                    headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek' },
+                    editable: true,
+                    eventDrop: async function (info) {
+                        const item = todos.find(t => t.id === info.event.id);
+                        if (item) {
+                            item.date = info.event.startStr;
+                            await saveTaskToServer(item);
+                        }
+                    },
+                    eventClick: function (info) { openModal(info.event.id); }
+                });
+                calendarInstance.render();
+            }
+
+            // TODO下部用（モバイル向けなど）カレンダー
+            const calendarMobileEl = document.getElementById('calendar-mobile');
+            if (calendarMobileEl) {
+                calendarMobileInstance = new FullCalendar.Calendar(calendarMobileEl, {
+                    initialView: 'dayGridMonth',
+                    locale: 'ja',
+                    height: 'auto', // ★ 高さを自動調整（または固定値 350 など）にする
+                    headerToolbar: { left: 'prev,next', center: 'title', right: 'today' },
+                    editable: true,
+                    eventDrop: async function (info) {
+                        const item = todos.find(t => t.id === info.event.id);
+                        if (item) {
+                            item.date = info.event.startStr;
+                            await saveTaskToServer(item);
+                        }
+                    },
+                    eventClick: function (info) { openModal(info.event.id); }
+                });
+                calendarMobileInstance.render();
+                
+                // ★ タブ切り替え時や画面幅変更時にサイズを再計算させる場合
+                setTimeout(() => {
+                    calendarMobileInstance.updateSize();
+                }, 100);
+            }
+        }
+
+        // function updateCalendarEvents() {
+        //     if (!calendarInstance) return;
+        //     calendarInstance.removeAllEvents();
+        //     const events = todos.map(t => ({
+        //         id: t.id,
+        //         title: t.title,
+        //         start: t.date,
+        //         backgroundColor: t.status === 'completed' ? '#10b981' : '#1d9bf0',
+        //         borderColor: 'transparent'
+        //     }));
+        //     calendarInstance.addEventSource(events);
+        // }
+        function updateCalendarEvents() {
+            const events = todos.map(t => ({
+                id: t.id,
+                title: t.title,
+                start: t.date,
+                backgroundColor: t.status === 'completed' ? '#10b981' : '#1d9bf0',
+                borderColor: 'transparent'
+            }));
+
+            // メインカレンダーの更新
+            if (calendarInstance) {
+                calendarInstance.removeAllEvents();
+                calendarInstance.addEventSource(events);
+            }
+            
+            // モバイル用カレンダーのイベントも完全に再設定して更新
+            if (calendarMobileInstance) {
+                calendarMobileInstance.removeAllEvents();
+                calendarMobileInstance.addEventSource(events);
+                calendarMobileInstance.render(); // 再描画を確実にする
+            }
+        }
+
+        function exportImage() {
+            const target = document.getElementById('capture-area');
+            html2canvas(target, { scale: 2, useCORS: true }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = `workspace_${new Date().toISOString().split('T')[0]}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            });
+        }
+
+        function exportCSV() {
+            let csvContent = "\uFEFFタイトル,期日,公開状態,ステータス\n";
+            todos.forEach(t => {
+                const isPrivate = !t.category || t.category === 'guest';
+                csvContent += `"${t.title}","${t.date}","${isPrivate ? '非公開' : '公開'}","${t.status === 'completed' ? '完了' : '未完了'}"\n`;
+            });
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = `tasks_${new Date().toISOString().split('T')[0]}.csv`;
+            link.click();
+        }
+
+        function exportExcel() {
+            const data = todos.map(t => ({
+                'タイトル': t.title,
+                '期日': t.date,
+                '公開状態': (!t.category || t.category === 'guest') ? '非公開' : '公開',
+                'ステータス': t.status === 'completed' ? '完了' : '未完了'
+            }));
+            const worksheet = XLSX.utils.json_to_sheet(data);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Tasks");
+            XLSX.writeFile(workbook, `tasks_${new Date().toISOString().split('T')[0]}.xlsx`);
+        }
+
+        function saveSettings() {
+            settings = {
+                theme: $('#setting-theme').val(),
+                fontSize: $('#setting-fontsize').val(),
+                defaultTab: $('#setting-defaulttab').val()
+            };
+            localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+            applySettings();
+        }
+
+        function applySettings() {
+            $('#setting-theme').val(settings.theme);
+            $('#setting-fontsize').val(settings.fontSize);
+            $('#setting-defaulttab').val(settings.defaultTab);
+            $('body').removeClass('text-sm text-base text-lg').addClass(settings.fontSize);
+            if (settings.theme === 'dark') {
+                $('body').addClass('bg-gray-900 text-white').removeClass('bg-white text-gray-900');
+            } else {
+                $('body').addClass('bg-white text-gray-900').removeClass('bg-gray-900 text-white');
+            }
+        }
+
+        function escapeHtml(str) {
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+    </script>
+</body>
+
+</html>

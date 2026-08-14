@@ -1,7 +1,7 @@
 <?php
 /**
  * ======================================================================================
- * 共通ヘッダー (header.php) - クラスエラー対策＆ローディング同期修正版
+ * 共通ヘッダー (header.php) - クラスエラー対策＆ローディング同期修正版・完全版
  * ======================================================================================
  */
 
@@ -75,11 +75,6 @@ if ($isLoggedIn) {
             font-family: sans-serif;
             width: 100%;
             overflow-x: hidden;
-        }
-
-        /* --- 引っ張り更新を完全に禁止 --- */
-        html,
-        body {
             height: 100%;
             overflow: hidden;
             /* 全体の揺れを防止 */
@@ -145,6 +140,21 @@ if ($isLoggedIn) {
                 padding: 4px 8px !important;
                 font-size: 0.75rem !important;
             }
+
+            /* --- スマホ時のTODOボタンなどの文字見切れ防止対策 --- */
+            .view-selector {
+                gap: 3px;
+                padding: 4px;
+            }
+
+            .view-btn {
+                flex: 1;
+                min-width: auto;
+                padding: 6px 1px;
+                font-size: 0.75rem;
+                text-align: center;
+                white-space: nowrap;
+            }
         }
 
         /* --- UIパーツ --- */
@@ -192,8 +202,80 @@ if ($isLoggedIn) {
             cursor: pointer;
             padding: 0 10px;
         }
+
+        /* --- ビュー切替ボタン用スタイル（PC/スマホ切り替え完全対応） --- */
+        .view-selector {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            padding: 5px 6px;
+            align-items: center;
+            opacity: 0;
+            transition: opacity 0.6s ease-in;
+        }
+
+        .view-btn {
+            padding: 6px 12px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            border: 1px solid #ccc;
+            background: #fff;
+            border-radius: 4px;
+            white-space: nowrap;
+            /* PCでは無駄に引き伸ばさない */
+            flex: 0 1 auto;
+        }
+
+        .view-btn.active {
+            background: #007bff;
+            color: #fff;
+            border-color: #007bff;
+        }
+
+        .btn-primary {
+            background: #007bff !important;
+            color: white !important;
+            line-height: 1.1;
+            padding: 5px 8px;
+            font-size: 0.8rem;
+        }
+
+        .btn-secondary {
+            background: #6c757d !important;
+            color: white !important;
+            line-height: 1.1;
+            padding: 5px 8px;
+            font-size: 0.75rem;
+        }
+
+        /* スマホ向け調整：スマホ時のみflex: 1等で均等・全幅配置に変化させる */
+        @media (max-width: 768px) {
+            .view-selector {
+                gap: 4px;
+                padding: 5px;
+            }
+
+            .view-btn {
+                flex: 1;
+                min-width: 32px;
+                padding: 6px 2px;
+                font-size: 0.8rem;
+                text-align: center;
+            }
+        }
     </style>
     <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            // コンテンツ読み込み遅延対策：少し待ってから表示する
+            setTimeout(() => {
+                const loader = document.getElementById("view-selector-loading");
+                if (loader) loader.style.display = "none";
+                const selector = document.querySelector(".view-selector");
+                if (selector) {
+                    selector.style.opacity = "1";
+                }
+            }, 800);
+        });
         // ページ読み込み時に通知許可をリクエスト
         window.addEventListener('load', () => {
             if ('Notification' in window && Notification.permission === 'default') {
@@ -240,15 +322,18 @@ if ($isLoggedIn) {
 
     <div>
         <?php if (($pageId ?? '') === 'home'): ?>
+            <div style="padding: 10px 12px; font-size: 1.1rem; font-weight: bold; color: #555;" id="view-selector-loading">
+                Loading....</div>
             <div class="view-selector">
-                <button class="view-btn active" onclick="switchView('month')">月</button>
-                <button class="view-btn" onclick="switchView('week')">週</button>
+                <button class="view-btn" onclick="switchView('month')">月</button>
+                <button class="view-btn active" onclick="switchView('week')">週</button>
                 <button class="view-btn" onclick="switchView('day')">日</button>
                 <button class="view-btn" onclick="switchView('year')">年</button>
-                <button class="view-btn" onclick="location.href='todoManage.html'"
-                    style="display: inline-flex; align-items: center; justify-content: center; gap: 4px;" title="TODO管理へ">
-                    TODO
-                </button>
+                <button class="view-btn" onclick="location.href='todoManage.html'" title="TODO管理へ">TO<br>DO</button>
+                <button type="button" class="view-btn btn-primary"
+                    onclick="location.href='index.php?page=memo&action=new&date=<?= date('Y-m-d') ?>'">新規<br>メモ</button>
+                <button type="button" class="view-btn btn-secondary"
+                    onclick="location.href='index.php?page=chat&receiver_id=&search_name='">チャ<br>ット</button>
             </div>
         <?php endif; ?>
     </div>
@@ -332,7 +417,7 @@ if ($isLoggedIn) {
 
         // 3. 実行（DOMContentLoadedで一括管理）
         document.addEventListener('DOMContentLoaded', () => {
-            // 1. まず ID が取れているか再確認（ログに出ているのでここはクリア）
+            // 1. まず ID が取れているか再確認
             const currentMyId = window.myId || null;
             console.log("DOM Ready - myId:", currentMyId);
 

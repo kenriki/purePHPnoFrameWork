@@ -88,19 +88,34 @@ try {
         $allDates[] = $targetDate;
     }
 
-    // 3. TODOのデータを今週（月〜日）の範囲で取得
-    $todoStmt = $pdo->prepare("
+    // 3-1. 未完了のTODOデータを今週（月〜日）の範囲で取得
+    $todoIncompleteStmt = $pdo->prepare("
         SELECT DATE(due_date) as date, COUNT(*) as count 
         FROM todo_items 
-        WHERE category = ? AND due_date BETWEEN ? AND ?
+        WHERE category = ? AND due_date BETWEEN ? AND ? AND is_completed = 0
         GROUP BY DATE(due_date)
     ");
-    $todoStmt->execute([$controller->user, $monday, $sunday]);
-    $todoRaw = $todoStmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    $todoMap = [];
-    foreach ($todoRaw as $row) {
-        $todoMap[$row['date']] = (int)$row['count'];
+    $todoIncompleteStmt->execute([$controller->user, $monday, $sunday]);
+    $todoIncompleteRaw = $todoIncompleteStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $todoIncompleteMap = [];
+    foreach ($todoIncompleteRaw as $row) {
+        $todoIncompleteMap[$row['date']] = (int) $row['count'];
+    }
+
+    // 3-2. 完了したTODOデータを今週（月〜日）の範囲で取得
+    $todoCompletedStmt = $pdo->prepare("
+        SELECT DATE(due_date) as date, COUNT(*) as count 
+        FROM todo_items 
+        WHERE category = ? AND due_date BETWEEN ? AND ? AND is_completed = 1
+        GROUP BY DATE(due_date)
+    ");
+    $todoCompletedStmt->execute([$controller->user, $monday, $sunday]);
+    $todoCompletedRaw = $todoCompletedStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $todoCompletedMap = [];
+    foreach ($todoCompletedRaw as $row) {
+        $todoCompletedMap[$row['date']] = (int) $row['count'];
     }
 
     // 4. メモ側のデータを今週（月〜日）の範囲に絞ってマップ化
@@ -109,30 +124,63 @@ try {
         $date = $row['date'];
         // 今週の範囲内のみを対象にする
         if ($date >= $monday && $date <= $sunday) {
-            $memoMap[$date] = (int)$row['count'];
+            $memoMap[$date] = (int) $row['count'];
         }
     }
 
-    // 5. 月曜から日曜までの軸に合わせてデータを整形
+    // 5. 月曜から日曜までの軸に合わせてデータを整形 ＋ 詳細データの紐付け[cite: 3]
     $memoCounts = [];
-    $todoCounts = [];
+    $todoIncompleteCounts = [];
+    $todoCompletedCounts = [];
     $formattedLabels = [];
+    $dailyDetailsMap = [];
 
     foreach ($allDates as $date) {
-        $formattedLabels[] = substr($date, 5); // '08-10' 形式に整形
-        $memoCounts[] = $memoMap[$date] ?? 0;   // データがなければ 0
-        $todoCounts[] = $todoMap[$date] ?? 0;   // データがなければ 0
+        $formattedLabels[] = substr($date, 5);          // '08-10' 形式に整形
+        $memoCounts[] = $memoMap[$date] ?? 0;           // データがなければ 0
+        $todoIncompleteCounts[] = $todoIncompleteMap[$date] ?? 0; // 未完了TODO
+        $todoCompletedCounts[] = $todoCompletedMap[$date] ?? 0;   // 完了TODO
+
+        // その日のイベントや予定の抽出[cite: 3]
+        $dayEvents = [];
+        foreach (($dbData['events'] ?? []) as $ev) {
+            if (isset($ev['start']) && str_starts_with($ev['start'], $date)) {
+                $dayEvents[] = [
+                    'title' => $ev['title'] ?? '予定',
+                    'type' => 'event'
+                ];
+            }
+        }
+
+        // 日付ごとの詳細マップ[cite: 3]
+        $dailyDetailsMap[$date] = [
+            'date' => $date,
+            'memo_count' => $memoMap[$date] ?? 0,
+            'todo_incomplete_count' => $todoIncompleteMap[$date] ?? 0,
+            'todo_completed_count' => $todoCompletedMap[$date] ?? 0,
+            'events' => $dayEvents
+        ];
     }
 
-    // まとめてJSに渡すための配列に格納
+    // まとめてJSに渡すための配列に格納[cite: 3]
     $page['dashboard']['unified_chart'] = [
         'labels' => $formattedLabels,
+        'all_dates' => $allDates,
         'memo' => $memoCounts,
-        'todo' => $todoCounts
+        'todo_incomplete' => $todoIncompleteCounts,
+        'todo_completed' => $todoCompletedCounts,
+        'details' => $dailyDetailsMap
     ];
 
 } catch (Exception $e) {
-    $page['dashboard']['unified_chart'] = ['labels' => [], 'memo' => [], 'todo' => []];
+    $page['dashboard']['unified_chart'] = [
+        'labels' => [],
+        'all_dates' => [],
+        'memo' => [],
+        'todo_incomplete' => [],
+        'todo_completed' => [],
+        'details' => []
+    ];
 }
 
 // コントローラー側から引き渡された未読件数（デフォルトは0）
@@ -524,7 +572,18 @@ $unread_messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </div>
     </div>
 </div>
-
+<!-- 他のモーダルがあればその周辺、またはbodyの閉じタグの直前 -->
+<div id="activity-modal" class="insta-modal" style="display:none;" onclick="closeActivityModal(event)">
+    <div class="insta-modal-content" style="max-width: 500px;">
+        <span class="insta-close"
+            onclick="document.getElementById('activity-modal').style.display='none'">&times;</span>
+        <div style="padding: 20px;">
+            <h3 id="activity-modal-date"
+                style="margin-top: 0; color: #007bff; border-bottom: 2px solid #eee; padding-bottom: 10px;"></h3>
+            <div id="activity-modal-body" style="max-height: 300px; overflow-y: auto;"></div>
+        </div>
+    </div>
+</div>
 <!-- ======================================================================================
      JavaScript 実装セクション
      ====================================================================================== -->
@@ -780,7 +839,7 @@ $unread_messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
         // }
         // 活動グラフ (Chart.js) - 積み上げグラフ対応版
         const ctx = document.getElementById('activityChart');
-        const chartData = dbData.unified_chart || { labels: [], memo: [], todo: [] };
+        const chartData = dbData.unified_chart || { labels: [], all_dates: [], memo: [], todo_incomplete: [], todo_completed: [], details: {} };
 
         if (ctx && chartData.labels.length > 0) {
             new Chart(ctx, {
@@ -794,14 +853,51 @@ $unread_messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             backgroundColor: '#007bff' // 青
                         },
                         {
-                            label: 'TODO',
-                            data: chartData.todo,
+                            label: '未完了TODO',
+                            data: chartData.todo_incomplete,
                             backgroundColor: '#ffc107' // 黄色
+                        },
+                        {
+                            label: '完了TODO',
+                            data: chartData.todo_completed,
+                            backgroundColor: '#28a745' // 緑
                         }
                     ]
                 },
                 options: {
                     responsive: true,
+                    // クリックイベントの追加
+                    onClick: function (event, elements) {
+                        if (elements.length === 0) return;
+
+                        const index = elements[0].index;
+                        const targetDate = chartData.all_dates[index];
+                        const details = chartData.details[targetDate];
+                        if (!details) return;
+
+                        document.getElementById('activity-modal-date').innerText = `📅 ${targetDate} の活動詳細`;
+
+                        let html = `<ul style="list-style: none; padding: 0; line-height: 1.8;">`;
+                        html += `<li>📝 メモ投稿数: <strong>${details.memo_count} 件</strong></li>`;
+                        html += `<li>⚠️ 未完了TODO: <strong>${details.todo_incomplete_count} 件</strong></li>`;
+                        html += `<li>✅ 完了TODO: <strong>${details.todo_completed_count} 件</strong></li>`;
+
+                        if (details.events && details.events.length > 0) {
+                            html += `<hr style="margin: 10px 0; border: 0; border-top: 1px solid #eee;">`;
+                            html += `<strong>予定・イベント:</strong><ul style="margin: 5px 0 0 15px;">`;
+                            details.events.forEach(ev => { html += `<li>${ev.title}</li>`; });
+                            html += `</ul>`;
+                        }
+                        html += `</ul>`;
+
+                        html += `<div style="margin-top: 15px; text-align: right;">`;
+                        html += `<a href="index.php?page=memo&action=new&date=${targetDate}" class="btn btn-primary" style="font-size: 0.8rem; padding: 6px 12px; background: #007bff; color: #fff; text-decoration: none; border-radius: 4px;">この日のメモを作成する</a>`;
+                        html += `</div>`;
+
+                        document.getElementById('activity-modal-body').innerHTML = html;
+                        document.getElementById('activity-modal').style.display = 'block';
+                        document.body.style.overflow = 'hidden';
+                    },
                     scales: {
                         x: { stacked: true },
                         y: {
@@ -812,6 +908,14 @@ $unread_messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     }
                 }
             });
+        }
+
+        // モーダルを閉じる関数
+        function closeActivityModal(event) {
+            if (event.target.id === 'activity-modal' || event.target.className === 'insta-close') {
+                document.getElementById('activity-modal').style.display = 'none';
+                document.body.style.overflow = '';
+            }
         }
     });
 

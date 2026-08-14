@@ -445,3 +445,19 @@
             transform: translateY(0);
         }
     }
+
+    /* スマホなどの狭い画面幅のとき、カレンダーの日付と曜日を強制的に縦並びにする */
+    @media (max-width: 480px) {
+
+        /* ヘッダーセル内のリンク要素をターゲットにする */
+        .fc .fc-col-header-cell-cushion {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+            font-size: 0.65rem !important;
+            line-height: 1.2 !important;
+            padding: 2px 0 !important;
+            white-space: normal !important;
+        }
+    }

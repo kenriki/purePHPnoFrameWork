@@ -74,6 +74,67 @@ if (!isset($page['dashboard'])) {
     ];
 }
 
+// TODO の集計処理 ＆ メモとの日付軸統合処理（月曜日起点・今週分に限定）
+try {
+    // 1. 今週の月曜日と日曜日の日付を計算 (本日は2026年8月14日金曜日です)
+    $monday = date('Y-m-d', strtotime('monday this week'));
+    $sunday = date('Y-m-d', strtotime('sunday this week'));
+
+    // 2. 過去7日間（月〜日）の日付配列（軸）をあらかじめ固定で作成
+    $chartLabels = [];
+    $allDates = [];
+    for ($i = 0; $i < 7; $i++) {
+        $targetDate = date('Y-m-d', strtotime("$monday +{$i} days"));
+        $allDates[] = $targetDate;
+    }
+
+    // 3. TODOのデータを今週（月〜日）の範囲で取得
+    $todoStmt = $pdo->prepare("
+        SELECT DATE(due_date) as date, COUNT(*) as count 
+        FROM todo_items 
+        WHERE category = ? AND due_date BETWEEN ? AND ?
+        GROUP BY DATE(due_date)
+    ");
+    $todoStmt->execute([$controller->user, $monday, $sunday]);
+    $todoRaw = $todoStmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    $todoMap = [];
+    foreach ($todoRaw as $row) {
+        $todoMap[$row['date']] = (int)$row['count'];
+    }
+
+    // 4. メモ側のデータを今週（月〜日）の範囲に絞ってマップ化
+    $memoMap = [];
+    foreach (($page['dashboard']['chart'] ?? []) as $row) {
+        $date = $row['date'];
+        // 今週の範囲内のみを対象にする
+        if ($date >= $monday && $date <= $sunday) {
+            $memoMap[$date] = (int)$row['count'];
+        }
+    }
+
+    // 5. 月曜から日曜までの軸に合わせてデータを整形
+    $memoCounts = [];
+    $todoCounts = [];
+    $formattedLabels = [];
+
+    foreach ($allDates as $date) {
+        $formattedLabels[] = substr($date, 5); // '08-10' 形式に整形
+        $memoCounts[] = $memoMap[$date] ?? 0;   // データがなければ 0
+        $todoCounts[] = $todoMap[$date] ?? 0;   // データがなければ 0
+    }
+
+    // まとめてJSに渡すための配列に格納
+    $page['dashboard']['unified_chart'] = [
+        'labels' => $formattedLabels,
+        'memo' => $memoCounts,
+        'todo' => $todoCounts
+    ];
+
+} catch (Exception $e) {
+    $page['dashboard']['unified_chart'] = ['labels' => [], 'memo' => [], 'todo' => []];
+}
+
 // コントローラー側から引き渡された未読件数（デフォルトは0）
 $unread_count = $unread_count ?? 0;
 
@@ -312,7 +373,7 @@ $unread_messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
         <!-- 右：サイドパネル  -->
         <div class="side-panel">
             <!-- 1. 新規作成 -->
-            <a href="index.php?page=memo&action=new&date=<?= date('Y-m-d') ?>" class="btn-new-memo">＋ 新規メモを作成</a>
+            <!-- <a href="index.php?page=memo&action=new&date=<?= date('Y-m-d') ?>" class="btn-new-memo">＋ 新規メモを作成</a> -->
 
             <!-- 2. 最新フォト（上位6枚） -->
             <div class="side-panel-section">
@@ -506,7 +567,7 @@ $unread_messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
         // メインカレンダー初期化
         mainCalendar = new FullCalendar.Calendar(mainEl, {
             selectable: true,
-            initialView: 'dayGridMonth',
+            initialView: 'dayGridWeek', //dayGridMonth
             locale: 'ja',
             height: 'auto',
             headerToolbar: { left: 'prev,next today', center: 'title', right: '' },
@@ -706,15 +767,50 @@ $unread_messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
         }
 
         // 活動グラフ (Chart.js)
+        // const ctx = document.getElementById('activityChart');
+        // if (ctx && dbData.chart && dbData.chart.length > 0) {
+        //     new Chart(ctx, {
+        //         type: 'bar',
+        //         data: {
+        //             labels: dbData.chart.map(d => d.date.slice(5)),
+        //             datasets: [{ label: '投稿', data: dbData.chart.map(d => d.count), backgroundColor: '#007bff' }]
+        //         },
+        //         options: { responsive: true, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+        //     });
+        // }
+        // 活動グラフ (Chart.js) - 積み上げグラフ対応版
         const ctx = document.getElementById('activityChart');
-        if (ctx && dbData.chart && dbData.chart.length > 0) {
+        const chartData = dbData.unified_chart || { labels: [], memo: [], todo: [] };
+
+        if (ctx && chartData.labels.length > 0) {
             new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: dbData.chart.map(d => d.date.slice(5)),
-                    datasets: [{ label: '投稿', data: dbData.chart.map(d => d.count), backgroundColor: '#007bff' }]
+                    labels: chartData.labels,
+                    datasets: [
+                        {
+                            label: 'メモ',
+                            data: chartData.memo,
+                            backgroundColor: '#007bff' // 青
+                        },
+                        {
+                            label: 'TODO',
+                            data: chartData.todo,
+                            backgroundColor: '#ffc107' // 黄色
+                        }
+                    ]
                 },
-                options: { responsive: true, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: { stacked: true },
+                        y: {
+                            stacked: true,
+                            beginAtZero: true,
+                            ticks: { stepSize: 1 }
+                        }
+                    }
+                }
             });
         }
     });

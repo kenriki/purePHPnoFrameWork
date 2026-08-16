@@ -56,16 +56,101 @@
                         <input type="date" name="due_date" id="todoDateInput" value="<?php echo date('Y-m-d'); ?>"
                             style="border: 1px solid #dcdcdc; border-radius: 6px; padding: 6px 10px; font-size: 0.9rem; color: #555; outline: none;">
                     </div>
-                    <div>
-                        <button type="button" id="quickTodoSubmitBtn"
-                            style="background-color: #00b0ff; color: #ffffff; border: none; border-radius: 20px; padding: 8px 24px; font-weight: bold; font-size: 0.95rem; cursor: pointer; box-shadow: 0 2px 5px rgba(0, 176, 255, 0.3);">
-                            追加
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <!-- ★ Google風の枠なしマイクアイコンボタン -->
+                        <button type="button" id="micBtn" onclick="startQuickSpeech()" title="音声入力"
+                            style="background: transparent; border: none; padding: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background 0.2s;">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5f6368" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                                <path d="M19 10v1a7 7 0 0 1-14 0v-1"></path>
+                                <line x1="12" y1="19" x2="12" y2="23"></line>
+                                <line x1="8" y1="23" x2="16" y2="23"></line>
+                            </svg>
                         </button>
+                        <div>
+                            <button type="button" id="quickTodoSubmitBtn"
+                                style="background-color: #00b0ff; color: #ffffff; border: none; border-radius: 20px; padding: 8px 24px; font-weight: bold; font-size: 0.95rem; cursor: pointer; box-shadow: 0 2px 5px rgba(0, 176, 255, 0.3);">
+                                追加
+                            </button>
+                        </div>
                     </div>
                 </div>
             </form>
         </div>
     <?php endif; ?>
+
+    <!-- 音声入力を動作させるためのJavaScriptスクリプト -->
+    <script>
+        function startQuickSpeech() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+            if (!SpeechRecognition) {
+                alert("お使いのブラウザは音声認識に対応していません。Google Chrome等をご利用ください。");
+                return;
+            }
+
+            const recognition = new SpeechRecognition();
+            recognition.lang = 'ja-JP';       // 日本語設定
+            recognition.interimResults = true; // リアルタイム反映
+            recognition.continuous = false;    // 短発話ごとに区切る
+
+            const inputField = document.getElementById('todoContentInput');
+            const micBtn = document.getElementById('micBtn');
+            const micIconSvg = micBtn ? micBtn.querySelector('svg') : null;
+
+            // 録音開始時
+            recognition.onstart = function () {
+                console.log("音声認識が開始されました。お話しください。");
+                if (micIconSvg) micIconSvg.setAttribute('stroke', '#ea4335'); // Googleレッド
+                if (micBtn) micBtn.style.background = '#fce8e6';
+            };
+
+            // 音声認識結果の取得
+            recognition.onresult = function (event) {
+                let transcript = '';
+                for (let i = 0; i < event.results.length; ++i) {
+                    transcript += event.results[i][0].transcript;
+                }
+                console.log("認識結果:", transcript);
+                if (inputField) {
+                    inputField.value = transcript;
+                    inputField.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+            };
+
+            // エラー発生時
+            recognition.onerror = function (event) {
+                console.error("音声認識エラー詳細: ", event.error);
+
+                // ★ no-speech（音声未検出）の場合はアラートを出さずに静かに終わる
+                if (event.error === 'no-speech') {
+                    console.log("音声が検出されませんでした。もう一度お試しください。");
+                } else {
+                    alert("音声認識エラーが発生しました: " + event.error);
+                }
+                resetMicButton();
+            };
+
+            // 録音終了時
+            recognition.onend = function () {
+                console.log("音声認識が終了しました。");
+                resetMicButton();
+            };
+
+            function resetMicButton() {
+                if (micIconSvg) micIconSvg.setAttribute('stroke', '#5f6368');
+                if (micBtn) micBtn.style.background = 'transparent';
+            }
+
+            // 録音スタート
+            try {
+                recognition.start();
+            } catch (e) {
+                console.error("起動失敗: ", e);
+            }
+        }
+    </script>
     <!-- ▼ ポップアップ（トースト通知）用のスタイルとスクリプト -->
     <div id="todoToast"
         style="display: none; position: fixed; bottom: 30px; right: 30px; background: #333; color: #fff; padding: 12px 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); z-index: 9999; font-size: 0.95rem; transition: opacity 0.3s ease;">

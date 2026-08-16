@@ -435,10 +435,134 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
 
             <div
                 style="background: #f9f9f9; padding: 15px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #eee;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-weight: bold; color: #555; font-size: 0.9rem;">本文内容</span>
+                    <!-- ★ Google風の枠なしマイクアイコンボタン -->
+                    <button type="button" id="memoMicBtn" onclick="toggleMemoSpeech()" title="音声入力"
+                        style="background: transparent; border: none; padding: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background 0.2s;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5f6368" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                            <path d="M19 10v1a7 7 0 0 1-14 0v-1"></path>
+                            <line x1="12" y1="19" x2="12" y2="23"></line>
+                            <line x1="8" y1="23" x2="16" y2="23"></line>
+                        </svg>
+                    </button>
+                </div>
                 <textarea name="content" id="memo-content"
                     style="height: 400px; padding: 15px; border: 1px solid #ccc; border-radius: 5px; line-height: 1.6; resize: vertical;"
                     placeholder="内容を入力してください..."><?= htmlspecialchars($content ?? $memo['content'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
             </div>
+            <script>
+                let recognitionInstance = null;
+                let isUserStopped = true;
+
+                function toggleMemoSpeech() {
+                    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+                    if (!SpeechRecognition) {
+                        alert("お使いのブラウザは音声認識に対応していません。Google Chrome等をご利用ください。");
+                        return;
+                    }
+
+                    const textarea = document.querySelector('textarea');
+                    const micBtn = document.getElementById('micBtn');
+                    const micIconSvg = micBtn ? micBtn.querySelector('svg') : null;
+
+                    if (!isUserStopped) {
+                        isUserStopped = true;
+                        if (recognitionInstance) {
+                            recognitionInstance.stop();
+                        }
+                        resetButtonUI();
+                        return;
+                    }
+
+                    isUserStopped = false;
+                    const recognition = new SpeechRecognition();
+                    recognitionInstance = recognition;
+
+                    recognition.lang = 'ja-JP';
+                    recognition.interimResults = true;
+                    recognition.continuous = true;
+
+                    // 既にテキストエリアにある文章をベースにする
+                    let committedText = textarea.value;
+                    if (committedText && !committedText.endsWith('\n') && !committedText.endsWith(' ')) {
+                        committedText += '\n';
+                    }
+
+                    // スマホでの重複を防ぐため、前回処理した結果のインデックスを記憶する変数
+                    let lastProcessedIndex = 0;
+
+                    recognition.onstart = function () {
+                        setRedButtonUI();
+                    };
+
+                    recognition.onresult = function (event) {
+                        let interimTranscript = '';
+                        let newFinalTranscript = '';
+
+                        // スマホは results 全体が毎回新しく送られてくることがあるため、
+                        // event.resultIndex から最後までを安全に処理する
+                        for (let i = event.resultIndex; i < event.results.length; ++i) {
+                            let transcript = event.results[i][0].transcript;
+                            if (event.results[i].isFinal) {
+                                newFinalTranscript += transcript;
+                            } else {
+                                interimTranscript += transcript;
+                            }
+                        }
+
+                        // 新しく確定したテキストがある場合のみベースに追加
+                        if (newFinalTranscript) {
+                            committedText += newFinalTranscript + '\n';
+                        }
+
+                        // 確定済みテキスト ＋ 現在認識中の仮テキストを表示
+                        textarea.value = committedText + interimTranscript;
+                        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                    };
+
+                    recognition.onerror = function (event) {
+                        console.error("音声認識エラー: ", event.error);
+                    };
+
+                    recognition.onend = function () {
+                        if (!isUserStopped) {
+                            try {
+                                recognition.start();
+                                return;
+                            } catch (e) {
+                                console.error("再起動エラー:", e);
+                            }
+                        }
+                        resetButtonUI();
+                    };
+
+                    function setRedButtonUI() {
+                        if (micBtn) micBtn.style.background = '#fce8e6';
+                        if (micIconSvg) micIconSvg.setAttribute('stroke', '#ea4335');
+                    }
+
+                    function resetButtonUI() {
+                        if (micBtn) micBtn.style.background = 'transparent';
+                        if (micIconSvg) micIconSvg.setAttribute('stroke', '#5f6368');
+                    }
+
+                    try {
+                        setRedButtonUI();
+                        recognition.start();
+                    } catch (e) {
+                        console.error("起動失敗:", e);
+                        resetButtonUI();
+                    }
+                }
+
+                function startQuickSpeech() {
+                    toggleMemoSpeech();
+                }
+            </script>
 
             <div style="margin-bottom: 15px; padding: 10px; border: 1px dashed #ccc; border-radius: 5px; background: #fff;">
                 <p style="color: #d9534f; font-size: 0.9em; font-weight: bold;">
@@ -937,25 +1061,25 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
     });
 </script>
 <script>
-document.addEventListener('keydown', function(event) {
-    // Ctrl + S または Command + S (Mac用) を検知
-    if ((event.ctrlKey || event.metaKey) && event.key === 's') {
-        event.preventDefault(); // ブラウザの標準保存ダイアログを抑制
-        
-        // 1. 保存ボタン（送信ボタン）を取得する
-        // ※実際のボタンのidかclass、またはtype属性に合わせて指定してください
-        const saveButton = document.getElementById('save-button') || document.querySelector('input[type="submit"]') || document.querySelector('button[type="submit"]');
-        
-        if (saveButton) {
-            // 2. ボタンを擬似的にクリックして、既存の保存処理（ローカルストレージ削除など）を発火させる
-            saveButton.click();
-        } else {
-            // ボタンが見つからない場合のフォールバックとして従来の処理を残す
-            const form = document.getElementById('memo-form');
-            if (form) {
-                form.submit();
+    document.addEventListener('keydown', function (event) {
+        // Ctrl + S または Command + S (Mac用) を検知
+        if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+            event.preventDefault(); // ブラウザの標準保存ダイアログを抑制
+
+            // 1. 保存ボタン（送信ボタン）を取得する
+            // ※実際のボタンのidかclass、またはtype属性に合わせて指定してください
+            const saveButton = document.getElementById('save-button') || document.querySelector('input[type="submit"]') || document.querySelector('button[type="submit"]');
+
+            if (saveButton) {
+                // 2. ボタンを擬似的にクリックして、既存の保存処理（ローカルストレージ削除など）を発火させる
+                saveButton.click();
+            } else {
+                // ボタンが見つからない場合のフォールバックとして従来の処理を残す
+                const form = document.getElementById('memo-form');
+                if (form) {
+                    form.submit();
+                }
             }
         }
-    }
-});
+    });
 </script>

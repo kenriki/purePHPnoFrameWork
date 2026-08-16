@@ -467,11 +467,8 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
 
                     const textarea = document.querySelector('textarea');
                     const micBtn = document.getElementById('micBtn');
-
-                    // SVGのパスやアイコン要素を確実につかむためのセレクタ
                     const micIconSvg = micBtn ? micBtn.querySelector('svg') : null;
 
-                    // すでに動いている場合は停止する
                     if (!isUserStopped) {
                         isUserStopped = true;
                         if (recognitionInstance) {
@@ -481,7 +478,6 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
                         return;
                     }
 
-                    // 新しく音声認識を開始
                     isUserStopped = false;
                     const recognition = new SpeechRecognition();
                     recognitionInstance = recognition;
@@ -490,36 +486,41 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
                     recognition.interimResults = true;
                     recognition.continuous = true;
 
-                    // 開始時のテキストベース
-                    let baseText = textarea.value;
-                    if (baseText && !baseText.endsWith('\n') && !baseText.endsWith(' ')) {
-                        baseText += '\n';
+                    // 既にテキストエリアにある文章をベースにする
+                    let committedText = textarea.value;
+                    if (committedText && !committedText.endsWith('\n') && !committedText.endsWith(' ')) {
+                        committedText += '\n';
                     }
 
+                    // スマホでの重複を防ぐため、前回処理した結果のインデックスを記憶する変数
+                    let lastProcessedIndex = 0;
+
                     recognition.onstart = function () {
-                        console.log("音声認識が開始されました（赤く変更）。");
                         setRedButtonUI();
                     };
 
                     recognition.onresult = function (event) {
                         let interimTranscript = '';
-                        let finalTranscript = '';
+                        let newFinalTranscript = '';
 
+                        // スマホは results 全体が毎回新しく送られてくることがあるため、
+                        // event.resultIndex から最後までを安全に処理する
                         for (let i = event.resultIndex; i < event.results.length; ++i) {
                             let transcript = event.results[i][0].transcript;
                             if (event.results[i].isFinal) {
-                                finalTranscript += transcript;
+                                newFinalTranscript += transcript;
                             } else {
                                 interimTranscript += transcript;
                             }
                         }
 
-                        // 1文が確定して次に行くとき、または少し間が空いたときに自動で改行を追加する
-                        if (finalTranscript) {
-                            baseText += finalTranscript + "\n"; // ★ここで文ごとに改行を入れる
+                        // 新しく確定したテキストがある場合のみベースに追加
+                        if (newFinalTranscript) {
+                            committedText += newFinalTranscript + '\n';
                         }
 
-                        textarea.value = baseText + interimTranscript;
+                        // 確定済みテキスト ＋ 現在認識中の仮テキストを表示
+                        textarea.value = committedText + interimTranscript;
                         textarea.dispatchEvent(new Event('input', { bubbles: true }));
                     };
 
@@ -528,7 +529,6 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
                     };
 
                     recognition.onend = function () {
-                        console.log("音声認識セッション終了。自動継続チェック...");
                         if (!isUserStopped) {
                             try {
                                 recognition.start();
@@ -541,25 +541,17 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
                     };
 
                     function setRedButtonUI() {
-                        if (micBtn) {
-                            micBtn.style.background = '#fce8e6'; // 背景を赤みのある薄い色に
-                        }
-                        if (micIconSvg) {
-                            micIconSvg.setAttribute('stroke', '#ea4335'); // Googleレッド
-                        }
+                        if (micBtn) micBtn.style.background = '#fce8e6';
+                        if (micIconSvg) micIconSvg.setAttribute('stroke', '#ea4335');
                     }
 
                     function resetButtonUI() {
-                        if (micBtn) {
-                            micBtn.style.background = 'transparent';
-                        }
-                        if (micIconSvg) {
-                            micIconSvg.setAttribute('stroke', '#5f6368'); // 元の色に戻す
-                        }
+                        if (micBtn) micBtn.style.background = 'transparent';
+                        if (micIconSvg) micIconSvg.setAttribute('stroke', '#5f6368');
                     }
 
                     try {
-                        setRedButtonUI(); // 確実に即座に赤くする
+                        setRedButtonUI();
                         recognition.start();
                     } catch (e) {
                         console.error("起動失敗:", e);
@@ -567,7 +559,6 @@ $percent = ($max_mb > 0) ? min(100, round(($current_mb / $max_mb) * 100)) : 0;
                     }
                 }
 
-                // 既存の関数名からの呼び出し用
                 function startQuickSpeech() {
                     toggleMemoSpeech();
                 }

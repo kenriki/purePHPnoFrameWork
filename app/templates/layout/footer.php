@@ -39,7 +39,7 @@
     <!-- ▼ これから何をする？（ポップアップ通知付き） -->
     <?php if (($pageId ?? '') === 'home'): ?>
         <div
-            style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+            style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 12px; padding: 5px; margin-bottom: 3px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
             <form id="quickTodoForm" style="display: flex; flex-direction: column; gap: 15px;">
                 <!-- 新規追加であることを示すための隠しフィールド -->
                 <input type="hidden" name="action" value="add">
@@ -47,7 +47,7 @@
                 <!-- タスク内容入力 -->
                 <div>
                     <input type="text" name="content" id="todoContentInput" placeholder="これから何をする？" required
-                        style="width: 100%; border: none; border-bottom: 1px solid #e0e0e0; padding: 8px 0; font-size: 1rem; outline: none; background: transparent;">
+                        style="width: 100%; border: none; border-bottom: 1px solid #e0e0e0; font-size: 1rem; outline: none; background: transparent;">
                 </div>
 
                 <!-- 日付選択と追加ボタンの行 -->

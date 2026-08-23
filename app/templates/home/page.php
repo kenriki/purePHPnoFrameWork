@@ -348,7 +348,7 @@ $unread_messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             <!-- カレンダーの下に追加するUIイメージ -->
             <div class="ai-bot-section"
-                style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 12px; border: 1px solid #dee2e6;">
+                style="margin-top: 20px; background: #f8f9fa; border-radius: 12px; border: 1px solid #dee2e6;">
                 <h4 style="font-size: 0.9rem; color: #555; margin-top: 0;">💬 AIアシスタント（週の振り返り）</h4>
                 <div id="ai-chat-response"
                     style="font-size: 0.85rem; min-height: 60px; color: #333; margin-bottom: 10px; background: #fff; padding: 10px; border-radius: 8px; border: 1px solid #eee; line-height: 1.5;">

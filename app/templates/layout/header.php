@@ -176,7 +176,7 @@ if ($isLoggedIn) {
             overflow-x: auto;
             list-style: none;
             margin: 0;
-            padding: 10px;
+            padding: 1px;
             scrollbar-width: none;
         }
 
@@ -235,8 +235,8 @@ if ($isLoggedIn) {
         .btn-primary {
             background: #007bff !important;
             color: white !important;
-            line-height: 1.1;
-            padding: 5px 8px;
+            line-height: 0.9;
+            /* padding: 5px 8px; */
             font-size: 0.8rem;
         }
 

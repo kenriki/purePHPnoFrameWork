@@ -71,6 +71,83 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // グループメンバー追加処理
+    if (isset($_POST['action']) && $_POST['action'] === 'add_member') {
+        $new_member_name = isset($_POST['new_member_name']) ? trim($_POST['new_member_name']) : '';
+
+        if ($room_id && $new_member_name !== '') {
+            // 追加対象のユーザーを検索
+            $stmt_target = $pdo->prepare("SELECT id, username FROM users WHERE username = ?");
+            $stmt_target->execute([$new_member_name]);
+            $target_user = $stmt_target->fetch(PDO::FETCH_ASSOC);
+
+            if ($target_user) {
+                $target_user_id = $target_user['id'];
+                $target_name = $target_user['username'];
+
+                // 二重登録防止チェック
+                $stmt_check = $pdo->prepare("SELECT COUNT(*) FROM room_members WHERE room_id = ? AND user_id = ?");
+                $stmt_check->execute([$room_id, $target_user_id]);
+
+                if ($stmt_check->fetchColumn() == 0) {
+                    // グループにメンバーを追加
+                    $stmt_add = $pdo->prepare("INSERT INTO room_members (room_id, user_id) VALUES (?, ?)");
+                    $stmt_add->execute([$room_id, $target_user_id]);
+
+                    // 操作者のユーザー名を取得
+                    $stmt_op = $pdo->prepare("SELECT username FROM users WHERE id = ?");
+                    $stmt_op->execute([$current_user_id]);
+                    $operator_name = $stmt_op->fetchColumn() ?: "ユーザー";
+
+                    // システムメッセージ挿入 (is_system_message = 1)
+                    $sys_msg = "{$operator_name} さんが {$target_name} さんを追加しました。";
+                    $stmt_sys = $pdo->prepare("INSERT INTO messages (room_id, sender_id, message, is_system_message, created_at) VALUES (?, ?, ?, 1, NOW())");
+                    $stmt_sys->execute([$room_id, $current_user_id, $sys_msg]);
+                }
+            }
+
+            header("Location: index.php?page=chat&room_id=" . $room_id);
+            exit;
+        }
+    }
+
+    // グループメンバー削除・退室処理
+    if (isset($_POST['action']) && $_POST['action'] === 'remove_member') {
+        $target_user_id = isset($_POST['target_user_id']) ? (int)$_POST['target_user_id'] : null;
+
+        if ($room_id && $target_user_id) {
+            // 削除対象のユーザー名を取得
+            $stmt_target = $pdo->prepare("SELECT username FROM users WHERE id = ?");
+            $stmt_target->execute([$target_user_id]);
+            $target_name = $stmt_target->fetchColumn();
+
+            if ($target_name) {
+                // グループから除外
+                $stmt_del = $pdo->prepare("DELETE FROM room_members WHERE room_id = ? AND user_id = ?");
+                $stmt_del->execute([$room_id, $target_user_id]);
+
+                // 操作者のユーザー名を取得
+                $stmt_op = $pdo->prepare("SELECT username FROM users WHERE id = ?");
+                $stmt_op->execute([$current_user_id]);
+                $operator_name = $stmt_op->fetchColumn() ?: "ユーザー";
+
+                // システムメッセージ文言の作成
+                $sys_msg = ($current_user_id === $target_user_id)
+                    ? "{$operator_name} さんがグループを退室しました。"
+                    : "{$operator_name} さんが {$target_name} さんを削除しました。";
+
+                // システムメッセージ挿入 (is_system_message = 1)
+                $stmt_sys = $pdo->prepare("INSERT INTO messages (room_id, sender_id, message, is_system_message, created_at) VALUES (?, ?, ?, 1, NOW())");
+                $stmt_sys->execute([$room_id, $current_user_id, $sys_msg]);
+            }
+
+            // 自分が退室した場合はチャットTOPへ、他人の削除なら同じグループへ
+            $redirect_url = ($current_user_id === $target_user_id) ? "index.php?page=chat" : "index.php?page=chat&room_id=" . $room_id;
+            header("Location: " . $redirect_url);
+            exit;
+        }
+    }
+
     // B. メッセージ送信処理
     if (isset($_POST['message'])) {
         $msg_text = trim($_POST['message']);
@@ -164,14 +241,14 @@ if ($room_id) {
     $receiver = ['name' => $stmt->fetchColumn() ?: 'グループチャット'];
     // 現在このルームに参加している全てのメンバー名を取得
     $stmt_rm = $pdo->prepare("
-        SELECT u.username 
+        SELECT u.id, u.username 
         FROM users u 
         JOIN room_members rm ON u.id = rm.user_id 
         WHERE rm.room_id = ?
         ORDER BY u.username ASC
     ");
     $stmt_rm->execute([$room_id]);
-    $room_members_list = $stmt_rm->fetchAll(PDO::FETCH_COLUMN);
+    $room_members_list = $stmt_rm->fetchAll(PDO::FETCH_ASSOC); // ASSOCに変更
 } elseif ($receiver_id) {
     $messages = $messageModel->getChatHistory($current_user_id, $receiver_id);
     $stmt = $pdo->prepare("SELECT id, username AS name FROM users WHERE id = :id");
@@ -310,11 +387,20 @@ if (file_exists(__DIR__ . '/../layout/header.php')) {
                     </span>
                     <!-- グループ表示のときだけタイトルの横に所属ユーザを出す -->
                     <?php if ($room_id && !empty($room_members_list)): ?>
-                        <span class="room-members-inline"
-                            style="font-size: 0.8rem; color: #777; font-weight: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
-                            title="参加メンバー: <?= htmlspecialchars(implode(', ', $room_members_list), ENT_QUOTES, 'UTF-8'); ?>">
-                            参加者:(
-                            <?= htmlspecialchars(implode(', ', $room_members_list), ENT_QUOTES, 'UTF-8'); ?>)
+                        <span class="room-members-inline" style="font-size: 0.8rem; color: #777; font-weight: normal;">
+                            参加者:
+                            <?php foreach ($room_members_list as $m): ?>
+                                <span style="display:inline-flex; align-items:center; gap:2px; background:#f0f0f0; padding:2px 6px; border-radius:10px; margin-right:4px;">
+                                    <?= htmlspecialchars($m['username'], ENT_QUOTES, 'UTF-8'); ?>
+                                    
+                                    <!-- 削除実行フォーム -->
+                                    <form action="index.php?page=chat&room_id=<?= $room_id ?>" method="POST" style="display:inline; margin:0;" onsubmit="return confirm('<?= htmlspecialchars($m['username'], ENT_QUOTES, 'UTF-8') ?> さんをグループから外しますか？');">
+                                        <input type="hidden" name="action" value="remove_member">
+                                        <input type="hidden" name="target_user_id" value="<?= $m['id'] ?>">
+                                        <button type="submit" style="background:none; border:none; color:#ff4d4d; cursor:pointer; font-weight:bold; padding:0 2px;">×</button>
+                                    </form>
+                                </span>
+                            <?php endforeach; ?>
                         </span>
                     <?php endif; ?>
                     <?php if ($room_id): ?>
@@ -375,45 +461,61 @@ if (file_exists(__DIR__ . '/../layout/header.php')) {
                         <?php foreach ($messages as $msg):
                             $is_me = ((int) $msg['sender_id'] === $current_user_id);
                             $msg_id = $msg['id'];
+                            $is_system = !empty($msg['is_system_message']) && (int) $msg['is_system_message'] === 1;
 
-                            // 既読INSERT処理（自分が送信者ではなく、かつ未読の場合のみ）
-                            if (!$is_me && !in_array($msg_id, $my_reads)) {
+                            // 既読INSERT処理（通常メッセージ 且つ 自分が送信者でない 且つ 未読の場合のみ）
+                            if (!$is_system && !$is_me && !in_array($msg_id, $my_reads)) {
                                 $stmt_ins = $pdo->prepare("INSERT INTO message_reads (message_id, user_id, read_at) VALUES (?, ?, NOW())");
                                 $stmt_ins->execute([$msg_id, $current_user_id]);
                                 $my_reads[] = $msg_id;
                                 $read_counts[$msg_id] = ($read_counts[$msg_id] ?? 0) + 1;
                             }
                             ?>
-                            <div class="msg-row <?= $is_me ? 'me' : 'partner'; ?>">
-                                <?php if ($is_me): ?>
-                                    <span class="msg-status">
-                                        <?php if ($room_id): ?>
-                                            既読: <?= (int) ($read_counts[$msg_id] ?? 0); ?>
-                                        <?php else: ?>
-                                            <?= ((int) $msg['is_read'] === 1) ? '既読' : '未読'; ?>
-                                        <?php endif; ?>
-                                    </span>
-                                <?php endif; ?>
 
-                                <div class="msg-bubble">
-                                    <?php if (!$is_me && $room_id && isset($msg['sender_name'])): ?>
-                                        <div style="font-size: 10px; color: #666;">
-                                            <?= htmlspecialchars($msg['sender_name'], ENT_QUOTES, 'UTF-8'); ?>
-                                        </div>
+                            <?php if ($is_system): ?>
+                                
+                                <!-- システムメッセージ表示（中央寄せ） -->
+                                <div class="msg-system" style="text-align: center; margin: 12px 0;">
+                                    <span style="background: #e9ecef; color: #6c757d; font-size: 0.75rem; padding: 4px 12px; border-radius: 12px; display: inline-block;">
+                                        <?= htmlspecialchars($msg['message'], ENT_QUOTES, 'UTF-8'); ?>
+                                    </span>
+                                </div>
+
+                            <?php else: ?>
+
+                                <!-- 通常メッセージ表示（既存機能ママ） -->
+                                <div class="msg-row <?= $is_me ? 'me' : 'partner'; ?>">
+                                    <?php if ($is_me): ?>
+                                        <span class="msg-status">
+                                            <?php if ($room_id): ?>
+                                                既読: <?= (int) ($read_counts[$msg_id] ?? 0); ?>
+                                            <?php else: ?>
+                                                <?= ((int) $msg['is_read'] === 1) ? '既読' : '未読'; ?>
+                                            <?php endif; ?>
+                                        </span>
                                     <?php endif; ?>
 
-                                    <?= nl2br(htmlspecialchars($msg['message'], ENT_QUOTES, 'UTF-8')); ?>
+                                    <div class="msg-bubble">
+                                        <?php if (!$is_me && $room_id && isset($msg['sender_name'])): ?>
+                                            <div style="font-size: 10px; color: #666;">
+                                                <?= htmlspecialchars($msg['sender_name'], ENT_QUOTES, 'UTF-8'); ?>
+                                            </div>
+                                        <?php endif; ?>
 
-                                    <div class="msg-actions">
-                                        <?php $is_liked = !empty($msg['is_liked']); ?>
-                                        <span class="like-btn" id="like-btn-<?= $msg_id; ?>" onclick="toggleLike(<?= $msg_id; ?>)"
-                                            style="color: <?= $is_liked ? '#e91e63' : '#ccc'; ?>;">
-                                            ❤️<span id="like-count-<?= $msg_id; ?>"><?= $msg['like_count'] ?? 0; ?></span>
-                                        </span>
+                                        <?= nl2br(htmlspecialchars($msg['message'], ENT_QUOTES, 'UTF-8')); ?>
+
+                                        <div class="msg-actions">
+                                            <?php $is_liked = !empty($msg['is_liked']); ?>
+                                            <span class="like-btn" id="like-btn-<?= $msg_id; ?>" onclick="toggleLike(<?= $msg_id; ?>)"
+                                                style="color: <?= $is_liked ? '#e91e63' : '#ccc'; ?>;">
+                                                ❤️<span id="like-count-<?= $msg_id; ?>"><?= $msg['like_count'] ?? 0; ?></span>
+                                            </span>
+                                        </div>
+                                        <span class="msg-meta"><?= date('m/d H:i', strtotime($msg['created_at'])); ?></span>
                                     </div>
-                                    <span class="msg-meta"><?= date('m/d H:i', strtotime($msg['created_at'])); ?></span>
                                 </div>
-                            </div>
+
+                            <?php endif; ?>
                         <?php endforeach; ?>
                     <?php else: ?>
                         <p>メッセージはまだありません</p>

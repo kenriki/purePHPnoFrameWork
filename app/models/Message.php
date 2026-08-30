@@ -190,33 +190,22 @@ class Message
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    // public function getRoomMessages($room_id)
-    // {
-    //     $stmt = $this->pdo->prepare("
-    //         SELECT m.*, u.username AS sender_name 
-    //         FROM messages m 
-    //         JOIN users u ON m.sender_id = u.id 
-    //         WHERE m.room_id = :room_id 
-    //         AND (m.deleted_by_user_id IS NULL OR m.deleted_by_user_id != :my_id)
-    //         ORDER BY m.created_at ASC
-    //     ");
-    //     $stmt->execute([':room_id' => $room_id, ':my_id' => $_SESSION['user_id']]);
-    //     return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    // }
-    public function getRoomMessages($room_id, $my_id) { // 引数に $my_id が必要になります
-        $sql = "SELECT m.*, u.username AS sender_name,
-                    (SELECT COUNT(*) FROM message_likes WHERE message_id = m.id) AS like_count,
-                    (SELECT COUNT(*) FROM message_likes WHERE message_id = m.id AND user_id = :my_id) AS is_liked
+    public function getRoomMessages($room_id, $my_id) {
+        // JOIN を LEFT JOIN に変更し、sender_id が 0 や NULL のシステムメッセージも取得可能にします
+        $sql = "SELECT m.*, 
+                       COALESCE(u.username, 'システム') AS sender_name,
+                       (SELECT COUNT(*) FROM message_likes WHERE message_id = m.id) AS like_count,
+                       (SELECT COUNT(*) FROM message_likes WHERE message_id = m.id AND user_id = :my_id) AS is_liked
                 FROM messages m
-                JOIN users u ON m.sender_id = u.id
+                LEFT JOIN users u ON m.sender_id = u.id
                 WHERE m.room_id = :room_id
-                AND (m.deleted_by_user_id IS NULL OR m.deleted_by_user_id != :my_id)
+                AND (m.deleted_by_user_id IS NULL OR m.deleted_by_user_id = 0 OR m.deleted_by_user_id != :my_id)
                 ORDER BY m.created_at ASC";
 
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([
             ':room_id' => $room_id,
-            ':my_id' => $my_id
+            ':my_id'   => $my_id
         ]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }

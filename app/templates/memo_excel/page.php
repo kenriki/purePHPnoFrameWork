@@ -208,7 +208,6 @@ unset($memo);
                         </td>
 
                         <td data-label="作成日">
-                            <!-- 'time' を 'create_date' に修正 -->
                             <?php echo htmlspecialchars($memo['create_date']); ?>
                         </td>
 
@@ -232,14 +231,58 @@ unset($memo);
 
 <script>
     $(document).ready(function () {
-        // ID を "memoTable" に統一して初期化
         var table = $('#memoTable').DataTable({
-            dom: 'Blfrtip', // B:Buttons, l:Length, f:Filter, r:Processing, t:Table, i:Info, p:Pagination
+            dom: 'Blfrtip',
             buttons: [
                 {
                     extend: 'excelHtml5',
                     text: '<i class="fas fa-file-excel"></i> Excel出力',
-                    className: 'btn-excel btn-sm'
+                    className: 'btn-excel btn-sm',
+                    exportOptions: {
+                        format: {
+                            body: function (data, row, column, node) {
+                                if (column === 0) {
+                                    // セル要素から全文章(full-text)のHTMLを取得
+                                    var fullHtml = $(node).find('.full-text').html();
+                                    if (!fullHtml) {
+                                        fullHtml = data;
+                                    }
+                                    // <br> タグを改行コード \n に変換し、その他のHTMLタグを除去
+                                    return fullHtml
+                                        .replace(/<br\s*\/?>/gi, "\n")
+                                        .replace(/<[^>]+>/g, '');
+                                }
+                                return data;
+                            }
+                        }
+                    },
+                    // customize: function (xlsx) {
+                    //     var sheet = xlsx.xl.worksheets['sheet1.xml'];
+                    //     // A列（メモ内容）に折り返し表示スタイル(s="55")を適用
+                    //     $('row c[r^="A"]', sheet).attr('s', '55');
+                    // }
+                    customize: function (xlsx) {
+                        var sheet = xlsx.xl.worksheets['sheet1.xml'];
+                        var styles = xlsx.xl['styles.xml'];
+                        
+                        // 1. styles.xml に「上揃え(top) + 折り返し(wrapText)」のスタイル定義を追加
+                        var xfs = $('cellXfs', styles);
+                        var count = parseInt(xfs.attr('count'), 10);
+                        
+                        // スタイルタグを追加（alignment に vertical="top" と wrapText="1" を指定）
+                        xfs.append(
+                            '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1">' +
+                                '<alignment vertical="top" wrapText="1"/>' +
+                            '</xf>'
+                        );
+                        xfs.attr('count', count + 1);
+                        
+                        // 追加したスタイルのID（インデックス番号）
+                        var newStyleIndex = count;
+
+                        // 2. A列（メモ内容）のデータセル全てに作成したスタイルIDを適用
+                        $('row:gt(0) c[r^="A"]', sheet).attr('s', newStyleIndex);
+                    }
                 },
                 {
                     extend: 'csvHtml5',
@@ -252,15 +295,26 @@ unset($memo);
             columnDefs: [{
                 "targets": 0,
                 "render": function (data, type, row) {
-                    // 表示用(display)かつ長い文字列の場合のみ「もっと見る」を適用
-                    if (type === 'display' && data && data.length > 150) {
+                    if (!data) return '';
+                    
+                    // Excel等のエクスポート時はそのまま生のテキストを渡す
+                    if (type !== 'display') {
+                        return data;
+                    }
+
+                    // 改行コード(\n)を <br> に変換
+                    var formattedData = data.replace(/\r\n|\r|\n/g, '<br>');
+
+                    // 表示用で150文字を超える場合は省略表示と「もっと見る」を付与
+                    if (data.length > 150) {
+                        var shortText = data.substr(0, 150).replace(/\r\n|\r|\n/g, '<br>');
                         return '<div class="memo-wrapper">' +
-                            '<span class="short-text">' + data.substr(0, 150) + '...</span>' +
-                            '<span class="full-text">' + data + '</span>' +
+                            '<span class="short-text">' + shortText + '...</span>' +
+                            '<span class="full-text" style="display:none;">' + formattedData + '</span>' +
                             '<br><span class="memo-toggle">もっと見る</span>' +
                             '</div>';
                     }
-                    return data;
+                    return formattedData;
                 }
             }],
             language: {

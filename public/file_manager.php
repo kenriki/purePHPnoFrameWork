@@ -5,6 +5,14 @@ require_once __DIR__ . '/../app/dbconfig.php';
 $pdo = getDB();
 $current_user_id = $_SESSION['user_id'] ?? null;
 
+// ログインユーザーのユーザー名を取得（初期表示用）
+$current_username = '';
+if ($current_user_id) {
+    $stmt = $pdo->prepare("SELECT username FROM users WHERE id = ?");
+    $stmt->execute([$current_user_id]);
+    $current_username = $stmt->fetchColumn() ?: '';
+}
+
 // ファイル保存先の物理パス定義
 $base_dir = __DIR__ . '/../app/';
 $upload_dir = $base_dir . 'data/uploads/';
@@ -67,14 +75,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $current_user_id) {
         $is_public = isset($_POST['is_public']) ? 1 : 0;
         $expires = $is_public ? date('Y-m-d H:i:s', strtotime('+24 hours')) : null;
 
-        $allowed_ids = null;
+        $allowed_id_list = [];
+
+        // 入力欄に指定がある場合、ユーザーIDへ変換
         if (!empty($_POST['target_users'])) {
             $names = array_map('trim', explode(',', $_POST['target_users']));
-            $placeholders = implode(',', array_fill(0, count($names), '?'));
-            $stmt = $pdo->prepare("SELECT GROUP_CONCAT(id) FROM users WHERE username IN ($placeholders)");
-            $stmt->execute($names);
-            $allowed_ids = $stmt->fetchColumn();
+            $names = array_filter($names); // 空文字を除去
+
+            if (!empty($names)) {
+                $placeholders = implode(',', array_fill(0, count($names), '?'));
+                $stmt = $pdo->prepare("SELECT id FROM users WHERE username IN ($placeholders)");
+                $stmt->execute($names);
+                $allowed_id_list = $stmt->fetchAll(PDO::FETCH_COLUMN);
+            }
         }
+
+        // 限定公開でID群が抽出できている場合、保存用の文字列（カンマ区切り）を生成
+        $allowed_ids = !empty($allowed_id_list) ? implode(',', array_unique($allowed_id_list)) : null;
 
         $new_name = uniqid() . '_' . basename($_FILES['file']['name']);
         if (move_uploaded_file($_FILES['file']['tmp_name'], $upload_dir . $new_name)) {
@@ -164,7 +181,6 @@ function formatSizeUnits($bytes)
         #userIn {
             width: 100%;
             max-width: 400px;
-            /* 必要に応じて調整してください */
             padding: 8px;
             box-sizing: border-box;
             border: 1px solid #ccc;
@@ -195,9 +211,7 @@ function formatSizeUnits($bytes)
             margin-top: 5px;
         }
 
-        /* ----------------------------------------------------
-        DataTables レイアウト調整 
-        ---------------------------------------------------- */
+        /* DataTables レイアウト調整 */
         .dataTables_wrapper .top {
             display: flex;
             align-items: center;
@@ -216,12 +230,10 @@ function formatSizeUnits($bytes)
             float: none !important;
         }
 
-        /* 全体検索窓を非表示 */
         .dataTables_filter {
             display: none !important;
         }
 
-        /* ページネーション配置 */
         .dataTables_wrapper .bottom {
             display: flex;
             justify-content: flex-end;
@@ -232,21 +244,18 @@ function formatSizeUnits($bytes)
             float: right;
         }
 
-        /* 各列の個別検索窓 */
         #filterRow th {
             padding: 8px !important;
         }
 
         #filterRow th input {
             width: 95% !important;
-            /* テーブル幅にほぼ合わせる */
             padding: 5px;
             box-sizing: border-box;
             border: 1px solid #ccc;
             border-radius: 4px;
         }
 
-        /* ソートアイコンと検索窓の被り防止 */
         table.dataTable thead .sorting:after,
         table.dataTable thead .sorting_asc:after,
         table.dataTable thead .sorting_desc:after {
@@ -269,7 +278,10 @@ function formatSizeUnits($bytes)
                 <input type="file" name="file" required><br>
                 <label><input type="checkbox" name="is_public"> 24H期限付き</label><br>
                 <div style="position:relative; width: 100%; max-width: 500px;">
-                    <input type="text" name="target_users" id="userIn" placeholder="ユーザー名(カンマ区切りで完全一致)" autocomplete="off">
+                    <!-- 初期値(value)に自分のユーザー名を設定 -->
+                    <input type="text" name="target_users" id="userIn" 
+                           value="<?= htmlspecialchars($current_username ? $current_username . ', ' : '', ENT_QUOTES, 'UTF-8') ?>" 
+                           placeholder="ユーザー名(カンマ区切りで完全一致)" autocomplete="off">
                     <div id="sugg" class="sugg-box"></div>
                 </div>
                 <button type="submit" style="background:#005bac;">アップロード</button>
@@ -317,18 +329,9 @@ function formatSizeUnits($bytes)
 
                                 <?php
                                 $base_url = (isset($_SERVER['HTTPS']) ? "https://" : "http://") . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']);
-                                $file_url = $base_url . '/download.php?token=' . $safe_token;
+                                $download_link = $base_url . '/download.php?token=' . $safe_token;
                                 ?>
                                 <div class="guest-link" style="font-size:0.8em; color:#005bac; margin-top:5px;">
-                                    <?php
-                                    // 1. 基本となるベースURLを構築（プロトコル + ホスト名 + ディレクトリ）
-                                    $base_url = (isset($_SERVER['HTTPS']) ? "https://" : "http://") . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']);
-
-                                    // 2. download.php を経由したダウンロード用リンクを生成
-                                    // $safe_token はすでに定義済みであることを想定しています
-                                    $download_link = $base_url . '/download.php?token=' . $safe_token;
-                                    ?>
-
                                     URL:
                                     <input type="text" id="url_<?= $safe_id ?>" value="<?= htmlspecialchars($download_link) ?>"
                                         style="width:200px; font-size:0.9em; padding:2px; border:1px solid #ccc; border-radius:3px;"
@@ -357,21 +360,15 @@ function formatSizeUnits($bytes)
         </section>
     <?php endif; ?>
     <script>
-        // 全ての処理を DOMContentLoaded で囲むことで、テーブルが存在してから実行されるようにします
         $(document).ready(function () {
-
-            // 1. DataTablesの初期化（重複防止ロジック）
-            // 既に初期化済みであれば一度破棄してから再設定します
             if ($.fn.DataTable.isDataTable('#fileTable')) {
                 $('#fileTable').DataTable().destroy();
             }
 
             $('#fileTable').DataTable({
                 initComplete: function () {
-                    // 各カラムの検索窓に機能を割り当て
                     this.api().columns().every(function (i) {
                         var column = this;
-                        // ヘッダー行内の input を探す
                         var input = $('#filterRow th').eq(i).find('input');
 
                         input.on('keyup change clear', function () {
@@ -384,17 +381,14 @@ function formatSizeUnits($bytes)
                 "language": {
                     "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/ja.json"
                 },
-                "pageLength": 5, // ここでデフォルト5件表示を指定
-                "lengthMenu": [5, 10, 25, 50, 100, 500], // プルダウンの選択肢
+                "pageLength": 5,
+                "lengthMenu": [5, 10, 25, 50, 100, 500],
                 "columnDefs": [
-                    { "orderable": false, "targets": 4 } // インデックス3（操作列）をソート無効
+                    { "orderable": false, "targets": 4 }
                 ],
-                //"dom": '<"top"li>f rt <"bottom"p>'
-                "dom": '<"top"lip>rt<"bottom">',
-                //"dom": '<"top"lf>rt<"bottom"ip><"clear">' // DOMの配置を明示的に指定
+                "dom": '<"top"lip>rt<"bottom">'
             });
 
-            // 2. ユーザー検索機能の初期化
             const input = document.getElementById('userIn');
             const sugg = document.getElementById('sugg');
 
@@ -414,7 +408,6 @@ function formatSizeUnits($bytes)
             }
         });
 
-        // 3. グローバル関数（HTML側から呼び出すため外に出します）
         function add(name) {
             const input = document.getElementById('userIn');
             let parts = input.value.split(',');

@@ -75,9 +75,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $current_user_id) {
         $is_public = isset($_POST['is_public']) ? 1 : 0;
         $expires = $is_public ? date('Y-m-d H:i:s', strtotime('+24 hours')) : null;
 
-        $allowed_id_list = [];
+        // 最初から自分自身のIDを必ず含めておく
+        $allowed_id_list = [$current_user_id]; 
 
-        // 入力欄に指定がある場合、ユーザーIDへ変換
+        // 入力欄に指定がある場合、ユーザーIDへ変換して追加
         if (!empty($_POST['target_users'])) {
             $names = array_map('trim', explode(',', $_POST['target_users']));
             $names = array_filter($names); // 空文字を除去
@@ -86,9 +87,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $current_user_id) {
                 $placeholders = implode(',', array_fill(0, count($names), '?'));
                 $stmt = $pdo->prepare("SELECT id FROM users WHERE username IN ($placeholders)");
                 $stmt->execute($names);
-                $allowed_id_list = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                $found_ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                
+                // 既存のリストと結合
+                $allowed_id_list = array_merge($allowed_id_list, $found_ids);
             }
         }
+
+        // 重複を削除してカンマ区切りにする
+        $allowed_ids = implode(',', array_unique($allowed_id_list));
 
         // 限定公開でID群が抽出できている場合、保存用の文字列（カンマ区切り）を生成
         $allowed_ids = !empty($allowed_id_list) ? implode(',', array_unique($allowed_id_list)) : null;
@@ -441,6 +448,30 @@ function formatSizeUnits($bytes)
             } catch (err) {
                 alert("コピーに失敗しました。");
             }
+        }
+        const input = document.getElementById('userIn');
+        const myUsername = "<?= $current_username ?>"; // ログイン中の自分のユーザー名
+
+        if (input && myUsername) {
+            input.addEventListener('input', function() {
+                let val = this.value;
+                // もし自分の名前が入力値から消えていたら、強制的に先頭に再追加する
+                if (!val.includes(myUsername)) {
+                    // 消された文字を補う形、または先頭に戻す
+                    this.value = myUsername + ', ' + val;
+                }
+            });
+
+            // バックスペースなどで自分の名前の部分を選択して消そうとしたときの保険
+            input.addEventListener('keydown', function(e) {
+                // カーソルが自分の名前の範囲（先頭付近）にあるときにバックスペースを押された場合のガード
+                if (e.key === 'Backspace' && this.selectionStart <= myUsername.length + 2) {
+                    // 自分の名前より前や中を消させないようにする
+                    if (this.selectionEnd <= myUsername.length + 2) {
+                        e.preventDefault();
+                    }
+                }
+            });
         }
     </script>
 </body>

@@ -650,6 +650,8 @@ class MemoController
         if (ob_get_length())
             ob_clean();
 
+        // PWA/モバイル向けに最適化されたヘッダー送出
+        $filename = "memo_" . date('YmdHis') . ".pdf";
         header('Content-Type: application/pdf');
         header('Content-Disposition: attachment; filename="memo_' . date('YmdHis') . '.pdf"');
         header('Content-Length: ' . strlen($pdfData));
@@ -657,11 +659,13 @@ class MemoController
         header('Pragma: no-cache');
         header('Expires: 0');
 
+        // バイナリデータのみを純粋に出力
         echo $pdfData;
 
         if (isset($tempFileToDelete) && file_exists($tempFileToDelete)) {
             unlink($tempFileToDelete);
         }
+        // 他のコードが実行されないよう即座に終了
         exit;
     }
 

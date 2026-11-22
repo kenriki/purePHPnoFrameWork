@@ -183,99 +183,114 @@ try {
     ];
 }
 
-// コントローラー側から引き渡された未読件数（デフォルトは0）
-$unread_count = $unread_count ?? 0;
+// TODO の集計処理 ＆ メモとの日付軸統合処理（月曜日起点・今週分に限定）
+try {
+    // 1. 今週の月曜日と日曜日の日付を計算 (本日は2026年8月14日金曜日です)
+    $monday = date('Y-m-d', strtotime('monday this week'));
+    $sunday = date('Y-m-d', strtotime('sunday this week'));
 
-// .env からクライアントIDを取得（環境に合わせてどちらかを使用）
-$clientId = $_ENV['GOOGLE_CLIENT_ID'] ?? getenv('GOOGLE_CLIENT_ID');
-$redirectUri = 'https://desktop-mnoqic1.tail7aa158.ts.net/index.php?page=google_callback';
-// プロトコルとホスト名を取得
-$protocol = "https";
-$host = $_SERVER['HTTP_HOST'];
-$scriptPath = $_SERVER['SCRIPT_NAME'];
-
-$redirectUri = $protocol . "://" . $host . $scriptPath . "?page=google_callback";
-
-// 名前（profile）とメールアドレス（email）のスコープを追加
-$scopes = [
-    'https://www.googleapis.com/auth/calendar.events',
-    'https://www.googleapis.com/auth/userinfo.profile',
-    'https://www.googleapis.com/auth/userinfo.email'
-];
-
-// $authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" . http_build_query([
-//     'client_id' => $clientId,
-//     'redirect_uri' => $redirectUri,
-//     'response_type' => 'code',
-//     'scope' => implode(' ', $scopes),
-//     'access_type' => 'offline',
-//     'prompt' => 'consent' // 毎回同意画面を出して確実にスコープを承認させる
-// ]);
-$authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" . http_build_query([
-    'client_id' => $clientId,
-    'redirect_uri' => $redirectUri,
-    'response_type' => 'code',
-    'scope' => implode(' ', $scopes),
-    'access_type' => 'offline',   // オフラインアクセスを有効にしてリフレッシュトークンを得る
-    'prompt' => 'select_account' // consentを外すと、ログイン済みなら同意画面をスキップできる
-]);
-?>
-
-<?php
-// index.phpで取得した未読数
-$unread_count = $GLOBALS['unread_count'] ?? 0;
-$latest_sender_id = null;
-if (!isset($current_user_id) && isset($_SESSION['user_id'])) {
-    $current_user_id = $_SESSION['user_id'];
-}
-
-// 未読がある場合、自動的にその相手のIDを1件取得する
-if ($unread_count > 0 && isset($current_user_id)) {
-    try {
-        $db = getDB();
-        //$stmtSender = $db->prepare("SELECT sender_id FROM messages WHERE receiver_id = ? AND is_read = 0 ORDER BY created_at DESC LIMIT 1");
-        $stmtSender = $db->prepare("SELECT sender_id, message FROM messages WHERE receiver_id = ? AND is_read = 0 ORDER BY created_at DESC LIMIT 1");
-        $stmtSender->execute([$current_user_id]);
-        $rowSender = $stmtSender->fetch(PDO::FETCH_ASSOC);
-        if ($rowSender) {
-            $latest_sender_id = $rowSender['sender_id'];
-        }
-    } catch (Exception $e) {
-        error_log("Failed to get latest unread sender: " . $e->getMessage());
+    // 2. 過去7日間（月〜日）の日付配列（軸）をあらかじめ固定で作成
+    $chartLabels = [];
+    $allDates = [];
+    for ($i = 0; $i < 7; $i++) {
+        $targetDate = date('Y-m-d', strtotime("$monday +{$i} days"));
+        $allDates[] = $targetDate;
     }
+
+    // 3-1. 未完了のTODOデータを今週（月〜日）の範囲で取得
+    $todoIncompleteStmt = $pdo->prepare("
+        SELECT DATE(due_date) as date, COUNT(*) as count 
+        FROM todo_items 
+        WHERE category = ? AND due_date BETWEEN ? AND ? AND is_completed = 0
+        GROUP BY DATE(due_date)
+    ");
+    $todoIncompleteStmt->execute([$controller->user, $monday, $sunday]);
+    $todoIncompleteRaw = $todoIncompleteStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $todoIncompleteMap = [];
+    foreach ($todoIncompleteRaw as $row) {
+        $todoIncompleteMap[$row['date']] = (int) $row['count'];
+    }
+
+    // 3-2. 完了したTODOデータを今週（月〜日）の範囲で取得
+    $todoCompletedStmt = $pdo->prepare("
+        SELECT DATE(due_date) as date, COUNT(*) as count 
+        FROM todo_items 
+        WHERE category = ? AND due_date BETWEEN ? AND ? AND is_completed = 1
+        GROUP BY DATE(due_date)
+    ");
+    $todoCompletedStmt->execute([$controller->user, $monday, $sunday]);
+    $todoCompletedRaw = $todoCompletedStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $todoCompletedMap = [];
+    foreach ($todoCompletedRaw as $row) {
+        $todoCompletedMap[$row['date']] = (int) $row['count'];
+    }
+
+    // 4. メモ側のデータを今週（月〜日）の範囲に絞ってマップ化
+    $memoMap = [];
+    foreach (($page['dashboard']['chart'] ?? []) as $row) {
+        $date = $row['date'];
+        // 今週の範囲内のみを対象にする
+        if ($date >= $monday && $date <= $sunday) {
+            $memoMap[$date] = (int) $row['count'];
+        }
+    }
+
+    // 5. 月曜から日曜までの軸に合わせてデータを整形 ＋ 詳細データの紐付け[cite: 3]
+    $memoCounts = [];
+    $todoIncompleteCounts = [];
+    $todoCompletedCounts = [];
+    $formattedLabels = [];
+    $dailyDetailsMap = [];
+
+    foreach ($allDates as $date) {
+        $formattedLabels[] = substr($date, 5);          // '08-10' 形式に整形
+        $memoCounts[] = $memoMap[$date] ?? 0;           // データがなければ 0
+        $todoIncompleteCounts[] = $todoIncompleteMap[$date] ?? 0; // 未完了TODO
+        $todoCompletedCounts[] = $todoCompletedMap[$date] ?? 0;   // 完了TODO
+
+        // その日のイベントや予定の抽出[cite: 3]
+        $dayEvents = [];
+        foreach (($dbData['events'] ?? []) as $ev) {
+            if (isset($ev['start']) && str_starts_with($ev['start'], $date)) {
+                $dayEvents[] = [
+                    'title' => $ev['title'] ?? '予定',
+                    'type' => 'event'
+                ];
+            }
+        }
+
+        // 日付ごとの詳細マップ[cite: 3]
+        $dailyDetailsMap[$date] = [
+            'date' => $date,
+            'memo_count' => $memoMap[$date] ?? 0,
+            'todo_incomplete_count' => $todoIncompleteMap[$date] ?? 0,
+            'todo_completed_count' => $todoCompletedMap[$date] ?? 0,
+            'events' => $dayEvents
+        ];
+    }
+
+    // まとめてJSに渡すための配列に格納[cite: 3]
+    $page['dashboard']['unified_chart'] = [
+        'labels' => $formattedLabels,
+        'all_dates' => $allDates,
+        'memo' => $memoCounts,
+        'todo_incomplete' => $todoIncompleteCounts,
+        'todo_completed' => $todoCompletedCounts,
+        'details' => $dailyDetailsMap
+    ];
+
+} catch (Exception $e) {
+    $page['dashboard']['unified_chart'] = [
+        'labels' => [],
+        'all_dates' => [],
+        'memo' => [],
+        'todo_incomplete' => [],
+        'todo_completed' => [],
+        'details' => []
+    ];
 }
-
-// リンク先のURLを動的に生成（相手のIDがあれば含める、無ければ通常のチャット画面）
-$chat_link_url = "index.php?page=chat";
-if ($latest_sender_id !== null) {
-    $chat_link_url .= "&receiver_id=" . $latest_sender_id;
-}
-?>
-
-<?php
-// 未読メッセージを抽出（sender情報をJOINして名前も取得）
-$sql = "SELECT m.*, u.username as sender_name 
-        FROM messages m 
-        JOIN users u ON m.sender_id = u.id 
-        WHERE m.receiver_id = :my_id 
-        AND m.is_read = 0 
-        ORDER BY m.created_at DESC";
-
-$stmt = $pdo->prepare($sql);
-$stmt->execute([':my_id' => $current_user_id]);
-$unread_messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
-?>
-
-
-<!-- 外部スクリプトの読み込み（CDN経由） -->
-<!-- 1. FullCalendar本体 -->
-<script src="/assets/js/fullcalendar@6.1.11/index.global.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@fullcalendar/google-calendar@6.1.15/index.global.min.js"></script>
-<!-- 2. ical.js (これが必要です！) -->
-<script src="https://cdn.jsdelivr.net/npm/ical.js@1.5.0/build/ical.min.js"></script>
-<!-- 3. FullCalendar iCalendarプラグイン -->
-<script src="https://cdn.jsdelivr.net/npm/@fullcalendar/icalendar@6.1.11/index.global.min.js"></script>
-<script src="/assets/js/chart.js"></script>
 
 <!-- ======================================================================================
      CSS デザイン定義

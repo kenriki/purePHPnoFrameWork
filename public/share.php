@@ -17,7 +17,8 @@ declare(strict_types=1);
 // 静的サーバ（別オリジン）からのfetchを許可する場合は適宜ドメインを絞る
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, Access-Control-Request-Private-Network');
+header('Access-Control-Allow-Private-Network: true');
 header('X-Content-Type-Options: nosniff');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -129,19 +130,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $jsonRecord = json_encode($record, JSON_UNESCAPED_UNICODE);
     $mainFile = $storageDir . '/' . $id . '.json';
 
-
-    /**
- * 共有データ（短縮ID）の登録・取得を行う軽量JSON APIエンドポイント。
- *
- * 静的サーバ側のフロントエンドからPOSTでペイロードを受け取り、
- * 一意な英数字IDを発行して `shares/<id>.json` に保存するとともに、
- * `../app/data/shares/` 配下へ日時付きJSONバックアップを出力する。
- * また、GETリクエスト（`?id=<id>`）に対しては保存済みJSONデータを返却する。
- *
- * @package ShareApi
- * @author  System
- * @since   1.0.0
- */
     if ($jsonRecord === false || file_put_contents($mainFile, $jsonRecord, LOCK_EX) === false) {
         jsonResponse(['ok' => false, 'error' => '保存に失敗しました'], 500);
     }
@@ -154,6 +142,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (is_dir($backupDir)) {
         $backupFile = $backupDir . '/' . date('Ymd_His') . '_' . $id . '.json';
         @file_put_contents($backupFile, $jsonRecord, LOCK_EX);
+
+        // 30日（2592000秒）経過したバックアップファイルを削除
+        $expireBefore = time() - (30 * 86400);
+        foreach (glob($backupDir . '/*.json') ?: [] as $oldFile) {
+            if (is_file($oldFile) && @filemtime($oldFile) < $expireBefore) {
+                @unlink($oldFile);
+            }
+        }
     }
 
     jsonResponse([
